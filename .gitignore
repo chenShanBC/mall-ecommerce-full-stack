@@ -1,0 +1,20 @@
+# IDE
+.idea/
+
+# Frontend
+**/node_modules/
+**/dist/
+.vite/
+
+# Backend
+**/target/
+*.class
+*.jar
+*.war
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

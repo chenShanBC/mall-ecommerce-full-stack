@@ -13,7 +13,7 @@
     <artifactId>mall-common</artifactId>
 
     <dependencies>
-        <!-- MySQL8驱动 适配JDK21 + SpringBoot3 -->
+        <!-- MySQL 驱动 -->
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
