@@ -1,10 +1,13 @@
 # IDE
 .idea/
+.cursor/
 
 # Frontend
 **/node_modules/
 **/dist/
 .vite/
+package-lock.json
+frontend/package-lock.json
 
 # Backend
 **/target/
