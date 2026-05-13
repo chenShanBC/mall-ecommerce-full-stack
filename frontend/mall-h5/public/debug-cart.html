@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>购物车调试工具</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #f9f9f9; }
+        h2 { margin-top: 0; color: #333; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #1989fa; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #1573cc; }
+        .result { background: #fff; padding: 15px; margin-top: 10px; border-radius: 4px; border: 1px solid #e0e0e0; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .error { color: #f56c6c; }
+        .success { color: #67c23a; }
+        .info { color: #409eff; }
+    </style>
+</head>
+<body>
+    <h1>🛒 购物车调试工具</h1>
+    
+    <div class="section">
+        <h2>当前登录状态</h2>
+        <div id="authStatus"></div>
+    </div>
+
+    <div class="section">
+        <h2>1. 加入购物车</h2>
+        <label>SKU ID: <input type="number" id="skuId" value="1" style="width: 100px;"></label>
+        <label>数量: <input type="number" id="quantity" value="1" style="width: 80px;"></label>
+        <button onclick="addToCart()">加入购物车</button>
+        <div id="addResult" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>2. 查看购物车</h2>
+        <button onclick="getCart()">获取购物车列表</button>
+        <div id="cartResult" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>3. 获取用户信息</h2>
+        <button onclick="getUserInfo()">获取当前用户</button>
+        <div id="userResult" class="result"></div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('mall-h5-token') || '';
+        
+        function updateAuthStatus() {
+            const statusDiv = document.getElementById('authStatus');
+            if (token) {
+                statusDiv.innerHTML = `<span class="success">✓ 已登录</span><br>Token: <code>${token.substring(0, 30)}...</code>`;
+            } else {
+                statusDiv.innerHTML = `<span class="error">✗ 未登录</span><br>请先在商城页面登录`;
+            }
+        }
+
+        async function request(url, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers
+            };
+            
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers
+                });
+                
+                const text = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch {
+                    data = text;
+                }
+                
+                return { 
+                    ok: response.ok,
+                    status: response.status,
+                    statusText: response.statusText,
+                    data 
+                };
+            } catch (error) {
+                return { 
+                    ok: false,
+                    error: error.message 
+                };
+            }
+        }
+
+        async function addToCart() {
+            const skuId = parseInt(document.getElementById('skuId').value);
+            const quantity = parseInt(document.getElementById('quantity').value);
+            const resultDiv = document.getElementById('addResult');
+
+            if (!token) {
+                resultDiv.innerHTML = '<span class="error">请先登录</span>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<span class="info">请求中...</span>';
+
+            const result = await request('/api/cart/items', {
+                method: 'POST',
+                body: JSON.stringify({ skuId, quantity, checked: true })
+            });
+
+            if (result.ok) {
+                resultDiv.innerHTML = `
+                    <span class="success">✓ 加入成功</span>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <span class="error">✗ 加入失败 (${result.status} ${result.statusText})</span>
+                    <pre>${JSON.stringify(result.data || result.error, null, 2)}</pre>
+                `;
+            }
+        }
+
+        async function getCart() {
+            const resultDiv = document.getElementById('cartResult');
+
+            if (!token) {
+                resultDiv.innerHTML = '<span class="error">请先登录</span>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<span class="info">请求中...</span>';
+
+            const result = await request('/api/cart/items', {
+                method: 'GET'
+            });
+
+            if (result.ok) {
+                const items = result.data?.data?.items || [];
+                resultDiv.innerHTML = `
+                    <span class="success">✓ 获取成功</span>
+                    <p><strong>购物车商品数: ${items.length}</strong></p>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <span class="error">✗ 获取失败 (${result.status} ${result.statusText})</span>
+                    <pre>${JSON.stringify(result.data || result.error, null, 2)}</pre>
+                `;
+            }
+        }
+
+        async function getUserInfo() {
+            const resultDiv = document.getElementById('userResult');
+
+            if (!token) {
+                resultDiv.innerHTML = '<span class="error">请先登录</span>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<span class="info">请求中...</span>';
+
+            const result = await request('/api/users/me', {
+                method: 'GET'
+            });
+
+            if (result.ok) {
+                resultDiv.innerHTML = `
+                    <span class="success">✓ 获取成功</span>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <span class="error">✗ 获取失败 (${result.status} ${result.statusText})</span>
+                    <pre>${JSON.stringify(result.data || result.error, null, 2)}</pre>
+                `;
+            }
+        }
+
+        // 页面加载时更新状态
+        updateAuthStatus();
+    </script>
+</body>
+</html>

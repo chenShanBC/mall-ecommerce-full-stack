@@ -1,0 +1,22 @@
+CREATE TABLE fms_file_record (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '文件ID',
+    biz_type VARCHAR(50) NOT NULL COMMENT '业务类型',
+    storage_type VARCHAR(20) NOT NULL COMMENT '存储类型',
+    file_name VARCHAR(255) NOT NULL COMMENT '存储文件名',
+    original_file_name VARCHAR(255) NOT NULL COMMENT '原始文件名',
+    relative_path VARCHAR(255) NOT NULL COMMENT '相对路径',
+    access_url VARCHAR(255) NOT NULL COMMENT '访问地址',
+    content_type VARCHAR(100) NOT NULL DEFAULT '' COMMENT '文件内容类型',
+    file_size BIGINT NOT NULL DEFAULT 0 COMMENT '文件大小字节',
+    uploader_id BIGINT NOT NULL COMMENT '上传人ID',
+    uploader_type VARCHAR(20) NOT NULL COMMENT '上传人类型',
+    uploader_account VARCHAR(100) NOT NULL DEFAULT '' COMMENT '上传人账号',
+    uploader_nickname VARCHAR(100) NOT NULL DEFAULT '' COMMENT '上传人昵称',
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT '文件状态',
+    version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted_at DATETIME NULL COMMENT '删除时间',
+    KEY idx_fms_file_record_biz_type (biz_type),
+    KEY idx_fms_file_record_uploader_id (uploader_id)
+) COMMENT='文件记录表';

@@ -1,19 +1,19 @@
 package com.mallfei.auth.controller;
 
-import com.mallfei.auth.application.dto.LoginRequest;
+import com.mallfei.auth.application.dto.AuthContextView;
 import com.mallfei.auth.application.service.AuthApplicationService;
-import com.mallfei.common.api.R;
-import jakarta.validation.Valid;
+import com.mallfei.common.api.ApiResponse;
+import com.mallfei.common.auth.RequireLogin;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 @RestController
 @RequestMapping("/api/auth")
+@Tag(name = "认证聚合")
 public class AuthController {
 
     private final AuthApplicationService authApplicationService;
@@ -22,18 +22,25 @@ public class AuthController {
         this.authApplicationService = authApplicationService;
     }
 
-    @PostMapping("/login/password")
-    public R<?> login(@Valid @RequestBody LoginRequest request) {
-        return R.ok(authApplicationService.login(request));
+    @RequireLogin
+    @Operation(summary = "获取当前登录上下文")
+    @GetMapping("/context")
+    public ApiResponse<?> context() {
+        return ApiResponse.success(AuthContextView.from(authApplicationService.currentPrincipal()));
     }
 
-    @PostMapping("/register")
-    public R<?> register(@RequestBody Map<String, Object> request) {
-        return R.ok("注册成功，当前为演示注册逻辑", request);
-    }
-
+    @RequireLogin
+    @Operation(summary = "获取当前主体信息")
     @GetMapping("/me")
-    public R<?> me() {
-        return R.ok(authApplicationService.currentUser());
+    public ApiResponse<?> me() {
+        return ApiResponse.success(authApplicationService.currentPrincipal());
+    }
+
+    @RequireLogin
+    @Operation(summary = "聚合退出登录")
+    @DeleteMapping("/logout")
+    public ApiResponse<?> logout() {
+        authApplicationService.logout();
+        return ApiResponse.success("退出成功", Boolean.TRUE);
     }
 }

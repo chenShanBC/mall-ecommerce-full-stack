@@ -1,55 +1,44 @@
 package com.mallfei.product.controller;
 
-import com.mallfei.common.api.R;
+import com.mallfei.common.api.ApiResponse;
+import com.mallfei.common.api.PageResponse;
+import com.mallfei.product.application.service.ProductQueryApplicationService;
+import com.mallfei.product.application.vo.CategoryTreeNodeView;
+import com.mallfei.product.application.vo.ProductCardView;
+import com.mallfei.product.application.vo.ProductDetailView;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 
 @RestController
-@RequestMapping("/api/product")
+@Tag(name = "商品公共接口")
 public class ProductController {
 
-    @GetMapping("/category/tree")
-    public R<?> categoryTree() {
-        return R.ok(List.of(
-                Map.of("id", 1, "name", "精选推荐", "children", List.of()),
-                Map.of("id", 2, "name", "手机数码", "children", List.of()),
-                Map.of("id", 3, "name", "服饰箱包", "children", List.of())
-        ));
+    private final ProductQueryApplicationService productQueryApplicationService;
+
+    public ProductController(ProductQueryApplicationService productQueryApplicationService) {
+        this.productQueryApplicationService = productQueryApplicationService;
     }
 
-    @GetMapping("/spu/page")
-    public R<?> page() {
-        return R.ok(Map.of(
-                "total", 1,
-                "list", List.of(
-                        Map.of(
-                                "id", 1,
-                                "name", "MVP 示例商品",
-                                "mainImage", "https://via.placeholder.com/300x300.png?text=mallFei",
-                                "salePrice", new BigDecimal("99.90"),
-                                "originPrice", new BigDecimal("129.90"),
-                                "sales", 10
-                        )
-                )
-        ));
+    @Operation(summary = "获取类目树")
+    @GetMapping("/api/categories")
+    public ApiResponse<List<CategoryTreeNodeView>> categoryTree() {
+        return ApiResponse.success(productQueryApplicationService.categories());
     }
 
-    @GetMapping("/spu/{id}")
-    public R<?> detail(@PathVariable Long id) {
-        return R.ok(Map.of(
-                "id", id,
-                "name", "MVP 示例商品",
-                "mainImage", "https://via.placeholder.com/300x300.png?text=mallFei",
-                "description", "这里是商品详情占位数据",
-                "salePrice", new BigDecimal("99.90"),
-                "originPrice", new BigDecimal("129.90"),
-                "stock", 100
-        ));
+    @Operation(summary = "获取商品列表")
+    @GetMapping("/api/products")
+    public ApiResponse<PageResponse<ProductCardView>> page() {
+        return ApiResponse.success(productQueryApplicationService.productPage());
+    }
+
+    @Operation(summary = "获取商品详情")
+    @GetMapping("/api/products/{productId}")
+    public ApiResponse<ProductDetailView> detail(@PathVariable Long productId) {
+        return ApiResponse.success(productQueryApplicationService.productDetail(productId));
     }
 }
