@@ -1,29 +1,22 @@
 server:
-  port: 8080
+  port: 9090
 
 spring:
   application:
     name: mall-fei
-  datasource:
-    url: jdbc:mysql://localhost:3306/mall_fei?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
-    username: root
-    password: 123456
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      database: 0
-  rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
+  profiles:
+    active: dev
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 2MB
 
 sa-token:
   token-name: Authorization
+  token-prefix: Bearer
+  redis-key-prefix: mall:auth:sa-token
   timeout: 2592000
-  active-timeout: -1
+  active-timeout: 7200
   is-read-header: true
   is-read-cookie: false
   is-log: true
@@ -33,7 +26,30 @@ springdoc:
     enabled: true
   swagger-ui:
     path: /swagger-ui.html
+    persistAuthorization: true
 
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
+
+mall:
+  order:
+    timeout-minutes: 2
+  file:
+    storage-type: local
+    upload-dir: storage
+    public-base-path: /uploads
+    max-avatar-size: 2097152
+  pay:
+    alipay:
+      enabled: false
+      gateway: https://openapi-sandbox.dl.alipaydev.com/gateway.do
+      app-id: ${MALL_PAY_ALIPAY_APP_ID:}
+      merchant-private-key: ${MALL_PAY_ALIPAY_PRIVATE_KEY:}
+      alipay-public-key: ${MALL_PAY_ALIPAY_PUBLIC_KEY:}
+      notify-url: ${MALL_PAY_ALIPAY_NOTIFY_URL:http://localhost:9090/api/pay/callback/alipay}
+      return-url: ${MALL_PAY_ALIPAY_RETURN_URL:http://localhost:9090/api/pay/alipay/return-bridge}
+      client-return-url: ${MALL_PAY_ALIPAY_CLIENT_RETURN_URL:http://localhost:5173/pay/return}
+      sign-type: RSA2
+      charset: UTF-8
+      format: json

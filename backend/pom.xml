@@ -21,6 +21,8 @@
         <module>mall-stock</module>
         <module>mall-pay</module>
         <module>mall-admin</module>
+        <module>mall-file</module>
+        <module>mall-aftersale</module>
         <module>mall-start</module>
     </modules>
 
@@ -62,6 +64,26 @@
         </dependencies>
     </dependencyManagement>
 
+    <dependencies>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+    </dependencies>
+
+    <repositories>
+        <repository>
+            <id>aliyun-public</id>
+            <name>Aliyun Public</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+        </repository>
+        <repository>
+            <id>central</id>
+            <name>Maven Central</name>
+            <url>https://repo1.maven.org/maven2</url>
+        </repository>
+    </repositories>
+
     <build>
         <pluginManagement>
             <plugins>
@@ -73,6 +95,7 @@
                         <source>${java.version}</source>
                         <target>${java.version}</target>
                         <encoding>${project.build.sourceEncoding}</encoding>
+                        <parameters>true</parameters>
                     </configuration>
                 </plugin>
                 <plugin>

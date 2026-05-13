@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#dbeafe"/>
+      <stop offset="100%" stop-color="#bfdbfe"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="240" rx="48" fill="url(#bg)"/>
+  <circle cx="120" cy="92" r="38" fill="#2563eb" opacity="0.92"/>
+  <path d="M56 196c9-34 35-52 64-52s55 18 64 52" fill="#2563eb" opacity="0.92"/>
+  <text x="120" y="220" text-anchor="middle" font-size="20" font-family="Arial, sans-serif" fill="#1d4ed8">mallFei</text>
+</svg>

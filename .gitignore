@@ -1,10 +1,15 @@
 # IDE
 .idea/
+.cursor/
+.vscode/
+*.iml
 
 # Frontend
 **/node_modules/
 **/dist/
 .vite/
+package-lock.json
+frontend/package-lock.json
 
 # Backend
 **/target/
@@ -14,6 +19,33 @@
 
 # Logs
 *.log
+logs/
+
+# Local config and secrets
+.env
+.env.*
+backend/mall-start/src/main/resources/application-dev.yml
+backend/mall-start/src/main/resources/application-local.yml
+backend/mall-start/src/main/resources/application-test.yml
+backend/mall-start/src/main/resources/*private*
+backend/mall-start/src/main/resources/*secret*
+backend/*.pem
+backend/*.key
+backend/*.jks
+backend/*.p12
+backend/*.crt
+backend/*.cer
+**/*.pem
+**/*.key
+**/*.jks
+**/*.p12
+**/*.crt
+**/*.cer
+
+# Local/private files
+storage/
+tmp_admin_login.json
+*.local
 
 # OS
 .DS_Store
