@@ -43,7 +43,7 @@ backend/*.cer
 **/*.cer
 
 # Local/private files
-storage/
+/storage/
 tmp_admin_login.json
 *.local
 
