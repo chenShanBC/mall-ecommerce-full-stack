@@ -16,6 +16,12 @@ export default defineConfig({
   ],
   server: {
     port: 5174,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:9090',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     rollupOptions: {

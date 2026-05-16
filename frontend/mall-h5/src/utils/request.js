@@ -2,7 +2,7 @@ import axios from 'axios';
 import { showFailToast } from 'vant';
 
 const request = axios.create({
-  baseURL: '/',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/',
   timeout: 10000,
 });
 

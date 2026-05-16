@@ -1,45 +1,25 @@
-server:
-  port: 9090
-
 spring:
-  application:
-    name: mall-fei
-  profiles:
-    active: ${SPRING_PROFILES_ACTIVE:local}
-  servlet:
-    multipart:
-      max-file-size: 2MB
-      max-request-size: 2MB
-
-sa-token:
-  token-name: Authorization
-  token-prefix: Bearer
-  redis-key-prefix: mall:auth:sa-token
-  timeout: 2592000
-  active-timeout: 7200
-  is-read-header: true
-  is-read-cookie: false
-  is-log: true
+  datasource:
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/mall_fei?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&connectTimeout=5000&socketTimeout=10000
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DATABASE:0}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:admin}
+    password: ${RABBITMQ_PASSWORD:admin123456}
 
 springdoc:
   api-docs:
-    enabled: true
-  swagger-ui:
-    path: /swagger-ui.html
-    persistAuthorization: true
-
-mybatis-plus:
-  configuration:
-    map-underscore-to-camel-case: true
+    enabled: false
 
 mall:
-  order:
-    timeout-minutes: 2
-  file:
-    storage-type: local
-    upload-dir: storage
-    public-base-path: /uploads
-    max-avatar-size: 2097152
   pay:
     alipay:
       enabled: ${MALL_PAY_ALIPAY_ENABLED:true}

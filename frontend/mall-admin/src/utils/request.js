@@ -19,7 +19,7 @@ const isUnauthorizedPayload = (payload) => {
 };
 
 const request = axios.create({
-  baseURL: 'http://localhost:9090',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/',
   timeout: 10000,
 });
 
