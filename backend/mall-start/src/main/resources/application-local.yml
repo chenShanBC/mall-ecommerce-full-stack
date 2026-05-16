@@ -1,0 +1,38 @@
+spring:
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3307/mall_fei?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&connectTimeout=5000&socketTimeout=10000
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+springdoc:
+  api-docs:
+    enabled: true
+
+mall:
+  order:
+    timeout-minutes: 15
+  pay:
+    alipay:
+      enabled: ${MALL_PAY_ALIPAY_ENABLED:true}
+      gateway: ${MALL_PAY_ALIPAY_GATEWAY:https://openapi-sandbox.dl.alipaydev.com/gateway.do}
+      app-id: ${MALL_PAY_ALIPAY_APP_ID:9021000163654371}
+      merchant-private-key: ${MALL_PAY_ALIPAY_PRIVATE_KEY:}
+      alipay-public-key: ${MALL_PAY_ALIPAY_PUBLIC_KEY:}
+      # 本地联调 + 内网穿透地址（例如 ngrok/cpolar/frp 映射出来的公网域名）
+      notify-url: ${MALL_PAY_ALIPAY_NOTIFY_URL:https://your-local-tunnel-domain/api/pay/callback/alipay}
+      return-url: ${MALL_PAY_ALIPAY_RETURN_URL:https://your-local-tunnel-domain/api/pay/alipay/return-bridge}
+      client-return-url: ${MALL_PAY_ALIPAY_CLIENT_RETURN_URL:https://your-local-tunnel-domain/pay/return}
+      sign-type: RSA2
+      charset: UTF-8
+      format: json
