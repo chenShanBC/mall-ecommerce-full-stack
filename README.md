@@ -21,10 +21,39 @@
 - 前端 H5 与后台 Vite 工程骨架
 - 数据库初始化脚本占位文件
 
-## 下一步建议
+## 云端容器化运行（Docker Compose）
 
-1. 完善数据库初始化 SQL
-2. 完成认证模块与 Sa-Token 配置
-3. 完成商品、购物车、订单主链路后端接口
-4. 完成 H5 与后台首页、登录、商品等核心页面
-5. 进行前后端联调
+已新增云端运行配置文件：
+
+- `docker-compose.cloud.yml`：一键启动 MySQL、Redis、RabbitMQ、后端、H5、Admin、Nginx 网关
+- `backend/Dockerfile`：构建并运行 Spring Boot 后端（`cloud` 配置）
+- `frontend/mall-h5/Dockerfile`：构建并运行 H5 静态站点
+- `frontend/mall-admin/Dockerfile`：构建并运行后台静态站点
+- `deploy/nginx.conf`：统一入口与反向代理（`/api` -> backend）
+
+### 启动方式
+
+在项目根目录执行：
+
+```bash
+docker compose -f docker-compose.cloud.yml up -d --build
+```
+
+### 访问地址
+
+- H5：`http://<服务器IP>/`
+- Admin：`http://<服务器IP>/admin/`
+- 后端 API：`http://<服务器IP>/api/`
+- RabbitMQ 管理台：`http://<服务器IP>:15672`（账号 `admin` / `admin123456`）
+
+### 停止与清理
+
+```bash
+docker compose -f docker-compose.cloud.yml down
+```
+
+如需连同数据卷一起清理：
+
+```bash
+docker compose -f docker-compose.cloud.yml down -v
+```
