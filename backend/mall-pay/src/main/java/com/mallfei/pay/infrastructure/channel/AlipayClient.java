@@ -4,16 +4,21 @@ import com.alipay.api.AlipayApiException;
 import com.alipay.api.AlipayConfig;
 import com.alipay.api.AlipayConstants;
 import com.alipay.api.DefaultAlipayClient;
+import com.alipay.api.domain.AlipayTradeQueryModel;
 import com.alipay.api.domain.AlipayTradeWapPayModel;
+import com.alipay.api.request.AlipayTradeQueryRequest;
 import com.alipay.api.request.AlipayTradeWapPayRequest;
+import com.alipay.api.response.AlipayTradeQueryResponse;
 import com.alipay.api.response.AlipayTradeWapPayResponse;
 import com.mallfei.common.exception.BusinessException;
 import com.mallfei.pay.config.AlipaySandboxProperties;
 import com.mallfei.pay.domain.model.PayOrder;
 import com.mallfei.pay.domain.service.PayChannelCallbackRequest;
+import com.mallfei.pay.domain.service.PayChannelQueryResult;
 import com.mallfei.pay.domain.service.PayChannelSubmitResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.Charset;
@@ -32,9 +37,12 @@ public class AlipayClient implements com.mallfei.pay.domain.service.PayChannelCl
     private static final DateTimeFormatter ALIPAY_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
     protected final AlipaySandboxProperties properties;
+    protected final long orderTimeoutMinutes;
 
-    public AlipayClient(AlipaySandboxProperties properties) {
+    public AlipayClient(AlipaySandboxProperties properties,
+                        @Value("${mall.order.timeout-minutes:2}") long orderTimeoutMinutes) {
         this.properties = properties;
+        this.orderTimeoutMinutes = orderTimeoutMinutes;
     }
 
     @Override
@@ -72,7 +80,7 @@ public class AlipayClient implements com.mallfei.pay.domain.service.PayChannelCl
         } catch (Exception exception) {
             log.error("Failed to generate Alipay WAP pay page, payOrderNo={}, orderNo={}, returnUrl={}, message={}",
                     payOrder.payOrderNo(), payOrder.orderNo(), returnUrl, exception.getMessage(), exception);
-            throw BusinessException.badRequest("支付宝支付页生成失败: " + exception.getMessage());
+            throw BusinessException.badRequest("支付宝 H5 支付页生成失败，请稍后重试或切换模拟支付");
         }
     }
 
@@ -85,6 +93,36 @@ public class AlipayClient implements com.mallfei.pay.domain.service.PayChannelCl
             return false;
         }
         return AlipayRsa2Support.verify(request.rawPayload(), request.signature(), properties.getAlipayPublicKey(), charset());
+    }
+
+    @Override
+    public PayChannelQueryResult query(PayOrder payOrder) {
+        ensureConfigured();
+        try {
+            AlipayTradeQueryModel model = new AlipayTradeQueryModel();
+            model.setOutTradeNo(payOrder.payOrderNo());
+
+            AlipayTradeQueryRequest request = new AlipayTradeQueryRequest();
+            request.setBizModel(model);
+
+            AlipayTradeQueryResponse response = createSdkClient().execute(request);
+            String tradeStatus = response == null ? "" : response.getTradeStatus();
+            String tradeNo = response == null ? "" : response.getTradeNo();
+            String body = response == null ? "" : response.getBody();
+            boolean paid = response != null
+                    && response.isSuccess()
+                    && ("TRADE_SUCCESS".equalsIgnoreCase(tradeStatus) || "TRADE_FINISHED".equalsIgnoreCase(tradeStatus));
+            log.info("Queried Alipay trade, payOrderNo={}, orderNo={}, responseCode={}, subCode={}, tradeStatus={}, tradeNo={}, paid={}",
+                    payOrder.payOrderNo(), payOrder.orderNo(), response == null ? null : response.getCode(),
+                    response == null ? null : response.getSubCode(), tradeStatus, tradeNo, paid);
+            return paid
+                    ? PayChannelQueryResult.paid(tradeNo, tradeStatus, body)
+                    : PayChannelQueryResult.unpaid(tradeStatus, body);
+        } catch (Exception exception) {
+            log.warn("Failed to query Alipay trade, payOrderNo={}, orderNo={}, message={}",
+                    payOrder.payOrderNo(), payOrder.orderNo(), exception.getMessage());
+            return PayChannelQueryResult.unpaid(payOrder.payStatus(), "");
+        }
     }
 
     protected String alipayMethod() {
@@ -101,6 +139,8 @@ public class AlipayClient implements com.mallfei.pay.domain.service.PayChannelCl
         model.setTotalAmount(toYuan(payOrder.payAmountCent()));
         model.setSubject(buildSubject(payOrder));
         model.setProductCode(productCode());
+        model.setTimeoutExpress(alipayTimeoutExpress());
+        model.setQuitUrl(properties.getClientReturnUrl());
         model.setPassbackParams(payOrder.orderNo());
         return model;
     }
@@ -137,11 +177,16 @@ public class AlipayClient implements com.mallfei.pay.domain.service.PayChannelCl
                 + "\",\"total_amount\":\"" + toYuan(payOrder.payAmountCent())
                 + "\",\"subject\":\"" + jsonEscape(buildSubject(payOrder))
                 + "\",\"product_code\":\"" + productCode()
+                + "\",\"timeout_express\":\"" + jsonEscape(alipayTimeoutExpress())
                 + "\",\"passback_params\":\"" + jsonEscape(payOrder.orderNo()) + "\"}";
     }
 
     protected String buildSubject(PayOrder payOrder) {
         return "mallFei订单-" + payOrder.orderNo();
+    }
+
+    protected String alipayTimeoutExpress() {
+        return Math.max(1, orderTimeoutMinutes) + "m";
     }
 
     protected void ensureConfigured() {

@@ -132,6 +132,7 @@ const payChannels = [
   { value: 'WECHAT_H5', label: '微信 H5 沙箱', description: '预留微信 H5 支付渠道接入' },
 ];
 let timer = null;
+let countdownBaseTime = Date.now();
 let refreshingAfterCountdown = false;
 let payStatusPoller = null;
 let payStatusPollAttempts = 0;
@@ -189,17 +190,11 @@ const handleSelectPayChannel = async (channel) => {
     try {
       await showDialog({
         title: '支付宝 H5 沙箱提示',
-        message: '当前渠道容易受到浏览器里已有支付宝/沙箱登录态影响。建议优先使用“支付宝 PC 沙箱”。\n\n如果你仍要测试 H5，请先使用无痕窗口，并确保只登录沙箱买家账号；如之前登录过正式支付宝或其他沙箱账号，请先清理 alipaydev.com 相关 Cookie 后再试。',
+        message: '即将打开支付宝 H5 沙箱收银台。建议使用手机浏览器或 Chrome 移动端模拟器测试，并确保登录的是沙箱买家账号。\n\n如果页面提示账号或环境异常，请清理 alipaydev.com 相关 Cookie 后重试。',
         confirmButtonText: '继续使用 H5',
-        showCancelButton: true,
-        cancelButtonText: '改用 PC 沙箱',
         messageAlign: 'left',
       });
-      selectedPayChannel.value = channel;
-      return;
     } catch {
-      selectedPayChannel.value = 'ALIPAY_PC';
-      return;
     }
   }
   selectedPayChannel.value = channel;
@@ -310,6 +305,7 @@ const refreshOrderWhenCountdownEnds = async () => {
 const loadOrder = async () => {
   const { data } = await fetchOrderDetail(route.params.id);
   order.value = data.data;
+  countdownBaseTime = Date.now();
   remainingPaySeconds.value = Number(data.data?.remainingPaySeconds || 0);
   if (data.data?.status === 'PENDING_PAYMENT' && Number(data.data?.remainingPaySeconds || 0) === 0) {
     setTimeout(() => refreshOrderWhenCountdownEnds(), 300);
@@ -322,11 +318,22 @@ const loadOrder = async () => {
 const tickCountdown = () => {
   if (order.value?.status !== 'PENDING_PAYMENT') {
     remainingPaySeconds.value = 0;
+    countdownBaseTime = Date.now();
     return;
   }
-  const nextSeconds = Math.max(0, Number(remainingPaySeconds.value || 0) - 1);
+  const elapsedSeconds = Math.max(1, Math.floor((Date.now() - countdownBaseTime) / 1000));
+  countdownBaseTime = Date.now();
+  const currentSeconds = Number(remainingPaySeconds.value || 0);
+  const nextSeconds = Math.max(0, currentSeconds - elapsedSeconds);
   remainingPaySeconds.value = nextSeconds;
-  if (nextSeconds === 0) refreshOrderWhenCountdownEnds();
+  if (nextSeconds === 0 && currentSeconds > 0) refreshOrderWhenCountdownEnds();
+};
+
+const handleVisibilityChange = () => {
+  if (!document.hidden) {
+    countdownBaseTime = Date.now();
+    loadOrder().then(() => refreshPayInfo());
+  }
 };
 
 const startTimer = () => {
@@ -467,6 +474,7 @@ const handleRefundApply = async () => {
 onMounted(async () => {
   window.addEventListener('storage', handlePayReturnStorage);
   window.addEventListener('message', handlePayReturnMessage);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
   try {
     await loadOrder();
     startTimer();
@@ -493,6 +501,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('storage', handlePayReturnStorage);
   window.removeEventListener('message', handlePayReturnMessage);
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
   if (timer) clearInterval(timer);
   stopPayStatusPolling();
 });

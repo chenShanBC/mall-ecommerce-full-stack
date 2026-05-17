@@ -76,6 +76,7 @@ public class SaTokenConfig implements WebMvcConfigurer {
                 || requestUri.startsWith("/api/admin/login/password")
                 || requestUri.startsWith("/api/products")
                 || requestUri.startsWith("/api/categories")
+                || requestUri.startsWith("/api/pay/alipay/return-bridge")
                 || requestUri.matches("^/api/pay/orders/[^/]+/submit-page$")
                 || requestUri.startsWith("/api/pay/callback");
     }

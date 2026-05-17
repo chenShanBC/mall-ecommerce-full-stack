@@ -25,7 +25,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { showFailToast } from 'vant';
-import { fetchPayOrderDetail, syncPayOrderStatus } from '../api';
+import { fetchPayOrderDetail, repairPaidOrder, syncPayOrderStatus } from '../api';
 
 const route = useRoute();
 const router = useRouter();
@@ -103,12 +103,25 @@ const queryPaySuccess = async (orderNo, payOrderNo) => {
   if (syncPayInfo?.status === 'SUCCESS') {
     return true;
   }
-  if (!payOrderNo) {
-    return false;
+
+  if (payOrderNo) {
+    const detailResponse = await fetchPayOrderDetail(payOrderNo);
+    const payDetail = detailResponse.data?.data;
+    if (payDetail?.status === 'SUCCESS') {
+      return true;
+    }
   }
-  const detailResponse = await fetchPayOrderDetail(payOrderNo);
-  const payDetail = detailResponse.data?.data;
-  return payDetail?.status === 'SUCCESS';
+
+  try {
+    const repairResponse = await repairPaidOrder(orderNo);
+    const repairedPayInfo = repairResponse.data?.data;
+    if (repairedPayInfo?.status === 'SUCCESS') {
+      return true;
+    }
+  } catch {
+  }
+
+  return false;
 };
 
 onMounted(async () => {

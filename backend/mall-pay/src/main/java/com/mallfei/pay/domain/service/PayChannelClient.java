@@ -15,4 +15,8 @@ public interface PayChannelClient {
     default boolean verifyCallback(PayChannelCallbackRequest request) {
         return true;
     }
+
+    default PayChannelQueryResult query(PayOrder payOrder) {
+        return PayChannelQueryResult.unpaid(payOrder.payStatus(), "");
+    }
 }

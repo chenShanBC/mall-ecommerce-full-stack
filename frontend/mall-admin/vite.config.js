@@ -20,6 +20,11 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:9090',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.removeHeader('origin');
+          });
+        },
       },
     },
   },

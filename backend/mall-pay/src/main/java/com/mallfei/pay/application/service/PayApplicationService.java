@@ -13,6 +13,7 @@ import com.mallfei.pay.domain.repository.PayCallbackRecordRepository;
 import com.mallfei.pay.domain.repository.PayOrderRepository;
 import com.mallfei.pay.domain.service.PayChannelCallbackRequest;
 import com.mallfei.pay.domain.service.PayChannelClientRouter;
+import com.mallfei.pay.domain.service.PayChannelQueryResult;
 import com.mallfei.pay.domain.service.PayChannelSubmitResult;
 import com.mallfei.pay.domain.service.PayOrderDomainService;
 import org.slf4j.Logger;
@@ -210,12 +211,25 @@ public class PayApplicationService {
     public PayOrderView syncOrderStatus(String orderNo) {
         Order order = orderFacade.getByOrderNo(orderNo);
         PayOrder payOrder = requireLatestPayOrder(orderNo);
+        if (!payOrder.success() && isAlipayChannel(payOrder.payChannel())) {
+            PayChannelQueryResult queryResult = payChannelClientRouter.route(payOrder.payChannel()).query(payOrder);
+            if (queryResult.paid()) {
+                payOrder = payOrder.markSuccess(queryResult.transactionNo(), LocalDateTime.now());
+                payOrderDomainService.update(payOrder);
+                log.warn("Marked pay order success from Alipay query, orderNo={}, payOrderNo={}, payChannel={}, tradeNo={}, tradeStatus={}",
+                        orderNo, payOrder.payOrderNo(), payOrder.payChannel(), queryResult.transactionNo(), queryResult.tradeStatus());
+            }
+        }
         if (payOrder.success() && order.pendingPayment()) {
             orderFacade.markPaid(orderNo);
             log.warn("Synced order status from successful pay order, orderNo={}, payOrderNo={}, payChannel={}",
                     orderNo, payOrder.payOrderNo(), payOrder.payChannel());
         }
-        return payViewAssembler.toView(payOrder);
+        return payViewAssembler.toView(payOrderDomainService.loadByPayOrderNo(payOrder.payOrderNo()));
+    }
+
+    private boolean isAlipayChannel(String payChannel) {
+        return PayOrder.CHANNEL_ALIPAY_WAP.equals(payChannel) || PayOrder.CHANNEL_ALIPAY_PC.equals(payChannel);
     }
 
     public PayOrderView mockRefund(String orderNo, String reason) {

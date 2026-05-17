@@ -7,6 +7,7 @@ import com.mallfei.common.exception.BusinessException;
 import com.mallfei.pay.config.AlipaySandboxProperties;
 import com.mallfei.pay.domain.model.PayOrder;
 import com.mallfei.pay.domain.service.PayChannelSubmitResult;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -14,8 +15,9 @@ import java.util.Map;
 @Component
 public class AlipayPcClient extends AlipayClient {
 
-    public AlipayPcClient(AlipaySandboxProperties properties) {
-        super(properties);
+    public AlipayPcClient(AlipaySandboxProperties properties,
+                          @Value("${mall.order.timeout-minutes:2}") long orderTimeoutMinutes) {
+        super(properties, orderTimeoutMinutes);
     }
 
     @Override
@@ -76,7 +78,7 @@ public class AlipayPcClient extends AlipayClient {
         } catch (Exception exception) {
             log.error("Failed to generate Alipay PC pay page, payOrderNo={}, orderNo={}, returnUrl={}, message={}",
                     payOrder.payOrderNo(), payOrder.orderNo(), returnUrl, exception.getMessage(), exception);
-            throw BusinessException.badRequest("支付宝 PC 支付页生成失败: " + exception.getMessage());
+            throw BusinessException.badRequest("支付宝 PC 支付页生成失败，请稍后重试或切换模拟支付");
         }
     }
 
@@ -86,6 +88,7 @@ public class AlipayPcClient extends AlipayClient {
         model.setTotalAmount(toYuan(payOrder.payAmountCent()));
         model.setSubject(buildSubject(payOrder));
         model.setProductCode(productCode());
+        model.setTimeoutExpress(alipayTimeoutExpress());
         model.setPassbackParams(payOrder.orderNo());
         return model;
     }

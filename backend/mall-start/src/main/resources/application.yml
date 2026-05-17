@@ -5,7 +5,8 @@ spring:
   application:
     name: mall-fei
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:local}
+    # local / cloud
+    active: ${SPRING_PROFILES_ACTIVE:cloud}
   servlet:
     multipart:
       max-file-size: 2MB
@@ -47,9 +48,9 @@ mall:
       app-id: ${MALL_PAY_ALIPAY_APP_ID:9021000163654371}
       merchant-private-key: ${MALL_PAY_ALIPAY_PRIVATE_KEY:}
       alipay-public-key: ${MALL_PAY_ALIPAY_PUBLIC_KEY:}
-      notify-url: ${MALL_PAY_ALIPAY_NOTIFY_URL:http://43.139.236.10:9090/api/pay/callback/alipay}
-      return-url: ${MALL_PAY_ALIPAY_RETURN_URL:http://43.139.236.10:9090/api/pay/alipay/return-bridge}
-      client-return-url: ${MALL_PAY_ALIPAY_CLIENT_RETURN_URL:http://43.139.236.10/pay/return}
+      notify-url: ${MALL_PAY_ALIPAY_NOTIFY_URL:https://your-local-tunnel-domain/api/pay/callback/alipay}
+      return-url: ${MALL_PAY_ALIPAY_RETURN_URL:https://your-local-tunnel-domain/api/pay/alipay/return-bridge}
+      client-return-url: ${MALL_PAY_ALIPAY_CLIENT_RETURN_URL:https://your-local-tunnel-domain/pay/return}
       sign-type: RSA2
       charset: UTF-8
       format: json

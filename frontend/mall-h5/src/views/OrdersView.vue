@@ -108,6 +108,7 @@ const confirmingOrderId = ref(null);
 const refundingOrderId = ref(null);
 const cancellingOrderId = ref(null);
 let timer = null;
+let countdownBaseTime = Date.now();
 let refreshingAfterCountdown = false;
 let payStatusPoller = null;
 let payStatusPollAttempts = 0;
@@ -233,14 +234,16 @@ const refreshOrdersWhenCountdownEnds = async () => {
 };
 
 const tickCountdown = () => {
+  const elapsedSeconds = Math.max(1, Math.floor((Date.now() - countdownBaseTime) / 1000));
+  countdownBaseTime = Date.now();
   let shouldRefresh = false;
   orders.value = orders.value.map((item) => {
     if (item.status !== 'PENDING_PAYMENT') {
       return item;
     }
     const currentSeconds = Number(item.remainingPaySeconds || 0);
-    const nextSeconds = Math.max(0, currentSeconds - 1);
-    if (nextSeconds === 0) {
+    const nextSeconds = Math.max(0, currentSeconds - elapsedSeconds);
+    if (nextSeconds === 0 && currentSeconds > 0) {
       shouldRefresh = true;
     }
     return {
@@ -250,6 +253,13 @@ const tickCountdown = () => {
   });
   if (shouldRefresh) {
     refreshOrdersWhenCountdownEnds();
+  }
+};
+
+const handleVisibilityChange = () => {
+  if (!document.hidden) {
+    countdownBaseTime = Date.now();
+    loadOrders(false);
   }
 };
 
@@ -263,6 +273,7 @@ const startTimer = () => {
 const loadOrders = async (showError = true) => {
   try {
     const { data } = await fetchOrders();
+    countdownBaseTime = Date.now();
     orders.value = data.data || [];
     if (orders.value.some((item) => item.status === 'PENDING_PAYMENT' && Number(item.remainingPaySeconds || 0) === 0)) {
       setTimeout(() => {
@@ -353,6 +364,7 @@ const goDetail = (id) => {
 };
 
 onMounted(async () => {
+  document.addEventListener('visibilitychange', handleVisibilityChange);
   await loadOrders();
   startTimer();
   const synced = await syncRecentPaidOrders({ allowRepair: true });
@@ -362,6 +374,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
   if (timer) {
     clearInterval(timer);
   }

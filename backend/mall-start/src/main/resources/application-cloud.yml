@@ -1,35 +1,37 @@
 spring:
   datasource:
-    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/mall_fei?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&connectTimeout=5000&socketTimeout=10000
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:root123456}
+    url: jdbc:mysql://127.0.0.1:3306/mall_fei?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&connectTimeout=5000&socketTimeout=10000
+    username: root
+    password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: ${REDIS_HOST:127.0.0.1}
-      port: ${REDIS_PORT:6379}
-      database: ${REDIS_DATABASE:0}
+      host: localhost
+      port: 6379
+      database: 0
   rabbitmq:
-    host: ${RABBITMQ_HOST:127.0.0.1}
-    port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USERNAME:admin}
-    password: ${RABBITMQ_PASSWORD:admin123456}
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
 
 springdoc:
   api-docs:
-    enabled: false
+    enabled: true
 
 mall:
+  order:
+    timeout-minutes: 15
   pay:
     alipay:
-      enabled: ${MALL_PAY_ALIPAY_ENABLED:true}
-      gateway: ${MALL_PAY_ALIPAY_GATEWAY:https://openapi-sandbox.dl.alipaydev.com/gateway.do}
-      app-id: ${MALL_PAY_ALIPAY_APP_ID:9021000163654371}
-      merchant-private-key: ${MALL_PAY_ALIPAY_PRIVATE_KEY:}
-      alipay-public-key: ${MALL_PAY_ALIPAY_PUBLIC_KEY:}
-      notify-url: ${MALL_PAY_ALIPAY_NOTIFY_URL:http://43.139.236.10:9090/api/pay/callback/alipay}
-      return-url: ${MALL_PAY_ALIPAY_RETURN_URL:http://43.139.236.10:9090/api/pay/alipay/return-bridge}
-      client-return-url: ${MALL_PAY_ALIPAY_CLIENT_RETURN_URL:http://43.139.236.10/pay/return}
+      enabled: true
+      gateway: https://openapi-sandbox.dl.alipaydev.com/gateway.do
+      app-id: 9021000163654371
+      merchant-private-key: MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDZeFrKAfvVENOGY9jmj3SI+eoR9Xbo4GWZm7iexu+eoZQinJuJfSmZ8BAhc2E85LVlvpRjt4AjqZNd+hvQ1P7JZWrFSy8XzuZiT07PRrk17RWAHBAv0CC02HhZC8L6jaYmpJfj0w+EUCnUlHNNK1N44UUsjNq6x+SKEy7uLUHCtA7hubeLYqt5WSz09mlyhP8Js+sjSytdqeEjYvc6cnnKKdKevaqSqxSTlbq9KI/Md190kQjMH1Cn+VeM6yrBQLggJcxe2B43yVyRPx/i/zxBtCKfXKw0lXPID/TBKzTFpDmJjIQYMfAbnTdhcYnQORoyta6ulgz5/7Al0oi7/4UlAgMBAAECggEBAKfa7vDHUTMnFq2/edaUWdW0WMhd19duBN3oxTrAwImHnAiPKrqXwjmQg1LedOqEecM7s9u38o8UP6wk9b1d+f9HaX85RfMxfr/ZCTKSGzkVcyf8AT52fhg4kcPhgTDVjq57EsYFzg9JtM/heZHR5E8ESdlWKypKSguNPQcYJY768XGCtKZoZEjeSo7XinR8B6W/pj0EV4i/8OxHOIyr9pFIo9CZqlqVzox3hmH8IzcakOwSv/Uff77WP0VhMsfxaDZkOggfEN0bqNpriJlVY2Tbnx186GfWglDH+d0UrkFPuFF3hhOzqwVdEzlBOTkS7sBhuSUr9G5GU8Gzke9c860CgYEA9z0ZBsfMk/LQ+Ka+opQxnopuCt6RBlRcoqbCrkbPKNUelQSysWnwwHzGkZ7Gt/+JLi7MAy/onEJAZ9iJAQ5qwfq0YWJ8jOLJ0lJLOeh57SzF5IfyZ8AtnfPAwRszzOXXJRBzpOUI9RC5mziTR49I/0qIBFinidmN1CCPXMlkFM8CgYEA4S0z07kuXMqNGycaQCzph6YG55u5Zd/sHTDXDwqpdXWcuP4fYjhEyn1r4PrIL7CkSNpCh4GQ+s0lDKd7Ktyhw4TnCJeXgfyhDierz/hLRznmTWPBygpjOBP4/jYN8JOHssyChzy0vaPLl/Uf2rVbApVM7aJzR2nP7y45BtEn68sCgYBbpjRuxQXbGjnI0tb8IX87TAl60gJknEUyriqgu/LzKf2KNBGhnqn2UMqzFG6JqppJmmNaExphQlXpqOUwlQ2SFsNjDkUpXLB/3K2yK7F28A/zpUmAmEbQtJkRfGn5XIIiZTTZPWXSon6LQa+m6UCgEhrVsZ95hEIFDoTWWnlVFQKBgQCBTVSicobl78XhXq3bRi7/nt3+J1Tp5BCQnpgP4h52/Yd2Ty60Vv1hjW3iLf/AKt3bm8FyUHtxGVX6Ez5N2Y3mWS3VqD7u/KN7HlqxvLF1gBD4RZ1lKFvbOtTTHTUZ/Y2BpaAaikh7UVA6vR6Cl3tgW11mY89wpZkqjk9e08HpywKBgQCl7L7HeLQ72XJI71dsIl7QvPsMO4JArc5YVSqGZ3+iEN0pQg2yuqeIPwGg8mY6s8GXv/Pvej3tt03aYPUCyyg8+vLWsWVdUJ0+6m2/souv395q0p5jCqRkvg6rnE562U9S5yRJLQneYVy7NcJNA05+hxeP8kisvODxCj/sQf4RqA==
+      alipay-public-key: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApz/DiTR0/iX5VO8JMzNtPBQFU97AZRhWFngyaLXLapxpLV6mt841zieMQ6/m1KvQmByhnDF9u27OYNe2keXNHLqPQr1MV6Yf9j574YK0QwcA8wB1H0k3O6uGxrx/9x9J6+GyAaLJ/uTWJnhhVt7rzUm/bKgQWb7VO0QancwSHnJr3xGZclVB2FDN6gsklKhPgZVG0R7bpswR7IIHMy2W7TQn064eMaUY6a8rqgli/sTsu3fV76yxYLSV9IAKzlUgg5Gp0L72m+7sYeNGgi9CnT7uFeVuwrJrI1XSQTgaStmdY1lEnA9UOd4V5zXSeKKeUQ2qH4OyR6elUofplxahrQIDAQAB
+      notify-url: http://42.194.224.180:9090/api/pay/callback/alipay
+      return-url: http://42.194.224.180:9090/api/pay/alipay/return-bridge
+      client-return-url: http://42.194.224.180:5173/pay/return
       sign-type: RSA2
       charset: UTF-8
       format: json
