@@ -46,8 +46,12 @@ public class ProductViewAssembler {
     }
 
     public ProductDetailView toProductDetail(ProductSpu productSpu) {
+        return toProductDetail(productSpu, Map.of());
+    }
+
+    public ProductDetailView toProductDetail(ProductSpu productSpu, Map<Long, StockSnapshot> stockBySkuId) {
         ProductSku defaultSku = productSpu.defaultSku();
-        return new ProductDetailView(productSpu.id(), productSpu.name(), productSpu.categoryId(), productSpu.mainImageUrl(), productSpu.albumImagesJson(), productSpu.description() == null ? "" : productSpu.description(), defaultSku.salePriceCent(), defaultSku.originPriceCent(), defaultSku.salesCount(), productSpu.skus().stream().map(this::toSkuView).toList());
+        return new ProductDetailView(productSpu.id(), productSpu.name(), productSpu.categoryId(), productSpu.mainImageUrl(), productSpu.albumImagesJson(), productSpu.description() == null ? "" : productSpu.description(), defaultSku.salePriceCent(), defaultSku.originPriceCent(), defaultSku.salesCount(), productSpu.skus().stream().map(sku -> toSkuView(sku, stockBySkuId.get(sku.id()))).toList());
     }
 
     public AdminProductSummaryView toAdminProductSummary(ProductSpu productSpu) {
@@ -68,7 +72,11 @@ public class ProductViewAssembler {
     }
 
     private ProductSkuView toSkuView(ProductSku sku) {
-        return new ProductSkuView(sku.id(), sku.skuCode(), sku.skuName(), sku.specJson(), sku.salePriceCent(), sku.originPriceCent(), sku.status(), sku.salesCount());
+        return toSkuView(sku, null);
+    }
+
+    private ProductSkuView toSkuView(ProductSku sku, StockSnapshot stock) {
+        return new ProductSkuView(sku.id(), sku.skuCode(), sku.skuName(), sku.specJson(), sku.salePriceCent(), sku.originPriceCent(), sku.status(), sku.salesCount(), stock == null ? null : stock.availableStock());
     }
 
     private AdminProductSkuEditView toAdminSkuEditView(ProductSku sku, StockSnapshot stock) {

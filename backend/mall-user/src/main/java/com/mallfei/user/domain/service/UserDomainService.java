@@ -207,6 +207,22 @@ public class UserDomainService {
         ));
     }
 
+    public UserAccount registerByThirdParty(String nickname, String avatarUrl, String rawPassword) {
+        String trimmedNickname = nickname == null || nickname.isBlank() ? "第三方用户" : nickname.trim();
+        if (trimmedNickname.length() > 20) {
+            trimmedNickname = trimmedNickname.substring(0, 20);
+        }
+        String normalizedAvatar = (avatarUrl == null || avatarUrl.isBlank()) ? "/images/default-avatar.svg" : avatarUrl.trim();
+        return userAccountRepository.save(new UserAccount(
+                null,
+                null,
+                passwordCodec.encode(rawPassword),
+                trimmedNickname,
+                normalizedAvatar,
+                "ENABLED"
+        ));
+    }
+
     public UserAddress createAddress(Long userId,
                                      String receiverName,
                                      String receiverPhone,

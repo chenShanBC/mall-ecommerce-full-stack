@@ -13,7 +13,7 @@
           <span class="origin-price">¥{{ formatPrice(activeOriginPrice) }}</span>
         </div>
         <div class="product-name">{{ product.name }}</div>
-        <div class="product-meta">销量 {{ product.sales || 0 }} · 类目ID {{ product.categoryId }} · SKU {{ skuCountText }}</div>
+        <div class="product-meta">销量 {{ product.sales || 0 }} · {{ skuCountText }}</div>
         <div class="product-desc">{{ product.description || '暂无商品描述' }}</div>
       </div>
 
@@ -24,14 +24,14 @@
             v-for="sku in normalizedSkus"
             :key="sku.id"
             class="sku-card"
-            :class="{ active: activeSku.id === sku.id }"
-            @click="activeSku = sku"
+            :class="{ active: activeSku.id === sku.id, soldout: sku.stockStatus === 'soldout' }"
+            @click="handleSkuSelect(sku)"
           >
             <div class="sku-card-header">
               <div class="sku-card-name">{{ sku.skuName }}</div>
               <div class="sku-card-price">¥{{ formatPrice(sku.salePrice || product.salePrice) }}</div>
             </div>
-            <div class="sku-card-code">{{ sku.skuCode || '暂无 SKU 编码' }}</div>
+            <div class="sku-card-stock" :class="`sku-card-stock--${sku.stockStatus}`">{{ sku.stockText }}</div>
             <div class="sku-spec-list">
               <span v-for="spec in sku.specEntries" :key="`${sku.id}-${spec.key}`" class="sku-spec-chip">
                 {{ spec.key }}：{{ spec.value }}
@@ -90,13 +90,31 @@ const gallery = computed(() => {
   return Array.isArray(images) ? images : [];
 });
 
+const getSkuStock = (sku = {}) => Number(sku.availableStock ?? sku.available_stock ?? sku.stock ?? sku.stockQuantity ?? sku.stockNum ?? 0);
+
+const getSkuStockView = (stock) => {
+  if (stock <= 0) {
+    return { stockText: '已售罄', stockStatus: 'soldout' };
+  }
+  if (stock <= 5) {
+    return { stockText: `仅剩 ${stock} 件，即将售罄`, stockStatus: 'critical' };
+  }
+  if (stock <= 20) {
+    return { stockText: `仅剩 ${stock} 件`, stockStatus: 'low' };
+  }
+  return { stockText: '库存充足', stockStatus: 'enough' };
+};
+
 const normalizedSkus = computed(() => {
   const list = product.value?.skus || [];
   return list.map((sku, index) => {
     const parsedSpec = safeJsonParse(sku.specJson, {});
     const specEntries = Object.entries(parsedSpec || {}).map(([key, value]) => ({ key, value }));
+    const stock = getSkuStock(sku);
     return {
       ...sku,
+      stock,
+      ...getSkuStockView(stock),
       specEntries,
       fallbackVisual: buildProductVisual({
         id: sku.id || index,
@@ -125,9 +143,21 @@ const activeBanner = computed(() => {
   return getProductImage(product.value || {});
 });
 
+const handleSkuSelect = (sku) => {
+  if (sku.stockStatus === 'soldout') {
+    showFailToast('该规格已售罄');
+    return;
+  }
+  activeSku.value = sku;
+};
+
 const ensureSkuSelected = () => {
   if (!activeSku.value?.id) {
-    showFailToast('当前商品暂无可购买 SKU');
+    showFailToast('当前商品暂无可购买规格');
+    return false;
+  }
+  if (activeSku.value.stockStatus === 'soldout') {
+    showFailToast('该规格已售罄');
     return false;
   }
   return true;
@@ -138,6 +168,9 @@ const loadDetail = async () => {
     loading.value = true;
     const { data } = await fetchProductDetail(route.params.id);
     product.value = data.data;
+    if (product.value?.id != null) {
+      localStorage.setItem('mallfei:last-visited-product-id', String(product.value.id));
+    }
   } catch (error) {
     showFailToast(error?.response?.data?.msg || error?.response?.data?.message || '商品详情加载失败');
   } finally {
@@ -182,6 +215,7 @@ const addToCart = async () => {
       throw new Error(response?.data?.message || '加入购物车失败');
     }
     saveLocalCartFallback();
+    window.dispatchEvent(new Event('mallfei:cart-changed'));
     showSuccessToast('加入购物车成功');
   } catch (error) {
     showFailToast(error?.response?.data?.msg || error?.response?.data?.message || (error?.message?.includes('MISCONF') ? 'Redis 写入异常，请重启后端或修复 Redis 配置' : error?.message) || '加入购物车失败');
@@ -218,15 +252,18 @@ onMounted(async () => {
     }
   }
   await loadDetail();
-  activeSku.value = normalizedSkus.value[0] || {};
+  activeSku.value = normalizedSkus.value.find((sku) => sku.stockStatus !== 'soldout') || {};
 });
 </script>
 
 <style scoped>
 .detail-page {
   min-height: 100vh;
-  padding-bottom: 90px;
-  background: #f6f8fb;
+  padding-bottom: 104px;
+  background:
+    radial-gradient(circle at top left, rgba(129, 140, 248, 0.22), transparent 28%),
+    radial-gradient(circle at top right, rgba(236, 72, 153, 0.14), transparent 24%),
+    linear-gradient(180deg, #edf3ff 0%, #f7f9ff 100%);
 }
 
 .loading-block {
@@ -235,17 +272,24 @@ onMounted(async () => {
 
 .banner {
   display: block;
-  width: 100%;
+  width: calc(100% - 24px);
   height: 320px;
+  margin: 12px;
   object-fit: cover;
-  background: #fff;
+  background: linear-gradient(135deg, #eef2ff 0%, #dbeafe 100%);
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow: 0 24px 60px rgba(108, 123, 225, 0.14);
 }
 
 .info-card {
   margin: 12px;
-  padding: 16px;
-  background: #fff;
-  border-radius: 18px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 28px;
+  box-shadow: 0 24px 60px rgba(108, 123, 225, 0.12);
+  backdrop-filter: blur(18px);
 }
 
 .price-row {
@@ -256,8 +300,8 @@ onMounted(async () => {
 
 .sale-price {
   font-size: 28px;
-  font-weight: 700;
-  color: #ee0a24;
+  font-weight: 800;
+  color: #f43f5e;
 }
 
 .origin-price {
@@ -269,27 +313,27 @@ onMounted(async () => {
 .product-name {
   margin-top: 12px;
   font-size: 20px;
-  font-weight: 700;
-  color: #111827;
+  font-weight: 800;
+  color: #2d3a64;
 }
 
 .product-meta {
   margin-top: 10px;
   font-size: 12px;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .product-desc {
   margin-top: 12px;
   font-size: 14px;
   line-height: 1.7;
-  color: #475569;
+  color: #51607a;
 }
 
 .section-title {
   font-size: 16px;
-  font-weight: 700;
-  color: #111827;
+  font-weight: 800;
+  color: #2d3a64;
 }
 
 .sku-panel {
@@ -301,15 +345,22 @@ onMounted(async () => {
 
 .sku-card {
   padding: 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 22px;
+  background: linear-gradient(135deg, #f8fbff 0%, #eef3ff 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
 .sku-card.active {
-  border-color: #2563eb;
-  background: #eff6ff;
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+  border-color: rgba(99, 102, 241, 0.34);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.16) 0%, rgba(59, 130, 246, 0.14) 100%);
+  box-shadow: 0 16px 30px rgba(99, 102, 241, 0.18);
+}
+
+.sku-card.soldout {
+  cursor: not-allowed;
+  opacity: 0.48;
+  filter: grayscale(0.35);
 }
 
 .sku-card-header {
@@ -321,20 +372,33 @@ onMounted(async () => {
 
 .sku-card-name {
   font-size: 15px;
-  font-weight: 700;
-  color: #0f172a;
+  font-weight: 800;
+  color: #2d3a64;
 }
 
 .sku-card-price {
   font-size: 16px;
-  font-weight: 700;
-  color: #ee0a24;
+  font-weight: 800;
+  color: #f43f5e;
 }
 
-.sku-card-code {
+.sku-card-stock {
   margin-top: 8px;
   font-size: 12px;
-  color: #94a3b8;
+  font-weight: 700;
+}
+
+.sku-card-stock--enough {
+  color: #64748b;
+}
+
+.sku-card-stock--low {
+  color: #d97706;
+}
+
+.sku-card-stock--critical,
+.sku-card-stock--soldout {
+  color: #f43f5e;
 }
 
 .sku-spec-list {
@@ -347,15 +411,16 @@ onMounted(async () => {
 .sku-spec-chip {
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.08);
-  color: #1d4ed8;
+  background: rgba(79, 70, 229, 0.1);
+  color: #4f46e5;
   font-size: 12px;
+  font-weight: 700;
 }
 
 .sku-tip {
   margin-top: 12px;
   font-size: 13px;
-  color: #475569;
+  color: #51607a;
 }
 
 .quantity-card {
@@ -371,28 +436,30 @@ onMounted(async () => {
 
 .submit-bar {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(14px);
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 26px;
+  box-shadow: 0 20px 48px rgba(108, 123, 225, 0.18);
+  backdrop-filter: blur(18px);
 }
 
 .submit-price {
-  color: #475569;
+  color: #51607a;
   font-size: 14px;
 }
 
 .submit-price span {
-  color: #ee0a24;
+  color: #f43f5e;
   font-size: 24px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .submit-actions {

@@ -2,6 +2,7 @@ package com.mallfei.user.controller;
 
 import com.mallfei.common.api.ApiResponse;
 import com.mallfei.common.auth.RequireUser;
+import com.mallfei.user.application.dto.AlipayLoginExchangeRequest;
 import com.mallfei.user.application.dto.LoginCaptchaVerifyRequest;
 import com.mallfei.user.application.dto.UserPasswordChangeRequest;
 import com.mallfei.user.application.dto.UserPasswordLoginRequest;
@@ -9,6 +10,7 @@ import com.mallfei.user.application.dto.UserProfileUpdateRequest;
 import com.mallfei.user.application.dto.UserRegisterRequest;
 import com.mallfei.user.application.dto.UserSmsCodeLoginRequest;
 import com.mallfei.user.application.dto.UserSmsCodeSendRequest;
+import com.mallfei.user.application.service.AlipayLoginApplicationService;
 import com.mallfei.user.application.service.UserApplicationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -27,9 +30,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserAuthController {
 
     private final UserApplicationService userApplicationService;
+    private final AlipayLoginApplicationService alipayLoginApplicationService;
 
-    public UserAuthController(UserApplicationService userApplicationService) {
+    public UserAuthController(UserApplicationService userApplicationService,
+                              AlipayLoginApplicationService alipayLoginApplicationService) {
         this.userApplicationService = userApplicationService;
+        this.alipayLoginApplicationService = alipayLoginApplicationService;
     }
 
     @Operation(summary = "获取登录拼图验证码挑战")
@@ -67,6 +73,25 @@ public class UserAuthController {
     @PostMapping("/register")
     public ApiResponse<?> register(@Valid @RequestBody UserRegisterRequest request) {
         return ApiResponse.success("注册并登录成功", userApplicationService.register(request));
+    }
+
+    @Operation(summary = "获取支付宝授权地址")
+    @GetMapping("/login/alipay/auth-url")
+    public ApiResponse<?> alipayAuthUrl() {
+        return ApiResponse.success(alipayLoginApplicationService.createAuthUrl());
+    }
+
+    @Operation(summary = "支付宝授权回调")
+    @GetMapping("/login/alipay/callback")
+    public org.springframework.web.servlet.view.RedirectView alipayCallback(@RequestParam("auth_code") String authCode,
+                                                                            @RequestParam("state") String state) {
+        return new org.springframework.web.servlet.view.RedirectView(alipayLoginApplicationService.handleCallback(authCode, state));
+    }
+
+    @Operation(summary = "支付宝登录票据换取登录态")
+    @PostMapping("/login/alipay/exchange")
+    public ApiResponse<?> alipayExchange(@Valid @RequestBody AlipayLoginExchangeRequest request) {
+        return ApiResponse.success(alipayLoginApplicationService.exchangeLoginTicket(request.loginTicket()));
     }
 
     @RequireUser

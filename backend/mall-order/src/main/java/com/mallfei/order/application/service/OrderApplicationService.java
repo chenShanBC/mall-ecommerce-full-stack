@@ -116,6 +116,16 @@ public class OrderApplicationService {
         return orderViewAssembler.toDetail(orderDomainService.loadOrder(orderId), orderTimeoutMinutes);
     }
 
+    public void deleteCurrentUserOrder(Long orderId) {
+        Long userId = currentUser().principalId();
+        Order order = orderDomainService.loadOwnedOrder(orderId, userId);
+        Order timeoutChecked = cancelTimedOutOrderIfNecessary(order);
+        if (!terminalOrder(timeoutChecked)) {
+            throw BusinessException.badRequest("仅已完成、已退款、已取消等终态订单可以删除");
+        }
+        orderDomainService.markUserDeleted(orderId, userId);
+    }
+
     public OrderRefundView applyRefund(Long orderId, OrderRefundApplyRequest request) {
         Order order = orderDomainService.loadOwnedOrder(orderId, currentUser().principalId());
         Order timeoutChecked = cancelTimedOutOrderIfNecessary(order);
@@ -220,6 +230,16 @@ public class OrderApplicationService {
             releasePendingOrderStockQuietly(order.orderNo());
             closePendingPayOrdersQuietly(order.orderNo(), Order.STATUS_TIMEOUT_CANCELLED);
         }
+    }
+
+    private boolean terminalOrder(Order order) {
+        return Order.STATUS_COMPLETED.equals(order.orderStatus())
+                || Order.STATUS_REFUNDED.equals(order.orderStatus())
+                || Order.STATUS_PARTIALLY_REFUNDED.equals(order.orderStatus())
+                || Order.STATUS_CANCELLED.equals(order.orderStatus())
+                || Order.STATUS_TIMEOUT_CANCELLED.equals(order.orderStatus())
+                || Order.STATUS_CLOSED.equals(order.orderStatus())
+                || Order.STATUS_REFUND_CLOSED.equals(order.orderStatus());
     }
 
     private Order cancelTimedOutOrderIfNecessary(Order order) {

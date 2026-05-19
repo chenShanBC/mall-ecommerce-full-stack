@@ -58,6 +58,13 @@ public class OrderController {
         return ApiResponse.success(orderApplicationService.cancelOrder(orderId));
     }
 
+    @Operation(summary = "用户删除订单")
+    @DeleteMapping("/{orderId}")
+    public ApiResponse<Void> delete(@PathVariable Long orderId) {
+        orderApplicationService.deleteCurrentUserOrder(orderId);
+        return ApiResponse.success("订单已删除", null);
+    }
+
     @Operation(summary = "确认收货")
     @PutMapping("/{orderId}/confirm-receipt")
     public ApiResponse<OrderDetailView> confirmReceipt(@PathVariable Long orderId) {

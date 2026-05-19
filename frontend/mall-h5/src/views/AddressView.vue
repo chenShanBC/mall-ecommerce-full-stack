@@ -304,7 +304,10 @@ loadAddresses().catch((error) => {
 .page {
   min-height: 100vh;
   padding-bottom: 90px;
-  background: #f6f8fb;
+  background:
+    radial-gradient(circle at top left, rgba(129, 140, 248, 0.2), transparent 28%),
+    radial-gradient(circle at top right, rgba(236, 72, 153, 0.11), transparent 24%),
+    linear-gradient(180deg, #edf3ff 0%, #f7f9ff 100%);
 }
 
 .list-wrap {
@@ -315,9 +318,11 @@ loadAddresses().catch((error) => {
   position: relative;
   margin-bottom: 12px;
   padding: 16px;
-  background: #fff;
-  border-radius: 18px;
-  border: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow: 0 14px 36px rgba(108, 123, 225, 0.1);
+  backdrop-filter: blur(18px);
   transition: all 0.2s ease;
 }
 

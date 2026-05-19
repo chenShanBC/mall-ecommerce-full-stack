@@ -12,6 +12,7 @@ import com.mallfei.order.infrastructure.persistence.mapper.OrderItemMapper;
 import com.mallfei.order.infrastructure.persistence.mapper.OrderMapper;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -53,7 +54,10 @@ public class MybatisOrderRepository implements OrderRepository {
 
     @Override
     public List<Order> findByUserId(Long userId) {
-        return orderMapper.selectList(new LambdaQueryWrapper<OrderDO>().eq(OrderDO::getUserId, userId).orderByDesc(OrderDO::getId)).stream().map(this::toDomain).toList();
+        return orderMapper.selectList(new LambdaQueryWrapper<OrderDO>()
+                .eq(OrderDO::getUserId, userId)
+                .and(wrapper -> wrapper.isNull(OrderDO::getUserDeleted).or().eq(OrderDO::getUserDeleted, 0))
+                .orderByDesc(OrderDO::getId)).stream().map(this::toDomain).toList();
     }
 
     @Override
@@ -95,6 +99,16 @@ public class MybatisOrderRepository implements OrderRepository {
 
     @Override
     public void update(Order order) { orderMapper.updateById(toOrderDO(order)); }
+
+    @Override
+    public void markUserDeleted(Long orderId, Long userId) {
+        OrderDO orderDO = new OrderDO();
+        orderDO.setUserDeleted(1);
+        orderDO.setUserDeletedAt(LocalDateTime.now());
+        orderMapper.update(orderDO, new LambdaQueryWrapper<OrderDO>()
+                .eq(OrderDO::getId, orderId)
+                .eq(OrderDO::getUserId, userId));
+    }
 
     private void applyOrderSort(LambdaQueryWrapper<OrderDO> wrapper, String sortBy, String sortOrder) {
         boolean asc = !"desc".equalsIgnoreCase(sortOrder);

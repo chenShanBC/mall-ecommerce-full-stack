@@ -2,31 +2,32 @@
   <div class="page">
     <van-nav-bar title="我的订单" />
 
-    <div class="toolbar-card">
-      <van-search
-        v-model="keyword"
-        shape="round"
-        placeholder="搜索订单号或商品名称"
-        @update:model-value="handleFilterChange"
-        @search="handleFilterChange"
-        @clear="handleFilterChange"
-      />
-      <div class="status-tabs">
-        <div
-          v-for="tab in statusTabs"
-          :key="tab.value"
-          class="status-tab"
-          :class="{ 'status-tab--active': activeStatus === tab.value }"
-          @click="handleStatusChange(tab.value)"
-        >
-          {{ tab.label }}
+    <div class="orders-panel">
+      <div class="toolbar-card">
+        <van-search
+          v-model="keyword"
+          shape="round"
+          placeholder="搜索订单号或商品名称"
+          @update:model-value="handleFilterChange"
+          @search="handleFilterChange"
+          @clear="handleFilterChange"
+        />
+        <div class="status-tabs">
+          <div
+            v-for="tab in statusTabs"
+            :key="tab.value"
+            class="status-tab"
+            :class="{ 'status-tab--active': activeStatus === tab.value }"
+            @click="handleStatusChange(tab.value)"
+          >
+            {{ tab.label }}
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="order-list">
-      <van-empty v-if="!filteredOrders.length" description="暂无订单" />
-      <div v-for="item in filteredOrders" :key="item.id" class="order-card" @click="goDetail(item.id)">
+      <div class="order-list">
+        <van-empty v-if="!filteredOrders.length" description="暂无订单" />
+        <div v-for="item in filteredOrders" :key="item.id" class="order-card" @click="goDetail(item.id)">
         <div class="order-top">
           <div class="order-top-label">订单编号</div>
           <div class="order-top-no">{{ item.orderNo }}</div>
@@ -84,10 +85,22 @@
               >
                 申请退款
               </van-button>
+              <van-button
+                v-if="canDeleteOrder(item.status)"
+                type="danger"
+                plain
+                size="small"
+                round
+                :loading="deletingOrderId === item.id"
+                @click.stop="handleDeleteOrder(item)"
+              >
+                删除订单
+              </van-button>
             </div>
           </div>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>
@@ -96,9 +109,12 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { showConfirmDialog, showFailToast, showSuccessToast } from 'vant';
-import { applyOrderRefund, cancelOrder, confirmReceipt, fetchOrders, repairPaidOrder, syncPayOrderStatus } from '../api';
+import { applyOrderRefund, cancelOrder, confirmReceipt, deleteUserOrder, fetchOrders, repairPaidOrder, syncPayOrderStatus } from '../api';
 import { formatCountdown, formatDateTime, formatPrice, formatStatus } from '../utils/format';
 import { getProductImage } from '../utils/productVisual';
+
+const ORDER_CACHE_KEY = 'mallfei:h5-orders-cache-v1';
+const ORDER_CACHE_TTL = 60 * 1000;
 
 const router = useRouter();
 const orders = ref([]);
@@ -107,6 +123,7 @@ const activeStatus = ref('ALL');
 const confirmingOrderId = ref(null);
 const refundingOrderId = ref(null);
 const cancellingOrderId = ref(null);
+const deletingOrderId = ref(null);
 let timer = null;
 let countdownBaseTime = Date.now();
 let refreshingAfterCountdown = false;
@@ -174,8 +191,10 @@ const statusPillClass = (status) => {
   return 'primary';
 };
 
+const terminalStatuses = ['COMPLETED', 'REFUNDED', 'CANCELLED', 'TIMEOUT_CANCELLED', 'CLOSED', 'REFUND_CLOSED'];
 const showRefundButton = (status) => ['PAID', 'PROCESSING', 'SHIPPED'].includes(status);
-const showActions = (status) => status === 'PENDING_PAYMENT' || status === 'PAID' || status === 'SHIPPED' || showRefundButton(status);
+const canDeleteOrder = (status) => terminalStatuses.includes(status);
+const showActions = (status) => status === 'PENDING_PAYMENT' || status === 'PAID' || status === 'SHIPPED' || showRefundButton(status) || canDeleteOrder(status);
 
 const stopPayStatusPolling = () => {
   if (payStatusPoller) {
@@ -270,11 +289,34 @@ const startTimer = () => {
   timer = setInterval(tickCountdown, 1000);
 };
 
+const restoreOrdersCache = () => {
+  try {
+    const raw = localStorage.getItem(ORDER_CACHE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.updatedAt || !Array.isArray(parsed?.orders)) return false;
+    if (Date.now() - Number(parsed.updatedAt) > ORDER_CACHE_TTL) return false;
+    orders.value = parsed.orders;
+    countdownBaseTime = Date.now();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const persistOrdersCache = () => {
+  try {
+    localStorage.setItem(ORDER_CACHE_KEY, JSON.stringify({ updatedAt: Date.now(), orders: orders.value }));
+  } catch {
+  }
+};
+
 const loadOrders = async (showError = true) => {
   try {
     const { data } = await fetchOrders();
     countdownBaseTime = Date.now();
     orders.value = data.data || [];
+    persistOrdersCache();
     if (orders.value.some((item) => item.status === 'PENDING_PAYMENT' && Number(item.remainingPaySeconds || 0) === 0)) {
       setTimeout(() => {
         refreshOrdersWhenCountdownEnds();
@@ -359,18 +401,42 @@ const handleRefundApply = async (order) => {
   }
 };
 
+const handleDeleteOrder = async (order) => {
+  try {
+    await showConfirmDialog({
+      title: '删除订单',
+      message: '删除后该订单将不再出现在你的订单列表中，但不会影响商家后台对账记录，确认删除吗？',
+      confirmButtonText: '确认删除',
+      cancelButtonText: '再想想',
+    });
+    deletingOrderId.value = order.id;
+    await deleteUserOrder(order.id);
+    await loadOrders();
+    showSuccessToast('订单已删除');
+  } catch (error) {
+    if (error !== 'cancel') {
+      showFailToast(error?.response?.data?.msg || error?.response?.data?.message || '删除订单失败');
+    }
+  } finally {
+    deletingOrderId.value = null;
+  }
+};
+
 const goDetail = (id) => {
   router.push(`/orders/${id}`);
 };
 
 onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange);
-  await loadOrders();
+  restoreOrdersCache();
   startTimer();
-  const synced = await syncRecentPaidOrders({ allowRepair: true });
-  if (!synced) {
-    startRecentPaidOrderPolling();
-  }
+
+  loadOrders(false).then(async () => {
+    const synced = await syncRecentPaidOrders({ allowRepair: true });
+    if (!synced) {
+      startRecentPaidOrderPolling();
+    }
+  });
 });
 
 onBeforeUnmount(() => {
@@ -385,15 +451,27 @@ onBeforeUnmount(() => {
 <style scoped>
 .page {
   min-height: 100vh;
-  padding: 12px 12px 80px;
-  background: #f6f8fb;
+  padding: 12px 12px 86px;
+  background:
+    radial-gradient(circle at top left, rgba(129, 140, 248, 0.2), transparent 28%),
+    radial-gradient(circle at top right, rgba(236, 72, 153, 0.11), transparent 24%),
+    linear-gradient(180deg, #edf3ff 0%, #f7f9ff 100%);
+}
+
+.orders-panel {
+  margin-top: 18px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 28px;
+  box-shadow: 0 14px 36px rgba(108, 123, 225, 0.1);
+  backdrop-filter: blur(18px);
 }
 
 .toolbar-card {
-  margin-bottom: 12px;
-  padding: 10px;
-  background: #fff;
-  border-radius: 18px;
+  margin-bottom: 14px;
+  padding: 0;
+  background: transparent;
 }
 
 .status-tabs {
@@ -427,9 +505,11 @@ onBeforeUnmount(() => {
 }
 
 .order-card {
-  padding: 16px;
-  background: #fff;
-  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  border-radius: 22px;
+  box-shadow: 0 10px 24px rgba(108, 123, 225, 0.08);
 }
 
 .order-top {

@@ -43,7 +43,7 @@ public class FileApplicationService {
     public FileUploadResult uploadAvatar(MultipartFile file) {
         String extension = fileDomainService.validateAvatarFile(file);
         StoredFile storedFile = fileStorage.storeAvatar(file, extension);
-        String accessUrl = normalizePublicBasePath(fileStorageProperties.getPublicBasePath()) + storedFile.relativePath();
+        String accessUrl = normalizePublicBasePath(fileStorageProperties.getPublicBasePath()) + "/" + storedFile.relativePath();
         AuthenticatedPrincipal principal = authFacade.currentRequiredPrincipal();
         try {
             FileRecord savedRecord = fileRecordRepository.save(new FileRecord(

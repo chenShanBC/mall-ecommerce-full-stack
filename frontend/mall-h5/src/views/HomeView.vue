@@ -20,12 +20,12 @@
       </div>
       <div class="category-list">
         <van-tag
-          v-for="item in flatCategories"
+          v-for="item in visibleCategories"
           :key="item.id"
           plain
           round
           size="large"
-          :color="activeCategoryId === item.id ? '#1989fa' : '#969799'"
+          :color="activeCategoryId === item.id ? '#4f46e5' : '#94a3b8'"
           @click="activeCategoryId = item.id"
         >
           {{ item.name }}
@@ -77,7 +77,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onActivated, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { showFailToast } from 'vant';
 import { pinyin } from 'pinyin-pro';
@@ -89,6 +89,10 @@ import { getProductImage } from '../utils/productVisual';
 import { requireLogin } from '../utils/requireLogin';
 
 const SALES_REFRESH_KEY = 'mallfei:product-sales-refresh';
+const HOME_CATEGORIES_CACHE_KEY = 'mallfei:h5-home-categories-cache-v1';
+const HOME_PRODUCTS_CACHE_KEY = 'mallfei:h5-home-products-cache-v1';
+const HOME_CATEGORIES_CACHE_TTL = 30 * 60 * 1000;
+const HOME_PRODUCTS_CACHE_TTL = 3 * 60 * 1000;
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -96,6 +100,8 @@ const keyword = ref('');
 const categories = ref([]);
 const products = ref([]);
 const activeCategoryId = ref(null);
+const categoriesLoadedAt = ref(0);
+const productsLoadedAt = ref(0);
 
 const normalizeText = (value = '') => String(value).toLowerCase().replace(/\s+/g, '');
 
@@ -126,9 +132,13 @@ const matchesProductKeyword = (item, search) => {
 
 const flatCategories = computed(() => {
   const result = [];
+  const seenIds = new Set();
   const walk = (nodes = [], parentId = null) => {
     nodes.forEach((node) => {
-      result.push({ id: node.id, name: node.name, parentId });
+      if (!seenIds.has(node.id)) {
+        seenIds.add(node.id);
+        result.push({ id: node.id, name: node.name, parentId });
+      }
       if (node.children?.length) {
         walk(node.children, node.id);
       }
@@ -137,6 +147,8 @@ const flatCategories = computed(() => {
   walk(categories.value);
   return result;
 });
+
+const visibleCategories = computed(() => flatCategories.value.filter((item) => item.parentId === null));
 
 const categoryMap = computed(() => new Map(flatCategories.value.map((item) => [item.id, item])));
 
@@ -175,17 +187,128 @@ const filteredProducts = computed(() => {
   });
 });
 
-const loadData = async () => {
+const saveCategoriesCache = () => {
   try {
-    const [categoryRes, productRes] = await Promise.all([fetchCategories(), fetchProductPage()]);
-    categories.value = categoryRes.data.data || [];
-    products.value = (productRes.data.data?.records || []).map((item) => ({
-      ...item,
-      categoryName: categoryMap.value.get(item.categoryId)?.name || '',
+    localStorage.setItem(HOME_CATEGORIES_CACHE_KEY, JSON.stringify({
+      ts: Date.now(),
+      categories: categories.value,
     }));
+  } catch {
+  }
+};
+
+const saveProductsCache = () => {
+  try {
+    localStorage.setItem(HOME_PRODUCTS_CACHE_KEY, JSON.stringify({
+      ts: Date.now(),
+      products: products.value,
+    }));
+  } catch {
+  }
+};
+
+const loadCategoriesCache = () => {
+  try {
+    const raw = localStorage.getItem(HOME_CATEGORIES_CACHE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed || Date.now() - Number(parsed.ts || 0) > HOME_CATEGORIES_CACHE_TTL) return false;
+    categories.value = Array.isArray(parsed.categories) ? parsed.categories : [];
+    categoriesLoadedAt.value = Number(parsed.ts || Date.now());
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const loadProductsCache = () => {
+  try {
+    const raw = localStorage.getItem(HOME_PRODUCTS_CACHE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed || Date.now() - Number(parsed.ts || 0) > HOME_PRODUCTS_CACHE_TTL) return false;
+    products.value = Array.isArray(parsed.products) ? parsed.products : [];
+    productsLoadedAt.value = Number(parsed.ts || Date.now());
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const normalizeProductsWithCategoryName = (list = []) => (list || []).map((item) => ({
+  ...item,
+  categoryName: categoryMap.value.get(item.categoryId)?.name || '',
+}));
+
+const loadCategories = async () => {
+  const categoryRes = await fetchCategories();
+  categories.value = categoryRes.data.data || [];
+  categoriesLoadedAt.value = Date.now();
+  saveCategoriesCache();
+};
+
+const loadProducts = async () => {
+  const productRes = await fetchProductPage();
+  products.value = normalizeProductsWithCategoryName(productRes.data.data?.records || []);
+  productsLoadedAt.value = Date.now();
+  saveProductsCache();
+};
+
+const refreshSingleProductInCache = async (productId) => {
+  if (!productId || !products.value.length) return false;
+  try {
+    const { fetchProductDetail } = await import('../api');
+    const { data } = await fetchProductDetail(productId);
+    const detail = data?.data;
+    if (!detail?.id) return false;
+    const idx = products.value.findIndex((item) => Number(item.id) === Number(detail.id));
+    if (idx < 0) return false;
+    const next = [...products.value];
+    next[idx] = {
+      ...next[idx],
+      id: detail.id,
+      name: detail.name,
+      categoryId: detail.categoryId,
+      mainImage: detail.mainImage,
+      salePrice: detail.salePrice,
+      originPrice: detail.originPrice,
+      sales: detail.sales,
+      categoryName: categoryMap.value.get(detail.categoryId)?.name || next[idx].categoryName || '',
+    };
+    products.value = next;
+    productsLoadedAt.value = Date.now();
+    saveProductsCache();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const loadData = async ({ silent = false, forceCategories = false, forceProducts = false } = {}) => {
+  try {
+    const categoriesExpired = Date.now() - categoriesLoadedAt.value > HOME_CATEGORIES_CACHE_TTL;
+    const productsExpired = Date.now() - productsLoadedAt.value > HOME_PRODUCTS_CACHE_TTL;
+    const needCategories = forceCategories || categoriesExpired || !categories.value.length;
+    const needProducts = forceProducts || productsExpired || !products.value.length;
+
+    if (needCategories && needProducts) {
+      await Promise.all([loadCategories(), loadProducts()]);
+    } else {
+      if (needCategories) {
+        await loadCategories();
+      }
+      if (needProducts) {
+        await loadProducts();
+      } else if (needCategories) {
+        products.value = normalizeProductsWithCategoryName(products.value);
+      }
+    }
+
     localStorage.removeItem(SALES_REFRESH_KEY);
   } catch (error) {
-    showFailToast(error?.response?.data?.msg || error?.response?.data?.message || '首页数据加载失败');
+    if (!silent) {
+      showFailToast(error?.response?.data?.msg || error?.response?.data?.message || '首页数据加载失败');
+    }
   }
 };
 
@@ -213,61 +336,98 @@ onMounted(async () => {
       await userStore.logout();
     }
   }
-  await loadData();
+  const hasCategoriesCache = loadCategoriesCache();
+  const hasProductsCache = loadProductsCache();
+  if (!hasCategoriesCache || !hasProductsCache) {
+    await loadData();
+  }
+});
+
+onActivated(async () => {
+  const shouldRefreshBySales = Boolean(localStorage.getItem(SALES_REFRESH_KEY));
+  const categoriesExpired = Date.now() - categoriesLoadedAt.value > HOME_CATEGORIES_CACHE_TTL;
+  const productsExpired = Date.now() - productsLoadedAt.value > HOME_PRODUCTS_CACHE_TTL;
+
+  if (shouldRefreshBySales) {
+    const lastProductId = Number(localStorage.getItem('mallfei:last-visited-product-id') || 0);
+    const patched = await refreshSingleProductInCache(lastProductId);
+    if (!patched) {
+      await loadData({ silent: true, forceProducts: true });
+    }
+    return;
+  }
+
+  if (categoriesExpired || productsExpired || !products.value.length) {
+    await loadData({ silent: true });
+  }
 });
 </script>
 
 <style scoped>
 .page {
   min-height: 100vh;
-  padding-bottom: 70px;
-  background: linear-gradient(180deg, #eff6ff 0%, #f6f8fb 220px);
+  padding: 8px 0 82px;
+  background:
+    radial-gradient(circle at top left, rgba(129, 140, 248, 0.18), transparent 24%),
+    radial-gradient(circle at top right, rgba(236, 72, 153, 0.1), transparent 22%),
+    linear-gradient(180deg, #edf3ff 0%, #f7f9ff 100%);
 }
 
 .hero {
-  padding: 16px;
-  background: linear-gradient(135deg, #2563eb, #4f46e5);
-  color: #fff;
-  border-radius: 0 0 24px 24px;
+  margin: 8px 12px 10px;
+  padding: 16px 16px 14px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #2d3a64;
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 24px;
+  box-shadow: 0 14px 36px rgba(108, 123, 225, 0.12);
+  backdrop-filter: blur(18px);
 }
 
 .hero-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .hero-title {
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 22px;
+  line-height: 1.18;
+  font-weight: 800;
+  letter-spacing: 0.01em;
 }
 
 .hero-subtitle {
-  margin-top: 6px;
-  font-size: 13px;
-  opacity: 0.9;
+  margin-top: 5px;
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 :deep(.hero-action-btn) {
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.92);
-  background: rgba(255, 255, 255, 0.12);
+  height: 30px;
+  padding: 0 12px;
+  color: #4f46e5;
+  border: none;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.14) 0%, rgba(59, 130, 246, 0.12) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
 :deep(.hero-action-btn .van-button__text) {
-  color: #ffffff;
-  font-weight: 600;
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .section-card {
-  margin: 12px;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.96);
-  border-radius: 20px;
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(14px);
+  margin: 10px 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 24px;
+  box-shadow: 0 14px 36px rgba(108, 123, 225, 0.1);
+  backdrop-filter: blur(18px);
 }
 
 .section-header {
@@ -278,46 +438,66 @@ onMounted(async () => {
 }
 
 .section-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #111827;
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: 800;
+  color: #2d3a64;
 }
 
 .section-link,
 .section-desc {
-  font-size: 12px;
-  color: #64748b;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.section-link {
+  font-weight: 700;
+  color: #4f46e5;
 }
 
 .category-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 14px;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+:deep(.van-tag) {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(248, 251, 255, 0.86);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
 }
 
 .user-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 
 .summary-item {
-  padding: 14px 12px;
+  min-width: 0;
+  padding: 10px;
   border-radius: 18px;
-  background: linear-gradient(180deg, #f8fafc, #eef6ff);
+  background: linear-gradient(135deg, #f8fbff 0%, #eef3ff 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
 .summary-label {
-  font-size: 12px;
-  color: #64748b;
+  font-size: 11px;
+  color: #94a3b8;
 }
 
 .summary-value {
-  margin-top: 10px;
-  font-size: 16px;
-  font-weight: 700;
-  color: #0f172a;
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #2d3a64;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .product-section {
@@ -325,64 +505,71 @@ onMounted(async () => {
 }
 
 .products-header {
-  margin-bottom: 12px;
+  margin: 4px 2px 10px;
 }
 
 .product-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .product-card {
   overflow: hidden;
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow: 0 14px 34px rgba(108, 123, 225, 0.1);
+  backdrop-filter: blur(18px);
 }
 
 .product-image {
   display: block;
   width: 100%;
-  height: 180px;
+  height: 132px;
   object-fit: cover;
-  background: #eff6ff;
+  background: linear-gradient(135deg, #eef2ff 0%, #dbeafe 100%);
 }
 
 .product-body {
-  padding: 14px;
+  padding: 10px;
 }
 
 .product-name {
-  min-height: 44px;
-  font-size: 15px;
-  font-weight: 700;
-  color: #0f172a;
-  line-height: 1.5;
+  min-height: 38px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #2d3a64;
+  line-height: 1.45;
 }
 
 .product-sales {
-  margin-top: 8px;
-  color: #64748b;
-  font-size: 12px;
+  margin-top: 5px;
+  color: #94a3b8;
+  font-size: 11px;
 }
 
 .product-price-row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  margin: 12px 0;
+  gap: 6px;
+  margin: 8px 0;
 }
 
 .price {
-  color: #ee0a24;
-  font-size: 20px;
-  font-weight: 700;
+  color: #f43f5e;
+  font-size: 17px;
+  font-weight: 800;
 }
 
 .origin {
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 11px;
   text-decoration: line-through;
+}
+
+:deep(.product-body .van-button) {
+  height: 30px;
+  font-size: 12px;
 }
 </style>

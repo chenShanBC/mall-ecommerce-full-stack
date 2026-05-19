@@ -30,6 +30,8 @@ public class OrderDO {
     private LocalDateTime cancelledAt;
     private LocalDateTime shippedAt;
     private LocalDateTime completedAt;
+    private Integer userDeleted;
+    private LocalDateTime userDeletedAt;
     private Integer version;
 
     public Long getId() { return id; }
@@ -72,6 +74,10 @@ public class OrderDO {
     public void setShippedAt(LocalDateTime shippedAt) { this.shippedAt = shippedAt; }
     public LocalDateTime getCompletedAt() { return completedAt; }
     public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
+    public Integer getUserDeleted() { return userDeleted; }
+    public void setUserDeleted(Integer userDeleted) { this.userDeleted = userDeleted; }
+    public LocalDateTime getUserDeletedAt() { return userDeletedAt; }
+    public void setUserDeletedAt(LocalDateTime userDeletedAt) { this.userDeletedAt = userDeletedAt; }
     public Integer getVersion() { return version; }
     public void setVersion(Integer version) { this.version = version; }
 }

@@ -39,13 +39,38 @@ import { useUserStore } from '../stores/user';
 
 const router = useRouter();
 const userStore = useUserStore();
-const backendOrigin = import.meta.env.DEV ? 'http://localhost:9090' : window.location.origin;
+
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+const backendOrigin = (() => {
+  if (/^https?:\/\//i.test(apiBaseUrl)) {
+    return apiBaseUrl.replace(/\/api$/, '');
+  }
+  return window.location.origin;
+})();
 
 const profileName = computed(() => userStore.displayName || '普通用户');
+const defaultAvatarSvg = "data:image/svg+xml;utf8," + encodeURIComponent(`
+  <svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'>
+    <defs>
+      <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
+        <stop offset='0%' stop-color='#e0e7ff'/>
+        <stop offset='100%' stop-color='#c7d2fe'/>
+      </linearGradient>
+    </defs>
+    <circle cx='60' cy='60' r='60' fill='url(#g)'/>
+    <circle cx='60' cy='48' r='20' fill='#94a3b8'/>
+    <rect x='28' y='74' width='64' height='30' rx='15' fill='#94a3b8'/>
+  </svg>
+`);
+const normalizeAvatarPath = (url) => {
+  if (!url) return url;
+  return url.replace(/^\/upload\//i, '/uploads/');
+};
+
 const avatarUrl = computed(() => {
-  const rawAvatarUrl = userStore.profile?.avatarUrl;
+  const rawAvatarUrl = normalizeAvatarPath(userStore.profile?.avatarUrl);
   if (!rawAvatarUrl) {
-    return `https://via.placeholder.com/120x120.png?text=${encodeURIComponent(profileName.value)}`;
+    return defaultAvatarSvg;
   }
   if (/^https?:\/\//i.test(rawAvatarUrl)) {
     return rawAvatarUrl;
@@ -74,8 +99,11 @@ onMounted(async () => {
 <style scoped>
 .page {
   min-height: 100vh;
-  padding: 0 12px 80px;
-  background: #f6f8fb;
+  padding: 8px 12px 86px;
+  background:
+    radial-gradient(circle at top left, rgba(129, 140, 248, 0.2), transparent 28%),
+    radial-gradient(circle at top right, rgba(236, 72, 153, 0.11), transparent 24%),
+    linear-gradient(180deg, #edf3ff 0%, #f7f9ff 100%);
 }
 
 .profile-hero {
@@ -83,11 +111,13 @@ onMounted(async () => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 4px;
   padding: 20px 18px;
-  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  background: linear-gradient(135deg, #5b6cff 0%, #4f46e5 100%);
+  border: 1px solid rgba(255, 255, 255, 0.68);
   border-radius: 24px;
   color: #fff;
+  box-shadow: 0 18px 42px rgba(79, 70, 229, 0.22);
 }
 
 .hero-main {
@@ -130,14 +160,17 @@ onMounted(async () => {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-top: 12px;
+  gap: 16px;
+  margin-top: 16px;
 }
 
 .stat-card,
 .menu-card {
-  background: #fff;
-  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 22px;
+  box-shadow: 0 14px 36px rgba(108, 123, 225, 0.1);
+  backdrop-filter: blur(18px);
 }
 
 .stat-card {

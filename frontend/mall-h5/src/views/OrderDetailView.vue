@@ -508,9 +508,23 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.page { min-height: 100vh; background: #f6f8fb; }
+.page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(129, 140, 248, 0.2), transparent 28%),
+    radial-gradient(circle at top right, rgba(236, 72, 153, 0.11), transparent 24%),
+    linear-gradient(180deg, #edf3ff 0%, #f7f9ff 100%);
+}
 .content { padding: 12px 12px 24px; }
-.card { margin-bottom: 12px; padding: 16px; background: #fff; border-radius: 18px; }
+.card {
+  margin-bottom: 12px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 24px;
+  box-shadow: 0 14px 36px rgba(108, 123, 225, 0.1);
+  backdrop-filter: blur(18px);
+}
 .head-row, .summary-line, .goods-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .order-no-label { font-size: 12px; color: #94a3b8; }
 .order-no { margin-top: 4px; font-size: 16px; font-weight: 700; line-height: 1.35; letter-spacing: 0.2px; word-break: break-all; }

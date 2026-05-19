@@ -64,6 +64,13 @@
       </van-tabs>
     </div>
 
+    <div class="third-login-wrap">
+      <van-button block plain type="primary" :loading="loading" @click="handleAlipayLogin">
+        支付宝快捷登录
+      </van-button>
+      <div class="third-login-tip">首次登录将自动创建账号并完成绑定</div>
+    </div>
+
     <van-popup v-model:show="showCaptchaPopup" class="captcha-popup" round @closed="handleCaptchaClosed">
       <div class="slider-wrap">
         <div class="slider-title">
@@ -117,10 +124,16 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, reactive, ref } from 'vue';
-import { showFailToast, showSuccessToast } from 'vant';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { showFailToast, showLoadingToast, showSuccessToast } from 'vant';
 import { useRoute, useRouter } from 'vue-router';
-import { loginCaptchaChallenge, loginCaptchaVerify, sendLoginSmsCode } from '../api';
+import {
+  exchangeAlipayLoginTicket,
+  fetchAlipayLoginAuthUrl,
+  loginCaptchaChallenge,
+  loginCaptchaVerify,
+  sendLoginSmsCode,
+} from '../api';
 import { useUserStore } from '../stores/user';
 
 const router = useRouter();
@@ -386,6 +399,54 @@ const handleRegister = async () => {
     loading.value = false;
   }
 };
+
+const handleAlipayLogin = async () => {
+  try {
+    loading.value = true;
+    const { data } = await fetchAlipayLoginAuthUrl();
+    const authUrl = data?.data?.authUrl;
+    if (!authUrl) {
+      showFailToast('获取支付宝授权地址失败');
+      return;
+    }
+    window.location.href = authUrl;
+  } catch (error) {
+    showFailToast(error?.response?.data?.message || '支付宝登录暂不可用');
+  } finally {
+    loading.value = false;
+  }
+};
+
+const handleAlipayCallback = async () => {
+  const loginTicket = route.query.loginTicket;
+  const tag = route.query.alipay;
+  if (!loginTicket || tag !== 'callback') {
+    return;
+  }
+  const toast = showLoadingToast({
+    message: '支付宝登录中...',
+    duration: 0,
+    forbidClick: true,
+  });
+  try {
+    const { data } = await exchangeAlipayLoginTicket({ loginTicket });
+    userStore.token = data.data.token;
+    userStore.profile = data.data;
+    userStore.profileLoaded = true;
+    localStorage.setItem('mall-h5-token', userStore.token);
+    showSuccessToast('支付宝登录成功');
+    await router.replace('/home');
+  } catch (error) {
+    showFailToast(error?.response?.data?.message || '支付宝登录失败');
+    await router.replace('/login');
+  } finally {
+    toast.close();
+  }
+};
+
+onMounted(async () => {
+  await handleAlipayCallback();
+});
 
 onBeforeUnmount(() => {
   clearInterval(countdownTimer.value);
@@ -699,5 +760,19 @@ onBeforeUnmount(() => {
 
 .submit-area {
   padding: 0 16px 16px;
+}
+
+.third-login-wrap {
+  margin: 12px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 16px;
+}
+
+.third-login-tip {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
 }
 </style>

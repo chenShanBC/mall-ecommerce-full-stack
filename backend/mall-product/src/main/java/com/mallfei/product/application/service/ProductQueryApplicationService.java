@@ -43,15 +43,28 @@ public class ProductQueryApplicationService {
     }
 
     public PageResponse<ProductCardView> productPage() {
-        List<ProductCardView> records = productDomainService.loadOnlineProducts().stream()
+        List<ProductSpu> onlineProducts = productDomainService.loadOnlineProducts().stream()
                 .filter(productSpu -> !productSpu.skus().isEmpty())
+                .toList();
+        Map<Long, ProductSpu> productBySkuId = onlineProducts.stream()
+                .flatMap(product -> product.skus().stream().filter(sku -> sku.id() != null).map(sku -> Map.entry(sku.id(), product)))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (left, right) -> left, LinkedHashMap::new));
+        Map<Long, Integer> availableStockByProductId = stockFacade.stockListBySkuIds(productBySkuId.keySet().stream().toList()).stream()
+                .filter(stock -> stock.availableStock() > 0)
+                .collect(Collectors.groupingBy(stock -> productBySkuId.get(stock.skuId()).id(), LinkedHashMap::new, Collectors.summingInt(StockSnapshot::availableStock)));
+        List<ProductCardView> records = onlineProducts.stream()
+                .filter(product -> availableStockByProductId.getOrDefault(product.id(), 0) > 0)
                 .map(productViewAssembler::toProductCard)
                 .toList();
         return new PageResponse<>(records, records.size(), 1, 10);
     }
 
     public ProductDetailView productDetail(Long productId) {
-        return productViewAssembler.toProductDetail(productDomainService.loadOnlineProduct(productId));
+        ProductSpu product = productDomainService.loadOnlineProduct(productId);
+        List<Long> skuIds = product.skus().stream().map(sku -> sku.id()).filter(id -> id != null).toList();
+        Map<Long, StockSnapshot> stockBySkuId = stockFacade.stockListBySkuIds(skuIds).stream()
+                .collect(Collectors.toMap(StockSnapshot::skuId, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+        return productViewAssembler.toProductDetail(product, stockBySkuId);
     }
 
     public List<CategoryAdminView> adminCategories() {

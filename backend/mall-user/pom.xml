@@ -24,6 +24,11 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.mallfei</groupId>
+            <artifactId>mall-pay</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
@@ -34,6 +39,11 @@
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alipay.sdk</groupId>
+            <artifactId>alipay-sdk-java</artifactId>
+            <version>4.34.0.ALL</version>
         </dependency>
     </dependencies>
 </project>

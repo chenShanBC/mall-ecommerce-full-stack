@@ -5,6 +5,7 @@ public record UserLoginResult(
         Long userId,
         String mobile,
         String nickname,
-        String avatarUrl
+        String avatarUrl,
+        boolean mobileBound
 ) {
 }

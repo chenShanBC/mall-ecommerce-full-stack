@@ -40,6 +40,7 @@ public class OrderDomainService {
     public Optional<Order> findByOrderNo(String orderNo) { return orderRepository.findByOrderNo(orderNo); }
     public Order save(Order order) { return orderRepository.save(order); }
     public void update(Order order) { orderRepository.update(order); }
+    public void markUserDeleted(Long orderId, Long userId) { orderRepository.markUserDeleted(orderId, userId); }
     public Order loadOwnedOrder(Long orderId, Long userId) { Order order = loadOrder(orderId); ensureOwnedBy(order, userId); return order; }
 
     public Order createPendingOrder(String orderNo, Long userId, OrderCreateRequest request) {

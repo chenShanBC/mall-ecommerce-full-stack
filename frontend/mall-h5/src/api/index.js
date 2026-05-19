@@ -36,6 +36,18 @@ export function registerUser(data) {
   });
 }
 
+export function fetchAlipayLoginAuthUrl() {
+  return request.get('/api/users/login/alipay/auth-url', {
+    skipAuth: true,
+  });
+}
+
+export function exchangeAlipayLoginTicket(data) {
+  return request.post('/api/users/login/alipay/exchange', data, {
+    skipAuth: true,
+  });
+}
+
 export function fetchCurrentUser() {
   return request.get('/api/users/me');
 }
@@ -132,6 +144,10 @@ export function fetchOrderDetail(orderId) {
 
 export function cancelOrder(orderId) {
   return request.delete(`/api/orders/${orderId}/cancel`);
+}
+
+export function deleteUserOrder(orderId) {
+  return request.delete(`/api/orders/${orderId}`);
 }
 
 export function confirmReceipt(orderId) {

@@ -165,6 +165,6 @@ public class UserApplicationService {
                 "USER",
                 List.of()
         );
-        return new UserLoginResult(token, userAccount.id(), userAccount.mobile(), userAccount.nickname(), userAccount.avatarUrl());
+        return new UserLoginResult(token, userAccount.id(), userAccount.mobile(), userAccount.nickname(), userAccount.avatarUrl(), userAccount.mobile() != null && !userAccount.mobile().isBlank());
     }
 }

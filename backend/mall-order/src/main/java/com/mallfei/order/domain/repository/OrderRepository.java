@@ -31,4 +31,6 @@ public interface OrderRepository {
     long sumPaidAmount();
 
     void update(Order order);
+
+    void markUserDeleted(Long orderId, Long userId);
 }

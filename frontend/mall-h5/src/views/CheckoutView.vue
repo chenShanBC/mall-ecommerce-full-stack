@@ -17,8 +17,7 @@
     <div class="card">
       <div class="card-title">订单信息</div>
       <div v-if="isBuyNow && buyNowSummary" class="summary-block">
-        <div class="summary-line"><span>商品ID</span><span>{{ buyNowSummary.productId }}</span></div>
-        <div class="summary-line"><span>SKU ID</span><span>{{ buyNowSummary.skuId }}</span></div>
+        <div class="summary-line"><span>购买方式</span><span>立即购买</span></div>
         <div class="summary-line"><span>购买数量</span><span>{{ buyNowSummary.quantity }}</span></div>
       </div>
       <div v-else-if="cartPreview" class="summary-block">
@@ -195,14 +194,20 @@ onMounted(async () => {
 .page {
   min-height: 100vh;
   padding-bottom: 24px;
-  background: #f6f8fb;
+  background:
+    radial-gradient(circle at top left, rgba(129, 140, 248, 0.2), transparent 28%),
+    radial-gradient(circle at top right, rgba(236, 72, 153, 0.11), transparent 24%),
+    linear-gradient(180deg, #edf3ff 0%, #f7f9ff 100%);
 }
 
 .card {
   margin: 12px;
   padding: 16px;
-  background: #fff;
-  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 24px;
+  box-shadow: 0 14px 36px rgba(108, 123, 225, 0.1);
+  backdrop-filter: blur(18px);
 }
 
 .address-card {

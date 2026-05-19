@@ -20,17 +20,29 @@
         <van-empty v-if="!previewItems.length" description="购物车暂无商品" />
 
         <div v-else class="preview-list">
-          <div v-for="item in previewItems" :key="item.id" class="preview-item">
-            <img class="preview-image" :src="getCartItemImage(item)" :alt="item.productName" />
-            <div class="preview-main">
-              <div class="preview-name van-multi-ellipsis--l2">{{ item.productName }}</div>
-              <div class="preview-spec">{{ item.skuName || '默认规格' }}</div>
-              <div class="preview-bottom-row">
-                <span class="preview-price">¥{{ formatPrice(item.unitPrice) }}</span>
-                <span class="preview-qty">x{{ item.quantity }}</span>
+          <van-swipe-cell v-for="item in previewItems" :key="item.id" class="preview-swipe-cell">
+            <div class="preview-item">
+              <img class="preview-image" :src="getCartItemImage(item)" :alt="item.productName" />
+              <div class="preview-main">
+                <div class="preview-name van-multi-ellipsis--l2">{{ item.productName }}</div>
+                <div class="preview-spec">{{ item.skuName || '默认规格' }}</div>
+                <div class="preview-bottom-row">
+                  <span class="preview-price">¥{{ formatPrice(item.unitPrice) }}</span>
+                  <van-stepper
+                    :model-value="item.quantity"
+                    min="1"
+                    integer
+                    theme="round"
+                    button-size="22"
+                    @update:model-value="(value) => handleQuantityChange(item, value)"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+            <template #right>
+              <div class="swipe-delete" @click="handleDelete(item)">删除</div>
+            </template>
+          </van-swipe-cell>
         </div>
 
         <div class="preview-footer">
@@ -46,12 +58,13 @@
 </template>
 
 <script setup>
-import { computed, onActivated, onMounted, ref } from 'vue';
+import { computed, onActivated, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { fetchCartItems, fetchCartQuantity } from '../api';
+import { deleteCartItem, fetchCartItems, fetchCartQuantity, updateCartItem } from '../api';
+import { showFailToast, showSuccessToast } from 'vant';
 import { formatPrice } from '../utils/format';
 import { buildProductVisual, isInvalidImageUrl } from '../utils/productVisual';
-import { getFallbackCartItems, mergeCartItems } from '../utils/cartFallback';
+import { getFallbackCartItems, mergeCartItems, removeFallbackCartItem, updateFallbackCartItem } from '../utils/cartFallback';
 
 const props = defineProps({
   right: {
@@ -63,6 +76,8 @@ const props = defineProps({
     default: '96px',
   },
 });
+
+const CART_REFRESH_EVENT = 'mallfei:cart-changed';
 
 const router = useRouter();
 const showPreview = ref(false);
@@ -120,13 +135,57 @@ const getCartItemImage = (item) => {
   });
 };
 
+const handleQuantityChange = async (item, value) => {
+  try {
+    if (item.isLocalFallback) {
+      updateFallbackCartItem(item.id, { quantity: value });
+      await loadCartPreview();
+      window.dispatchEvent(new CustomEvent(CART_REFRESH_EVENT));
+      return;
+    }
+    await updateCartItem(item.id, { quantity: value });
+    await loadCartPreview();
+    window.dispatchEvent(new CustomEvent(CART_REFRESH_EVENT));
+  } catch (error) {
+    showFailToast(error?.response?.data?.msg || error?.response?.data?.message || '数量修改失败');
+  }
+};
+
+const handleDelete = async (item) => {
+  try {
+    if (item.isLocalFallback) {
+      removeFallbackCartItem(item.id);
+    } else {
+      await deleteCartItem(item.id);
+    }
+    await loadCartPreview();
+    window.dispatchEvent(new CustomEvent(CART_REFRESH_EVENT));
+    showSuccessToast('删除成功');
+  } catch (error) {
+    showFailToast(error?.response?.data?.msg || error?.response?.data?.message || '删除失败');
+  }
+};
+
 const openCartPage = () => {
   showPreview.value = false;
   router.push('/cart');
 };
 
-onMounted(loadQuantity);
+const handleCartChanged = async () => {
+  await loadQuantity();
+  if (showPreview.value) {
+    await loadCartPreview();
+  }
+};
+
+onMounted(() => {
+  loadQuantity();
+  window.addEventListener(CART_REFRESH_EVENT, handleCartChanged);
+});
 onActivated(loadQuantity);
+onBeforeUnmount(() => {
+  window.removeEventListener(CART_REFRESH_EVENT, handleCartChanged);
+});
 </script>
 
 <style scoped>
@@ -163,11 +222,15 @@ onActivated(loadQuantity);
   padding-right: 2px;
 }
 
+.preview-swipe-cell {
+  border-bottom: 1px solid #eef2f7;
+}
+
 .preview-item {
   display: flex;
   gap: 12px;
   padding: 12px 0;
-  border-bottom: 1px solid #eef2f7;
+  background: #fff;
 }
 
 .preview-image {
@@ -209,9 +272,16 @@ onActivated(loadQuantity);
   font-weight: 700;
 }
 
-.preview-qty {
-  color: #475569;
+.swipe-delete {
+  width: 72px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #fb7185 0%, #f43f5e 100%);
+  color: #fff;
   font-size: 13px;
+  font-weight: 700;
 }
 
 .preview-footer {

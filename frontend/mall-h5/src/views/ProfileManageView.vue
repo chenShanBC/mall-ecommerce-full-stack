@@ -51,7 +51,15 @@ import { useUserStore } from '../stores/user';
 
 const router = useRouter();
 const userStore = useUserStore();
-const backendOrigin = import.meta.env.DEV ? 'http://localhost:9090' : window.location.origin;
+
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+const backendOrigin = (() => {
+  if (/^https?:\/\//i.test(apiBaseUrl)) {
+    return apiBaseUrl.replace(/\/api$/, '');
+  }
+  return window.location.origin;
+})();
+
 const savingProfile = ref(false);
 const savingPassword = ref(false);
 const uploadingAvatar = ref(false);
@@ -65,20 +73,40 @@ const passwordForm = reactive({
   confirmPassword: '',
 });
 
-const resolveAvatarUrl = (url, displayName) => {
-  if (!url) {
-    return `https://via.placeholder.com/120x120.png?text=${encodeURIComponent(displayName)}`;
-  }
-  if (/^https?:\/\//i.test(url)) {
-    return url;
-  }
-  if (url.startsWith('/')) {
-    return `${backendOrigin}${url}`;
-  }
-  return `${backendOrigin}/${url}`;
+const defaultAvatarSvg = "data:image/svg+xml;utf8," + encodeURIComponent(`
+  <svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'>
+    <defs>
+      <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
+        <stop offset='0%' stop-color='#e0e7ff'/>
+        <stop offset='100%' stop-color='#c7d2fe'/>
+      </linearGradient>
+    </defs>
+    <circle cx='60' cy='60' r='60' fill='url(#g)'/>
+    <circle cx='60' cy='48' r='20' fill='#94a3b8'/>
+    <rect x='28' y='74' width='64' height='30' rx='15' fill='#94a3b8'/>
+  </svg>
+`);
+
+const normalizeAvatarPath = (url) => {
+  if (!url) return url;
+  return url.replace(/^\/upload\//i, '/uploads/');
 };
 
-const avatarPreview = computed(() => resolveAvatarUrl(profileForm.avatarUrl, userStore.displayName || '用户'));
+const resolveAvatarUrl = (url) => {
+  const normalizedUrl = normalizeAvatarPath(url);
+  if (!normalizedUrl) {
+    return defaultAvatarSvg;
+  }
+  if (/^https?:\/\//i.test(normalizedUrl)) {
+    return normalizedUrl;
+  }
+  if (normalizedUrl.startsWith('/')) {
+    return `${backendOrigin}${normalizedUrl}`;
+  }
+  return `${backendOrigin}/${normalizedUrl}`;
+};
+
+const avatarPreview = computed(() => resolveAvatarUrl(profileForm.avatarUrl));
 
 const syncForm = () => {
   profileForm.nickname = userStore.profile?.nickname || '';

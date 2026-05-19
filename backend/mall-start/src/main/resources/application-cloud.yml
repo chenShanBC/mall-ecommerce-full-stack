@@ -22,6 +22,11 @@ springdoc:
 mall:
   order:
     timeout-minutes: 15
+  file:
+    storage-type: local
+    upload-dir: /home/ubuntu/storage
+    public-base-path: /uploads
+    max-avatar-size: 2097152
   pay:
     alipay:
       enabled: true
@@ -35,3 +40,9 @@ mall:
       sign-type: RSA2
       charset: UTF-8
       format: json
+  user:
+    alipay-login:
+      redirect-uri: http://42.194.224.180:9090/api/users/login/alipay/callback
+      frontend-redirect-uri: http://42.194.224.180:5173/login
+      state-expire-seconds: 300
+      login-ticket-expire-seconds: 120

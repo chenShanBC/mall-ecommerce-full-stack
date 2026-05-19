@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mall-mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-ChangeMe_Strong_Password}
+      TZ: Asia/Shanghai
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      # 强烈建议使用宿主机目录，防止卷误删导致数据丢失
+      - /data/mall/mysql:/var/lib/mysql
+      - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-ChangeMe_Strong_Password}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: mall-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - /data/mall/redis:/data
+      - /etc/localtime:/etc/localtime:ro
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: mall-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+      TZ: Asia/Shanghai
+    volumes:
+      - /data/mall/rabbitmq:/var/lib/rabbitmq
+      - /etc/localtime:/etc/localtime:ro
+
+networks:
+  default:
+    name: mall-infra-net

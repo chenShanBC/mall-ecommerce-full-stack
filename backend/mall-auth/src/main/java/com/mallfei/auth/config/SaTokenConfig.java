@@ -67,6 +67,7 @@ public class SaTokenConfig implements WebMvcConfigurer {
 
     private boolean isPublicPath(String requestUri) {
         return requestUri.startsWith("/uploads/")
+                || requestUri.startsWith("/upload/")
                 || requestUri.startsWith("/api/users/register")
                 || requestUri.startsWith("/api/users/login/captcha/challenge")
                 || requestUri.startsWith("/api/users/login/captcha/verify")
