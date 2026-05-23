@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { adminLogin, fetchCurrentAdmin, fetchDashboard, logoutAdmin } from '../api';
+import { destroyAdminForceLogoutSocket, initAdminForceLogoutSocket } from '../utils/adminForceLogout';
 
 export const useAdminStore = defineStore('admin', {
   state: () => ({
@@ -18,20 +19,24 @@ export const useAdminStore = defineStore('admin', {
   },
   actions: {
     hasPermission(permission) {
-      return this.permissions.includes(permission);
+      return this.roleCode === 'SUPER_ADMIN' || this.permissions.includes(permission);
+    },
+    hasAnyPermission(permissions) {
+      return this.roleCode === 'SUPER_ADMIN' || permissions.some((permission) => this.hasPermission(permission));
     },
     getFirstAccessiblePath() {
       const entries = [
+        { permission: 'dashboard:view', path: '/dashboard' },
         { permission: 'product:view', path: '/products' },
         { permission: 'order:view', path: '/orders' },
         { permission: 'stock:view', path: '/stocks' },
-        { permission: 'pay:view', path: '/pays' },
-        { permission: 'reconcile:view', path: '/reconciliations' },
+        { permission: 'payment:view', path: '/pays' },
+        { permission: 'reconciliation:view', path: '/reconciliations' },
         { permission: 'user:view', path: '/users' },
-        { permission: 'system:account:manage', path: '/accounts' },
-        { permission: 'system:log:view', path: '/operation-logs' },
+        { permission: 'admin:view', path: '/accounts' },
+        { permission: 'log:operation:view', path: '/operation-logs' },
       ];
-      return entries.find((item) => this.hasPermission(item.permission))?.path || '/dashboard';
+      return entries.find((item) => this.hasPermission(item.permission))?.path || '/profile';
     },
     persistProfile() {
       if (this.profile) {
@@ -39,6 +44,20 @@ export const useAdminStore = defineStore('admin', {
       } else {
         localStorage.removeItem('mall-admin-profile');
       }
+    },
+    initForceLogout(router) {
+      if (!router) return;
+      initAdminForceLogoutSocket(this, router);
+    },
+    clearLocalSession() {
+      this.token = '';
+      this.profile = null;
+      this.dashboard = null;
+      this.profileLoaded = false;
+      this.profileLoadingPromise = null;
+      this.sessionCheckPromise = null;
+      localStorage.removeItem('mall-admin-token');
+      localStorage.removeItem('mall-admin-profile');
     },
     async login(form) {
       const { data } = await adminLogin(form);
@@ -49,6 +68,7 @@ export const useAdminStore = defineStore('admin', {
       this.sessionCheckPromise = null;
       localStorage.setItem('mall-admin-token', this.token);
       this.persistProfile();
+      this.initForceLogout(window.__mallAdminRouter);
       return data.data;
     },
     async loadProfile(force = false) {

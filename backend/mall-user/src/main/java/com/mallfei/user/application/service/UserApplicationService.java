@@ -36,6 +36,11 @@ public class UserApplicationService {
         this.authFacade = authFacade;
     }
 
+    public boolean blacklistStatusByMobile(String mobile) {
+        UserAccount userAccount = userDomainService.loadByMobile(mobile);
+        return authFacade.isUserDisabled(userAccount.id()) || !userAccount.enabled();
+    }
+
     public LoginCaptchaChallengeResult createLoginCaptchaChallenge() {
         return userDomainService.createLoginCaptchaChallenge();
     }
@@ -45,8 +50,9 @@ public class UserApplicationService {
     }
 
     public UserLoginResult login(UserPasswordLoginRequest request) {
-        userDomainService.consumeVerifiedLoginCaptcha(request.captchaToken(), request.captchaVerifyToken());
         UserAccount userAccount = userDomainService.loadByMobile(request.mobile());
+        ensureEnabled(userAccount);
+        userDomainService.consumeVerifiedLoginCaptcha(request.captchaToken(), request.captchaVerifyToken());
         userDomainService.validateLogin(userAccount, request.password());
         return buildLoginResult(userAccount);
     }
@@ -56,7 +62,9 @@ public class UserApplicationService {
     }
 
     public UserLoginResult loginBySmsCode(UserSmsCodeLoginRequest request) {
-        UserAccount userAccount = userDomainService.loginBySmsCode(request.mobile(), request.code());
+        UserAccount userAccount = userDomainService.loadByMobile(request.mobile());
+        ensureEnabled(userAccount);
+        userAccount = userDomainService.loginBySmsCode(request.mobile(), request.code());
         return buildLoginResult(userAccount);
     }
 
@@ -68,6 +76,7 @@ public class UserApplicationService {
     public UserProfileVO currentUser() {
         AuthenticatedPrincipal principal = authFacade.currentPrincipal();
         UserAccount userAccount = userDomainService.loadById(principal.principalId());
+        ensureEnabled(userAccount);
         return toProfileVO(userAccount);
     }
 
@@ -139,6 +148,13 @@ public class UserApplicationService {
     public UserAddress setDefaultAddress(Long addressId) {
         UserAddress existing = userDomainService.loadOwnedAddress(addressId, currentUserId());
         return userDomainService.setDefaultAddress(existing);
+    }
+
+    private void ensureEnabled(UserAccount userAccount) {
+        if (authFacade.isUserDisabled(userAccount.id()) || !userAccount.enabled()) {
+            authFacade.disableUserSession(userAccount.id());
+            throw new com.mallfei.common.exception.BusinessException(UserDomainService.USER_DISABLED_CODE, UserDomainService.USER_DISABLED_MESSAGE);
+        }
     }
 
     private Long currentUserId() {

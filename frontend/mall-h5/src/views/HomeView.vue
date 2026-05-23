@@ -86,7 +86,7 @@ import FloatingCartButton from '../components/FloatingCartButton.vue';
 import { useUserStore } from '../stores/user';
 import { formatPrice } from '../utils/format';
 import { getProductImage } from '../utils/productVisual';
-import { requireLogin } from '../utils/requireLogin';
+import { ensureAccessGate } from '../utils/requireLogin';
 
 const SALES_REFRESH_KEY = 'mallfei:product-sales-refresh';
 const HOME_CATEGORIES_CACHE_KEY = 'mallfei:h5-home-categories-cache-v1';
@@ -105,8 +105,17 @@ const productsLoadedAt = ref(0);
 
 const normalizeText = (value = '') => String(value).toLowerCase().replace(/\s+/g, '');
 
-const toPinyinFull = (value = '') => normalizeText(pinyin(String(value), { toneType: 'none', type: 'array' }).join(''));
-const toPinyinInitials = (value = '') => normalizeText(pinyin(String(value), { pattern: 'first', toneType: 'none', type: 'array' }).join(''));
+const pinyinCache = new Map();
+const toPinyinCached = (value = '', options = {}) => {
+  const text = String(value || '');
+  const key = `${options.pattern || 'full'}:${text}`;
+  if (!pinyinCache.has(key)) {
+    pinyinCache.set(key, normalizeText(pinyin(text, { toneType: 'none', type: 'array', ...options }).join('')));
+  }
+  return pinyinCache.get(key);
+};
+const toPinyinFull = (value = '') => toPinyinCached(value);
+const toPinyinInitials = (value = '') => toPinyinCached(value, { pattern: 'first' });
 
 const fuzzyMatch = (text, search) => {
   const source = normalizeText(text);
@@ -313,7 +322,7 @@ const loadData = async ({ silent = false, forceCategories = false, forceProducts
 };
 
 const handleProfileAction = async () => {
-  if (!await requireLogin(router, '/profile')) {
+  if (!await ensureAccessGate(router, '/profile', { force: true })) {
     return;
   }
   router.push('/profile');
@@ -328,37 +337,28 @@ const goDetail = (id) => {
   router.push(`/products/${id}`);
 };
 
-onMounted(async () => {
+onMounted(() => {
   if (userStore.isLogin && !userStore.profile) {
-    try {
-      await userStore.ensureValidSession();
-    } catch {
-      await userStore.logout();
-    }
+    userStore.ensureValidSession().catch(() => {
+      userStore.logout();
+    });
   }
   const hasCategoriesCache = loadCategoriesCache();
   const hasProductsCache = loadProductsCache();
   if (!hasCategoriesCache || !hasProductsCache) {
-    await loadData();
+    loadData();
   }
 });
 
 onActivated(async () => {
   const shouldRefreshBySales = Boolean(localStorage.getItem(SALES_REFRESH_KEY));
-  const categoriesExpired = Date.now() - categoriesLoadedAt.value > HOME_CATEGORIES_CACHE_TTL;
-  const productsExpired = Date.now() - productsLoadedAt.value > HOME_PRODUCTS_CACHE_TTL;
-
-  if (shouldRefreshBySales) {
-    const lastProductId = Number(localStorage.getItem('mallfei:last-visited-product-id') || 0);
-    const patched = await refreshSingleProductInCache(lastProductId);
-    if (!patched) {
-      await loadData({ silent: true, forceProducts: true });
-    }
+  if (!shouldRefreshBySales) {
     return;
   }
-
-  if (categoriesExpired || productsExpired || !products.value.length) {
-    await loadData({ silent: true });
+  const lastProductId = Number(localStorage.getItem('mallfei:last-visited-product-id') || 0);
+  const patched = await refreshSingleProductInCache(lastProductId);
+  if (!patched) {
+    await loadData({ silent: true, forceProducts: true });
   }
 });
 </script>

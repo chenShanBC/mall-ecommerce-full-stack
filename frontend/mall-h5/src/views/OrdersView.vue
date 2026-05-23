@@ -112,12 +112,18 @@ import { showConfirmDialog, showFailToast, showSuccessToast } from 'vant';
 import { applyOrderRefund, cancelOrder, confirmReceipt, deleteUserOrder, fetchOrders, repairPaidOrder, syncPayOrderStatus } from '../api';
 import { formatCountdown, formatDateTime, formatPrice, formatStatus } from '../utils/format';
 import { getProductImage } from '../utils/productVisual';
+import { useUserStore } from '../stores/user';
+import { requireLogin, redirectLoginWithNotice } from '../utils/requireLogin';
 
 const ORDER_CACHE_KEY = 'mallfei:h5-orders-cache-v1';
 const ORDER_CACHE_TTL = 60 * 1000;
+const ORDER_SUMMARY_CACHE_KEY = 'mallfei:h5-orders-summary-cache-v1';
+const ORDER_SUMMARY_CACHE_TTL = 3 * 60 * 1000;
 
 const router = useRouter();
+const userStore = useUserStore();
 const orders = ref([]);
+let sessionProbeTimer = null;
 const keyword = ref('');
 const activeStatus = ref('ALL');
 const confirmingOrderId = ref(null);
@@ -278,7 +284,6 @@ const tickCountdown = () => {
 const handleVisibilityChange = () => {
   if (!document.hidden) {
     countdownBaseTime = Date.now();
-    loadOrders(false);
   }
 };
 
@@ -304,15 +309,35 @@ const restoreOrdersCache = () => {
   }
 };
 
+const restoreOrdersSummaryCache = () => {
+  try {
+    const raw = localStorage.getItem(ORDER_SUMMARY_CACHE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.updatedAt || !Array.isArray(parsed?.orders)) return false;
+    if (Date.now() - Number(parsed.updatedAt) > ORDER_SUMMARY_CACHE_TTL) return false;
+    orders.value = parsed.orders;
+    countdownBaseTime = Date.now();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const persistOrdersCache = () => {
   try {
-    localStorage.setItem(ORDER_CACHE_KEY, JSON.stringify({ updatedAt: Date.now(), orders: orders.value }));
+    const payload = { updatedAt: Date.now(), orders: orders.value };
+    localStorage.setItem(ORDER_CACHE_KEY, JSON.stringify(payload));
   } catch {
   }
 };
 
 const loadOrders = async (showError = true) => {
   try {
+    const valid = await requireLogin(router, '/orders', { force: false });
+    if (!valid) {
+      return;
+    }
     const { data } = await fetchOrders();
     countdownBaseTime = Date.now();
     orders.value = data.data || [];
@@ -326,6 +351,15 @@ const loadOrders = async (showError = true) => {
     if (showError) {
       showFailToast(error?.response?.data?.msg || error?.response?.data?.message || '订单列表加载失败');
     }
+  }
+};
+
+const prefetchOrderSummary = async () => {
+  try {
+    const { data } = await fetchOrders();
+    const summaryOrders = data.data || [];
+    localStorage.setItem(ORDER_SUMMARY_CACHE_KEY, JSON.stringify({ updatedAt: Date.now(), orders: summaryOrders }));
+  } catch {
   }
 };
 
@@ -426,8 +460,31 @@ const goDetail = (id) => {
   router.push(`/orders/${id}`);
 };
 
+const startSessionProbe = () => {
+  if (sessionProbeTimer) return;
+  sessionProbeTimer = window.setInterval(async () => {
+    const blacklisted = await userStore.checkBlacklist(false);
+    if (blacklisted) {
+      redirectLoginWithNotice(router, '该用户已禁用，详情可咨询平台/客服', 2200);
+      return;
+    }
+    const valid = await userStore.ensureValidSession(false);
+    if (!valid) {
+      redirectLoginWithNotice(router, '登录已失效，请重新登录', 1200);
+    }
+  }, 45000);
+};
+
+const stopSessionProbe = () => {
+  if (!sessionProbeTimer) return;
+  clearInterval(sessionProbeTimer);
+  sessionProbeTimer = null;
+};
+
 onMounted(async () => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
   document.addEventListener('visibilitychange', handleVisibilityChange);
+  restoreOrdersSummaryCache();
   restoreOrdersCache();
   startTimer();
 

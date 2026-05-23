@@ -36,26 +36,13 @@ public class LoginCaptchaRenderer {
     private static final int MAX_X = 230;
     private static final int MIN_Y = 42;
     private static final int MAX_Y = 92;
-    private static final float JPEG_QUALITY = 0.76f;
+    private static final float JPEG_QUALITY = 0.58f;
     private static final String CAPTCHA_IMAGE_PATH = "static/images/captcha-scene.jpg";
+    private static final BufferedImage SCALED_SOURCE_IMAGE = scaleSourceImage();
 
     public LoginCaptchaRenderResult render() {
         try {
-            ClassPathResource resource = new ClassPathResource(CAPTCHA_IMAGE_PATH);
-            if (!resource.exists()) {
-                throw new IllegalStateException("验证码底图资源不存在: " + CAPTCHA_IMAGE_PATH);
-            }
-            BufferedImage source = ImageIO.read(resource.getInputStream());
-            if (source == null) {
-                throw new IllegalStateException("验证码底图读取失败: " + CAPTCHA_IMAGE_PATH);
-            }
-
-            BufferedImage scaled = new BufferedImage(IMAGE_WIDTH, IMAGE_HEIGHT, BufferedImage.TYPE_INT_RGB);
-            Graphics2D scaledGraphics = scaled.createGraphics();
-            scaledGraphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            scaledGraphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            scaledGraphics.drawImage(source, 0, 0, IMAGE_WIDTH, IMAGE_HEIGHT, null);
-            scaledGraphics.dispose();
+            BufferedImage scaled = SCALED_SOURCE_IMAGE;
 
             int x = ThreadLocalRandom.current().nextInt(MIN_X, MAX_X + 1);
             int y = ThreadLocalRandom.current().nextInt(MIN_Y, MAX_Y + 1);
@@ -114,6 +101,28 @@ public class LoginCaptchaRenderer {
         graphics.translate(0.9, 0.9);
         graphics.draw(shape);
         graphics.dispose();
+    }
+
+    private static BufferedImage scaleSourceImage() {
+        try {
+            ClassPathResource resource = new ClassPathResource(CAPTCHA_IMAGE_PATH);
+            if (!resource.exists()) {
+                throw new IllegalStateException("验证码底图资源不存在: " + CAPTCHA_IMAGE_PATH);
+            }
+            BufferedImage source = ImageIO.read(resource.getInputStream());
+            if (source == null) {
+                throw new IllegalStateException("验证码底图读取失败: " + CAPTCHA_IMAGE_PATH);
+            }
+            BufferedImage scaled = new BufferedImage(IMAGE_WIDTH, IMAGE_HEIGHT, BufferedImage.TYPE_INT_RGB);
+            Graphics2D graphics = scaled.createGraphics();
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+            graphics.drawImage(source, 0, 0, IMAGE_WIDTH, IMAGE_HEIGHT, null);
+            graphics.dispose();
+            return scaled;
+        } catch (IOException exception) {
+            throw new IllegalStateException("加载拼图验证码底图失败", exception);
+        }
     }
 
     private Area createPuzzleShape(int x, int y, int size) {

@@ -35,17 +35,41 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
-import { useRouter } from 'vue-router';
+import { onMounted, reactive, ref } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { useRoute, useRouter } from 'vue-router';
 import { useAdminStore } from '../stores/admin';
+import { ADMIN_FORCE_LOGOUT_MESSAGE_KEY } from '../utils/adminForceLogout';
 
+const route = useRoute();
 const router = useRouter();
 const adminStore = useAdminStore();
 const loading = ref(false);
 const form = reactive({
   username: 'admin',
   password: '123456',
+});
+
+const showForceLogoutTip = (message) => {
+  ElMessageBox.alert(message || '您的后台账号已被禁用，请联系超级管理员处理。', '账号已被禁用', {
+    type: 'warning',
+    confirmButtonText: '知道了',
+    closeOnClickModal: false,
+    closeOnPressEscape: false,
+  }).catch(() => null);
+};
+
+const consumeForceLogoutTip = (fallbackMessage = '') => {
+  const message = localStorage.getItem(ADMIN_FORCE_LOGOUT_MESSAGE_KEY) || fallbackMessage;
+  if (!message) return;
+  localStorage.removeItem(ADMIN_FORCE_LOGOUT_MESSAGE_KEY);
+  setTimeout(() => showForceLogoutTip(message), 120);
+};
+
+onMounted(() => {
+  if (route.query.reason === 'forceLogout') {
+    consumeForceLogoutTip('您的后台账号已被禁用，请联系超级管理员处理。');
+  }
 });
 
 const handleSubmit = async () => {

@@ -26,9 +26,9 @@
         <el-table-column label="操作" width="360">
           <template #default="{ row }">
             <el-button size="small" @click="openDetail(row.orderNo)">详情</el-button>
-            <el-button v-if="canManage" size="small" type="warning" @click="syncStatus(row)">同步状态</el-button>
-            <el-button v-if="canManage" size="small" type="success" :disabled="row.status !== 'SUCCESS'" @click="repairPaid(row)">补偿订单</el-button>
-            <el-button v-if="canManage" size="small" type="danger" :disabled="row.status === 'SUCCESS' || row.status === 'REFUNDED' || row.status === 'CLOSED'" @click="openClose(row)">关闭</el-button>
+            <el-button v-if="canOperatePayment" size="small" type="warning" @click="syncStatus(row)">同步状态</el-button>
+            <el-button v-if="canOperatePayment" size="small" type="success" :disabled="row.status !== 'SUCCESS'" @click="repairPaid(row)">补偿订单</el-button>
+            <el-button v-if="canClosePayment" size="small" type="danger" :disabled="row.status === 'SUCCESS' || row.status === 'REFUNDED' || row.status === 'CLOSED'" @click="openClose(row)">关闭</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -79,7 +79,8 @@ import { getStatusTagMeta } from '../utils/status';
 const route = useRoute();
 const router = useRouter();
 const adminStore = useAdminStore();
-const canManage = computed(() => adminStore.hasPermission('pay:manage'));
+const canOperatePayment = computed(() => adminStore.hasPermission('payment:view'));
+const canClosePayment = computed(() => adminStore.hasPermission('refund:execute'));
 const payStatusMeta = (status) => getStatusTagMeta('pay', status);
 const rows = ref([]);
 const loading = ref(false);

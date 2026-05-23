@@ -65,11 +65,26 @@
     </div>
 
     <div class="third-login-wrap">
-      <van-button block plain type="primary" :loading="loading" @click="handleAlipayLogin">
+      <van-button block plain type="primary" :loading="loading" :disabled="isLocalAlipayLoginDisabled" @click="handleAlipayLogin">
         支付宝快捷登录
       </van-button>
-      <div class="third-login-tip">首次登录将自动创建账号并完成绑定</div>
+      <div class="third-login-tip">
+        {{ isLocalAlipayLoginDisabled ? '本地开发暂不可用，需公网 HTTPS 回调后再开启' : '首次登录将自动创建账号并完成绑定' }}
+      </div>
     </div>
+
+    <van-popup v-model:show="showAlipayGuide" round class="alipay-guide-popup">
+      <div class="alipay-guide">
+        <div class="guide-title">浏览器唤起支付宝说明</div>
+        <div class="guide-desc">
+          正在使用系统浏览器时，点击下方按钮会直接唤起支付宝授权。
+          若未唤起，请检查是否安装支付宝，并允许浏览器打开外部应用。
+        </div>
+        <div class="guide-actions guide-actions-secondary">
+          <van-button size="small" type="primary" :loading="wakeupLoading" :disabled="wakeupCooldown" @click="openAlipayAuthUrl">立即唤起支付宝授权</van-button>
+        </div>
+      </div>
+    </van-popup>
 
     <van-popup v-model:show="showCaptchaPopup" class="captcha-popup" round @closed="handleCaptchaClosed">
       <div class="slider-wrap">
@@ -125,10 +140,10 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { showFailToast, showLoadingToast, showSuccessToast } from 'vant';
+import { showFailToast, showSuccessToast } from 'vant';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  exchangeAlipayLoginTicket,
+  exchangeAlipayJsapiAuthCode,
   fetchAlipayLoginAuthUrl,
   loginCaptchaChallenge,
   loginCaptchaVerify,
@@ -145,6 +160,42 @@ const smsCountdown = ref(0);
 const countdownTimer = ref(null);
 const debugCode = ref('');
 const showCaptchaPopup = ref(false);
+const showAlipayGuide = ref(false);
+const wakeupLoading = ref(false);
+const wakeupCooldown = ref(false);
+let wakeupCooldownTimer = null;
+const DISABLED_USER_MESSAGE = '该用户已禁用，详情可咨询平台/客服';
+const isLocalAlipayLoginDisabled = import.meta.env.VITE_ENABLE_LOCAL_ALIPAY_LOGIN !== 'true'
+  && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const getErrorMessage = (error, fallback) => {
+  const message = error?.response?.data?.message || error?.response?.data?.msg || fallback;
+  if (String(message).includes('禁用')) {
+    return DISABLED_USER_MESSAGE;
+  }
+  return message;
+};
+
+const isDisabledError = (error) => {
+  const status = error?.response?.status;
+  const code = error?.response?.data?.code || '';
+  const message = error?.response?.data?.message || error?.response?.data?.msg || '';
+  return Boolean(error?.isDisabledUser || code === 'AUTH_403' || status === 403 || String(message).includes('禁用'));
+};
+
+const showAuthError = (error, fallback) => {
+  const message = isDisabledError(error) ? DISABLED_USER_MESSAGE : getErrorMessage(error, fallback);
+  showFailToast({ message, duration: message === DISABLED_USER_MESSAGE ? 2200 : 1400 });
+  return message;
+};
+
+const resolveLoginErrorMessage = (error, fallback) => (isDisabledError(error) ? DISABLED_USER_MESSAGE : getErrorMessage(error, fallback));
+const normalizeLoginError = (error, fallback) => {
+  const disabled = isDisabledError(error);
+  return {
+    disabled,
+    message: disabled ? DISABLED_USER_MESSAGE : getErrorMessage(error, fallback),
+  };
+};
 const captchaVerified = ref(false);
 const captchaErrorVisible = ref(false);
 const captchaToken = ref('');
@@ -225,8 +276,16 @@ const resetCaptcha = () => {
   resetSlider();
 };
 
+let captchaChallengePromise = null;
+
 const loadCaptchaChallenge = async () => {
-  const { data } = await loginCaptchaChallenge();
+  if (captchaChallengePromise) {
+    return captchaChallengePromise;
+  }
+  captchaChallengePromise = loginCaptchaChallenge().finally(() => {
+    captchaChallengePromise = null;
+  });
+  const { data } = await captchaChallengePromise;
   captchaToken.value = data.data.captchaToken;
   backgroundImage.value = data.data.backgroundImage;
   sliderImage.value = data.data.sliderImage;
@@ -255,6 +314,16 @@ const updatePosition = (distance) => {
   moveX.value = Math.round(movePercent.value * maxMoveX.value);
 };
 
+const checkBlacklistBeforeLogin = async () => false;
+
+const finishPasswordLogin = async () => {
+  const blacklisted = await checkBlacklistBeforeLogin(loginForm.mobile, DISABLED_USER_MESSAGE);
+  if (blacklisted) {
+    return;
+  }
+  await submitPasswordLogin(captchaVerifyToken.value);
+};
+
 const finishCaptcha = async () => {
   try {
     const { data } = await loginCaptchaVerify({
@@ -268,7 +337,7 @@ const finishCaptcha = async () => {
     moveX.value = puzzleTargetOffset.value;
     showSuccessToast('拖拽验证通过');
     showCaptchaPopup.value = false;
-    await submitPasswordLogin();
+    await finishPasswordLogin();
   } catch (error) {
     captchaErrorVisible.value = true;
     resetSlider();
@@ -313,7 +382,7 @@ const startDrag = (event) => {
 
 const touchstart = (event) => {
   captchaErrorVisible.value = false;
-  startX.value = event.changedTouches[0].screenX - blockLeft.value;
+  startX.value = event.changedTouches[0].clientX - blockLeft.value;
   startMove.value = true;
 };
 
@@ -321,7 +390,7 @@ const touchmove = (event) => {
   if (!startMove.value) {
     return;
   }
-  updatePosition(event.changedTouches[0].screenX - startX.value);
+  updatePosition(event.changedTouches[0].clientX - startX.value);
 };
 
 const touchend = async () => {
@@ -343,30 +412,31 @@ const sendCode = async () => {
   }
 };
 
-const submitPasswordLogin = async () => {
+const submitPasswordLogin = async (verifyToken) => {
   try {
     loading.value = true;
     await userStore.login({
       ...loginForm,
       captchaToken: captchaToken.value,
-      captchaVerifyToken: captchaVerifyToken.value,
+      captchaVerifyToken: verifyToken || captchaVerifyToken.value,
     });
     showSuccessToast('登录成功');
     redirectTo();
   } catch (error) {
-    showFailToast(error?.response?.data?.message || '登录失败');
+    const normalized = normalizeLoginError(error, '登录失败');
+    showAuthError(error, normalized.message);
     await refreshCaptcha();
   } finally {
     loading.value = false;
   }
 };
-
 const handlePasswordLogin = async () => {
   try {
+    const challengePromise = loadCaptchaChallenge();
     showCaptchaPopup.value = true;
-    await loadCaptchaChallenge();
+    await challengePromise;
   } catch (error) {
-    showFailToast(error?.response?.data?.message || '验证码加载失败');
+    showFailToast(getErrorMessage(error, '验证码加载失败'));
   }
 };
 
@@ -377,16 +447,20 @@ const handleSmsLogin = async () => {
   }
   try {
     loading.value = true;
+    const blacklisted = await checkBlacklistBeforeLogin(smsLoginForm.mobile, DISABLED_USER_MESSAGE);
+    if (blacklisted) {
+      return;
+    }
     await userStore.loginWithSms(smsLoginForm);
     showSuccessToast('登录成功');
     redirectTo();
   } catch (error) {
-    showFailToast(error?.response?.data?.message || '验证码登录失败');
+    const normalized = normalizeLoginError(error, '验证码登录失败');
+    showAuthError(error, normalized.message);
   } finally {
     loading.value = false;
   }
 };
-
 const handleRegister = async () => {
   try {
     loading.value = true;
@@ -394,62 +468,105 @@ const handleRegister = async () => {
     showSuccessToast('注册并登录成功');
     redirectTo();
   } catch (error) {
-    showFailToast(error?.response?.data?.message || '注册失败');
+    const normalized = normalizeLoginError(error, '注册失败');
+    showAuthError(error, normalized.message);
   } finally {
     loading.value = false;
   }
+};
+const isAlipayWebView = () => /AlipayClient/i.test(navigator.userAgent || '');
+
+const buildAlipaySchemeUrl = (authUrl) => `alipays://platformapi/startapp?appId=20000067&url=${encodeURIComponent(authUrl)}`;
+
+const persistLoginResult = async (result) => {
+  userStore.token = result.token;
+  userStore.profile = result;
+  userStore.profileLoaded = true;
+  localStorage.setItem('mall-h5-token', userStore.token);
+  showSuccessToast('支付宝登录成功');
+  await router.replace('/home');
+};
+
+const loginByAlipayJsapi = async () => {
+  if (!window.ap || typeof window.ap.getAuthCode !== 'function') {
+    showFailToast('当前环境不支持支付宝授权，请在支付宝内打开');
+    return false;
+  }
+  return new Promise((resolve) => {
+    window.ap.getAuthCode({ scopes: ['auth_user'] }, async (res) => {
+      try {
+        const authCode = res?.authCode;
+        if (!authCode) {
+          showFailToast('未获取到支付宝授权码');
+          resolve(false);
+          return;
+        }
+        const { data } = await exchangeAlipayJsapiAuthCode({ authCode });
+        await persistLoginResult(data.data);
+        resolve(true);
+      } catch (error) {
+        const normalized = normalizeLoginError(error, '支付宝授权登录失败');
+        showAuthError(error, normalized.message);
+        resolve(false);
+      }
+    });
+  });
 };
 
 const handleAlipayLogin = async () => {
+  if (isLocalAlipayLoginDisabled) {
+    showFailToast('本地开发暂不可用，请先使用密码/验证码登录');
+    return;
+  }
+  if (!isAlipayWebView()) {
+    showAlipayGuide.value = true;
+    return;
+  }
   try {
     loading.value = true;
-    const { data } = await fetchAlipayLoginAuthUrl();
-    const authUrl = data?.data?.authUrl;
-    if (!authUrl) {
-      showFailToast('获取支付宝授权地址失败');
-      return;
-    }
-    window.location.href = authUrl;
-  } catch (error) {
-    showFailToast(error?.response?.data?.message || '支付宝登录暂不可用');
+    await loginByAlipayJsapi();
   } finally {
     loading.value = false;
   }
 };
 
-const handleAlipayCallback = async () => {
-  const loginTicket = route.query.loginTicket;
-  const tag = route.query.alipay;
-  if (!loginTicket || tag !== 'callback') {
+const openAlipayAuthUrl = async () => {
+  if (wakeupLoading.value || wakeupCooldown.value) {
     return;
   }
-  const toast = showLoadingToast({
-    message: '支付宝登录中...',
-    duration: 0,
-    forbidClick: true,
-  });
   try {
-    const { data } = await exchangeAlipayLoginTicket({ loginTicket });
-    userStore.token = data.data.token;
-    userStore.profile = data.data;
-    userStore.profileLoaded = true;
-    localStorage.setItem('mall-h5-token', userStore.token);
-    showSuccessToast('支付宝登录成功');
-    await router.replace('/home');
+    wakeupLoading.value = true;
+    const { data } = await fetchAlipayLoginAuthUrl();
+    const authUrl = data?.data?.authUrl;
+    if (!authUrl) {
+      showFailToast('获取授权地址失败');
+      return;
+    }
+    wakeupCooldown.value = true;
+    window.location.href = buildAlipaySchemeUrl(authUrl);
+    wakeupCooldownTimer = window.setTimeout(() => {
+      wakeupCooldown.value = false;
+    }, 2500);
   } catch (error) {
-    showFailToast(error?.response?.data?.message || '支付宝登录失败');
-    await router.replace('/login');
+    showFailToast(error?.response?.data?.message || '唤起支付宝失败');
   } finally {
-    toast.close();
+    wakeupLoading.value = false;
   }
 };
 
-onMounted(async () => {
-  await handleAlipayCallback();
+onMounted(() => {
+  if (route.query.disabled === '1') {
+    showFailToast({ message: DISABLED_USER_MESSAGE, duration: 2200 });
+    router.replace('/login');
+  }
 });
 
 onBeforeUnmount(() => {
   clearInterval(countdownTimer.value);
+  if (wakeupCooldownTimer) {
+    clearTimeout(wakeupCooldownTimer);
+    wakeupCooldownTimer = null;
+  }
   window.removeEventListener('mousemove', onMouseMove);
   window.removeEventListener('mouseup', onMouseUp);
 });
@@ -774,5 +891,50 @@ onBeforeUnmount(() => {
   color: #64748b;
   font-size: 12px;
   text-align: center;
+}
+
+:deep(.alipay-guide-popup) {
+  width: min(92vw, 360px);
+  border-radius: 16px;
+}
+
+.alipay-guide {
+  padding: 16px;
+}
+
+.guide-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.guide-desc {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.guide-qr {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.guide-qr img {
+  width: 220px;
+  height: 220px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.guide-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.guide-actions-secondary {
+  justify-content: center;
 }
 </style>

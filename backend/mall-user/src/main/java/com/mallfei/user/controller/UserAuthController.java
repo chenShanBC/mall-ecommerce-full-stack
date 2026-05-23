@@ -2,6 +2,7 @@ package com.mallfei.user.controller;
 
 import com.mallfei.common.api.ApiResponse;
 import com.mallfei.common.auth.RequireUser;
+import com.mallfei.user.application.dto.AlipayJsapiLoginRequest;
 import com.mallfei.user.application.dto.AlipayLoginExchangeRequest;
 import com.mallfei.user.application.dto.LoginCaptchaVerifyRequest;
 import com.mallfei.user.application.dto.UserPasswordChangeRequest;
@@ -36,6 +37,19 @@ public class UserAuthController {
                               AlipayLoginApplicationService alipayLoginApplicationService) {
         this.userApplicationService = userApplicationService;
         this.alipayLoginApplicationService = alipayLoginApplicationService;
+    }
+
+    @Operation(summary = "检查手机号是否在禁用黑名单")
+    @GetMapping("/login/blacklist/status")
+    public ApiResponse<?> blacklistStatus(@RequestParam("mobile") String mobile) {
+        return ApiResponse.success(userApplicationService.blacklistStatusByMobile(mobile));
+    }
+
+    @Operation(summary = "检查当前登录用户是否在禁用黑名单")
+    @GetMapping("/me/blacklist-status")
+    @RequireUser
+    public ApiResponse<?> currentUserBlacklistStatus() {
+        return ApiResponse.success(userApplicationService.blacklistStatusByMobile(userApplicationService.currentUser().mobile()));
     }
 
     @Operation(summary = "获取登录拼图验证码挑战")
@@ -92,6 +106,12 @@ public class UserAuthController {
     @PostMapping("/login/alipay/exchange")
     public ApiResponse<?> alipayExchange(@Valid @RequestBody AlipayLoginExchangeRequest request) {
         return ApiResponse.success(alipayLoginApplicationService.exchangeLoginTicket(request.loginTicket()));
+    }
+
+    @Operation(summary = "支付宝内H5通过authCode直接登录")
+    @PostMapping("/login/alipay/jsapi-exchange")
+    public ApiResponse<?> alipayJsapiExchange(@Valid @RequestBody AlipayJsapiLoginRequest request) {
+        return ApiResponse.success(alipayLoginApplicationService.loginByJsapiAuthCode(request.authCode()));
     }
 
     @RequireUser

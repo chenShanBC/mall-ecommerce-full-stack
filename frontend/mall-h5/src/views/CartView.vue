@@ -50,7 +50,7 @@
 </template>
 
 <script setup>
-import { computed, onActivated, onMounted, ref } from 'vue';
+import { computed, onActivated, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { showConfirmDialog, showFailToast, showSuccessToast } from 'vant';
 import { clearCartItems, deleteCartItem, fetchCartItems, prepareCartCheckout, updateCartItem, updateCartItemChecked } from '../api';
@@ -62,10 +62,14 @@ import {
   removeFallbackCartItem,
   updateFallbackCartItem,
 } from '../utils/cartFallback';
+import { useUserStore } from '../stores/user';
+import { requireLogin, redirectLoginWithNotice } from '../utils/requireLogin';
 
 const router = useRouter();
+const userStore = useUserStore();
 const items = ref([]);
 const preparingCheckout = ref(false);
+let sessionProbeTimer = null;
 
 const CART_CACHE_KEY = 'mallfei:h5-cart-cache-v1';
 const CART_CACHE_TTL = 180 * 1000;
@@ -115,8 +119,15 @@ const restoreCartCache = () => {
   }
 };
 
-const loadData = async () => {
+const loadData = async (force = false) => {
   try {
+    const valid = await requireLogin(router, '/cart', { force });
+    if (!valid) {
+      if (userStore.lastSessionInvalidReason === 'DISABLED') {
+        redirectLoginWithNotice(router);
+      }
+      return;
+    }
     const { data } = await fetchCartItems();
     const remoteItems = data?.data?.items || [];
     items.value = mergeCartItems(remoteItems);
@@ -125,6 +136,22 @@ const loadData = async () => {
     items.value = mergeCartItems([]);
     showFailToast(error?.response?.data?.msg || error?.response?.data?.message || '购物车加载失败');
   }
+};
+
+const startSessionProbe = () => {
+  if (sessionProbeTimer) return;
+  sessionProbeTimer = window.setInterval(async () => {
+    const valid = await requireLogin(router, '/cart', { force: false });
+    if (!valid && userStore.lastSessionInvalidReason === 'DISABLED') {
+      redirectLoginWithNotice(router);
+    }
+  }, 45000);
+};
+
+const stopSessionProbe = () => {
+  if (!sessionProbeTimer) return;
+  clearInterval(sessionProbeTimer);
+  sessionProbeTimer = null;
 };
 
 const handleQuantityChange = async (item, value) => {
@@ -227,8 +254,15 @@ const handleCheckout = async () => {
 onMounted(() => {
   restoreCartCache();
   loadData();
+  startSessionProbe();
 });
-onActivated(loadData);
+onActivated(() => {
+  loadData();
+});
+
+onBeforeUnmount(() => {
+  stopSessionProbe();
+});
 </script>
 
 <style scoped>

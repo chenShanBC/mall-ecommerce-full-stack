@@ -32,10 +32,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed, onActivated, onMounted } from 'vue';
 import { showFailToast, showSuccessToast } from 'vant';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../stores/user';
+import { ensureAccessGate, redirectLoginWithNotice } from '../utils/requireLogin';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -87,12 +88,24 @@ const handleLogout = async () => {
   router.replace('/login');
 };
 
-onMounted(async () => {
+const ensureSession = async (force = false) => {
   try {
-    await userStore.loadProfile();
-  } catch (error) {
-    showFailToast(error?.response?.data?.msg || '用户信息加载失败');
+    const valid = await ensureAccessGate(router, '/profile', { force });
+    if (!valid) {
+      return;
+    }
+  } catch {
+    showFailToast('登录状态已失效，请重新登录');
+    router.replace('/login');
   }
+};
+
+onMounted(() => {
+  ensureSession(true);
+});
+
+onActivated(() => {
+  ensureSession(false);
 });
 </script>
 

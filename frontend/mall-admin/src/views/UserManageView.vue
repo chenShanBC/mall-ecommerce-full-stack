@@ -30,7 +30,16 @@
         </el-table-column>
         <el-table-column label="标签" min-width="180">
           <template #default="{ row }">
-            <el-tag v-for="tag in row.tags || []" :key="tag" class="tag" size="small">{{ tag }}</el-tag>
+            <el-tag
+              v-for="tag in row.tags || []"
+              :key="tag"
+              class="tag"
+              :class="userTagClass(tag)"
+              size="small"
+              effect="light"
+            >
+              {{ tag }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="240">
@@ -55,7 +64,7 @@
         <div class="admin-detail__grid user-detail-grid">
           <div v-if="detail.avatarUrl" class="admin-detail__item full user-avatar-panel">
             <span class="admin-detail__label">头像</span>
-            <el-image :src="detail.avatarUrl" fit="cover" class="user-avatar-image" :preview-src-list="[detail.avatarUrl]" preview-teleported />
+            <el-image :src="resolveAssetUrl(detail.avatarUrl)" fit="cover" class="user-avatar-image" :preview-src-list="[resolveAssetUrl(detail.avatarUrl)]" preview-teleported />
           </div>
           <div class="admin-detail__item"><span class="admin-detail__label">用户ID</span>{{ detail.id }}</div>
           <div class="admin-detail__item"><span class="admin-detail__label">手机号</span>{{ detail.mobile }}</div>
@@ -96,6 +105,34 @@ const query = reactive({ keyword: '', status: '', sortBy: 'id', sortOrder: 'asc'
 const pager = reactive({ page: 1, size: ADMIN_PAGE_SIZE, total: 0 });
 const canManage = computed(() => adminStore.hasPermission('user:manage'));
 const userStatusMeta = (status) => getStatusTagMeta('userAccountStatus', status);
+const userTagClass = (tag) => {
+  if (tag === '有地址') return 'tag--address-yes';
+  if (tag === '无地址') return 'tag--address-no';
+  if (tag === '正常用户') return 'tag--status-enabled';
+  if (tag === '已禁用') return 'tag--status-disabled';
+  return '';
+};
+const getBackendOrigin = () => {
+  const explicitTarget = import.meta.env.VITE_DEV_API_TARGET;
+  if (explicitTarget && /^https?:\/\//i.test(explicitTarget)) {
+    return explicitTarget.replace(/\/$/, '');
+  }
+  const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
+  if (/^https?:\/\//i.test(apiBase)) {
+    return apiBase.replace(/\/$/, '').replace(/\/api$/, '');
+  }
+  return window.location.origin;
+};
+const resolveAssetUrl = (url) => {
+  if (!url) return '';
+  if (/^(https?:)?\/\//i.test(url) || url.startsWith('data:')) return url;
+  const normalized = String(url).replace(/^\/upload\//i, '/uploads/');
+  const backendOrigin = getBackendOrigin();
+  if (normalized.startsWith('/')) {
+    return `${backendOrigin}${normalized}`;
+  }
+  return `${backendOrigin}/${normalized}`;
+};
 
 const loadData = async () => {
   loading.value = true;
@@ -150,7 +187,7 @@ onMounted(loadData);
 </script>
 
 <style scoped>
-.tag{margin-right:6px;margin-bottom:6px}.user-address-cell{display:flex;flex-direction:column;gap:4px}.user-address-cell__detail{color:#94a3b8}.user-actions{display:flex;gap:8px;flex-wrap:wrap}.user-action-btn{min-width:72px;border:none;border-radius:999px;box-shadow:0 10px 24px rgba(15,23,42,.08)}.user-action-btn--detail{color:#2563eb;background:linear-gradient(135deg,#eff6ff,#dbeafe)}.user-action-btn--danger{color:#be123c;background:linear-gradient(135deg,#fff1f2,#ffe4e6)}.user-action-btn--success{color:#047857;background:linear-gradient(135deg,#ecfdf5,#d1fae5)}.user-avatar-panel{display:flex;flex-direction:column;align-items:flex-start;gap:12px}.user-avatar-image{width:84px;height:84px;border-radius:20px;overflow:hidden;border:1px solid rgba(148,163,184,.18);box-shadow:0 10px 24px rgba(15,23,42,.08)}
+.tag{margin-right:6px;margin-bottom:6px;border:none;font-weight:700}.tag--address-yes{color:#047857;background:#d1fae5}.tag--address-no{color:#64748b;background:#f1f5f9}.tag--status-enabled{color:#2563eb;background:#dbeafe}.tag--status-disabled{color:#be123c;background:#ffe4e6}.user-address-cell{display:flex;flex-direction:column;gap:4px}.user-address-cell__detail{color:#94a3b8}.user-actions{display:flex;gap:8px;flex-wrap:wrap}.user-action-btn{min-width:72px;border:none;border-radius:999px;box-shadow:0 10px 24px rgba(15,23,42,.08)}.user-action-btn--detail{color:#2563eb;background:linear-gradient(135deg,#eff6ff,#dbeafe)}.user-action-btn--danger{color:#be123c;background:linear-gradient(135deg,#fff1f2,#ffe4e6)}.user-action-btn--success{color:#047857;background:linear-gradient(135deg,#ecfdf5,#d1fae5)}.user-avatar-panel{display:flex;flex-direction:column;align-items:flex-start;gap:12px}.user-avatar-image{width:84px;height:84px;border-radius:20px;overflow:hidden;border:1px solid rgba(148,163,184,.18);box-shadow:0 10px 24px rgba(15,23,42,.08)}
 :deep(.el-table .cell){display:flex;align-items:center;gap:6px;white-space:nowrap}
 :deep(.el-table th.is-sortable .cell){justify-content:flex-start}
 </style>

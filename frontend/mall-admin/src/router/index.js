@@ -17,18 +17,18 @@ const UserManageView = () => import('../views/UserManageView.vue');
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
-  { path: '/dashboard', name: 'dashboard', component: DashboardView, meta: { requiresAuth: true } },
+  { path: '/dashboard', name: 'dashboard', component: DashboardView, meta: { requiresAuth: true, permission: 'dashboard:view' } },
   { path: '/orders', name: 'orders', component: OrderManageView, meta: { requiresAuth: true, permission: 'order:view' } },
-  { path: '/aftersales', name: 'aftersales', component: AftersaleManageView, meta: { requiresAuth: true, permission: 'order:view' } },
-  { path: '/pays', name: 'pays', component: PayManageView, meta: { requiresAuth: true, permission: 'pay:view' } },
-  { path: '/reconciliations', name: 'reconciliations', component: ReconciliationManageView, meta: { requiresAuth: true, permission: 'reconcile:view' } },
+  { path: '/aftersales', name: 'aftersales', component: AftersaleManageView, meta: { requiresAuth: true, permission: 'aftersale:view' } },
+  { path: '/pays', name: 'pays', component: PayManageView, meta: { requiresAuth: true, permission: 'payment:view' } },
+  { path: '/reconciliations', name: 'reconciliations', component: ReconciliationManageView, meta: { requiresAuth: true, permission: 'reconciliation:view' } },
   { path: '/products', name: 'products', component: ProductManageView, meta: { requiresAuth: true, permission: 'product:view' } },
   { path: '/stocks', name: 'stocks', component: StockManageView, meta: { requiresAuth: true, permission: 'stock:view' } },
   { path: '/users', name: 'users', component: UserManageView, meta: { requiresAuth: true, permission: 'user:view' } },
 
-  { path: '/stock-logs', name: 'stock-logs', component: StockLogView, meta: { requiresAuth: true, permission: 'stock:view' } },
-  { path: '/accounts', name: 'accounts', component: AccountManageView, meta: { requiresAuth: true, permission: 'system:account:manage' } },
-  { path: '/operation-logs', name: 'operation-logs', component: OperationLogView, meta: { requiresAuth: true, permission: 'system:log:view' } },
+  { path: '/stock-logs', name: 'stock-logs', component: StockLogView, meta: { requiresAuth: true, permission: 'stock:log:view' } },
+  { path: '/accounts', name: 'accounts', component: AccountManageView, meta: { requiresAuth: true, permissions: ['admin:view', 'role:view', 'permission:view'] } },
+  { path: '/operation-logs', name: 'operation-logs', component: OperationLogView, meta: { requiresAuth: true, permission: 'log:operation:view' } },
   { path: '/profile', name: 'profile', component: ProfileCenterView, meta: { requiresAuth: true } },
   { path: '/login', name: 'login', component: LoginView },
 ];
@@ -47,8 +47,10 @@ router.beforeEach(async (to) => {
     if (!valid) {
       return '/login';
     }
+    adminStore.initForceLogout(router);
   }
   if (to.meta.permission && !adminStore.hasPermission(to.meta.permission)) return adminStore.getFirstAccessiblePath();
+  if (to.meta.permissions && !adminStore.hasAnyPermission(to.meta.permissions)) return adminStore.getFirstAccessiblePath();
   if (to.path === '/login' && token) {
     const valid = await adminStore.ensureSessionValid();
     return valid ? adminStore.getFirstAccessiblePath() : true;

@@ -1,6 +1,10 @@
 <template>
   <div class="app-shell">
-    <router-view />
+    <router-view v-slot="{ Component, route }">
+      <keep-alive :include="cachedRouteNames">
+        <component :is="Component" :key="route.name" />
+      </keep-alive>
+    </router-view>
     <van-tabbar
       v-if="showTabbar"
       :model-value="activeTab"
@@ -29,6 +33,7 @@ const tabs = [
   { name: 'profile', path: '/profile', icon: 'contact-o', label: '我的', requiresAuth: true },
 ];
 
+const cachedRouteNames = ['home', 'cart', 'orders', 'profile', 'profile-manage', 'address', 'product-detail', 'checkout', 'order-detail', 'pay-return'];
 const showTabbar = computed(() => Boolean(route.meta.showTabbar));
 const activeTab = computed(() => route.name || 'home');
 
@@ -37,7 +42,7 @@ const handleTabChange = async (name) => {
   if (!target) {
     return;
   }
-  if (target.requiresAuth && !await requireLogin(router, target.path)) {
+  if (target.requiresAuth && !await requireLogin(router, target.path, { force: false })) {
     return;
   }
   if (route.path !== target.path) {

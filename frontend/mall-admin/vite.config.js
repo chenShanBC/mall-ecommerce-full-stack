@@ -17,15 +17,30 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5174,
+    strictPort: true,
+    allowedHosts: ['localhost', '127.0.0.1', '0.0.0.0'],
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:9090',
+        target: process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:9090',
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
             proxyReq.removeHeader('origin');
           });
         },
+      },
+      '/ws': {
+        target: process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:9090',
+        changeOrigin: true,
+        ws: true,
+      },
+      '/uploads': {
+        target: process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:9090',
+        changeOrigin: true,
+      },
+      '/upload': {
+        target: process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:9090',
+        changeOrigin: true,
       },
     },
   },

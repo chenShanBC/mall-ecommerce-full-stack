@@ -58,7 +58,7 @@ import { getStatusTagMeta } from '../utils/status';
 const route = useRoute();
 const router = useRouter();
 const adminStore = useAdminStore();
-const canManage = computed(() => adminStore.hasPermission('reconcile:manage'));
+const canManage = computed(() => adminStore.hasPermission('reconciliation:handle'));
 const orderStatusMeta = (status) => getStatusTagMeta('order', status);
 const payStatusMeta = (status) => getStatusTagMeta('pay', status);
 const reconcileStatusMeta = (status) => getStatusTagMeta('reconcile', status);

@@ -16,6 +16,8 @@ import com.mallfei.stock.facade.StockFacade;
 import com.mallfei.stock.facade.StockSnapshot;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,9 +28,13 @@ import java.util.stream.Collectors;
 @Service
 public class ProductQueryApplicationService {
 
+    private static final Duration PUBLIC_CACHE_TTL = Duration.ofSeconds(30);
+
     private final ProductDomainService productDomainService;
     private final ProductViewAssembler productViewAssembler;
     private final StockFacade stockFacade;
+    private volatile CacheEntry<List<CategoryTreeNodeView>> categoriesCache;
+    private volatile CacheEntry<PageResponse<ProductCardView>> productPageCache;
 
     public ProductQueryApplicationService(ProductDomainService productDomainService,
                                           ProductViewAssembler productViewAssembler,
@@ -39,10 +45,20 @@ public class ProductQueryApplicationService {
     }
 
     public List<CategoryTreeNodeView> categories() {
-        return productViewAssembler.toCategoryTree(productDomainService.loadEnabledCategories());
+        CacheEntry<List<CategoryTreeNodeView>> cached = categoriesCache;
+        if (cached != null && !cached.expired()) {
+            return cached.value();
+        }
+        List<CategoryTreeNodeView> result = productViewAssembler.toCategoryTree(productDomainService.loadEnabledCategories());
+        categoriesCache = CacheEntry.of(result, PUBLIC_CACHE_TTL);
+        return result;
     }
 
     public PageResponse<ProductCardView> productPage() {
+        CacheEntry<PageResponse<ProductCardView>> cached = productPageCache;
+        if (cached != null && !cached.expired()) {
+            return cached.value();
+        }
         List<ProductSpu> onlineProducts = productDomainService.loadOnlineProducts().stream()
                 .filter(productSpu -> !productSpu.skus().isEmpty())
                 .toList();
@@ -56,7 +72,9 @@ public class ProductQueryApplicationService {
                 .filter(product -> availableStockByProductId.getOrDefault(product.id(), 0) > 0)
                 .map(productViewAssembler::toProductCard)
                 .toList();
-        return new PageResponse<>(records, records.size(), 1, 10);
+        PageResponse<ProductCardView> result = new PageResponse<>(records, records.size(), 1, 10);
+        productPageCache = CacheEntry.of(result, PUBLIC_CACHE_TTL);
+        return result;
     }
 
     public ProductDetailView productDetail(Long productId) {
@@ -116,5 +134,15 @@ public class ProductQueryApplicationService {
 
     private boolean blank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private record CacheEntry<T>(T value, Instant expiresAt) {
+        static <T> CacheEntry<T> of(T value, Duration ttl) {
+            return new CacheEntry<>(value, Instant.now().plus(ttl));
+        }
+
+        boolean expired() {
+            return Instant.now().isAfter(expiresAt);
+        }
     }
 }

@@ -10,17 +10,17 @@
       </div>
       <el-menu :default-active="route.path" class="admin-menu" @select="handleMenuSelect">
         <el-menu-item index="/dashboard">仪表盘</el-menu-item>
-        <el-menu-item v-if="adminStore.hasPermission('order:view')" index="/orders">订单管控</el-menu-item>
-        <el-menu-item v-if="adminStore.hasPermission('order:view')" index="/aftersales">售后管理</el-menu-item>
-        <el-menu-item v-if="adminStore.hasPermission('pay:view')" index="/pays">支付单管控</el-menu-item>
-        <el-menu-item v-if="adminStore.hasPermission('reconcile:view')" index="/reconciliations">对账运营</el-menu-item>
         <el-menu-item v-if="adminStore.hasPermission('user:view')" index="/users">用户管理</el-menu-item>
         <el-menu-item v-if="adminStore.hasPermission('product:view')" index="/products">商品管理</el-menu-item>
         <el-menu-item v-if="adminStore.hasPermission('stock:view')" index="/stocks">库存管理</el-menu-item>
-        <el-menu-item v-if="adminStore.hasPermission('stock:view')" index="/stock-logs">库存日志</el-menu-item>
-        <el-menu-item v-if="adminStore.hasPermission('system:account:manage')" index="/accounts">账号权限</el-menu-item>
-        <el-menu-item v-if="adminStore.hasPermission('system:log:view')" index="/operation-logs">操作日志</el-menu-item>
+        <el-menu-item v-if="adminStore.hasPermission('order:view')" index="/orders">订单管控</el-menu-item>
+        <el-menu-item v-if="adminStore.hasPermission('aftersale:view')" index="/aftersales">售后管理</el-menu-item>
+        <el-menu-item v-if="adminStore.hasPermission('payment:view')" index="/pays">支付单管控</el-menu-item>
+        <el-menu-item v-if="adminStore.hasPermission('reconciliation:view')" index="/reconciliations">对账运营</el-menu-item>
+        <el-menu-item v-if="adminStore.hasAnyPermission(['admin:view', 'role:view', 'permission:view'])" index="/accounts">账号权限</el-menu-item>
+        <el-menu-item v-if="adminStore.hasPermission('log:operation:view')" index="/operation-logs">操作日志</el-menu-item>
         <el-menu-item index="/profile">个人中心</el-menu-item>
+        <el-menu-item v-if="adminStore.hasPermission('stock:log:view')" index="/stock-logs">库存日志</el-menu-item>
       </el-menu>
       <div class="aside-footer">
         <div class="aside-footer__label">当前角色</div>

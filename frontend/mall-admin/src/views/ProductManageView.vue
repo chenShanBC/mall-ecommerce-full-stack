@@ -8,7 +8,7 @@
         <el-form-item><el-button type="primary" @click="handleSearch">查询</el-button></el-form-item>
         <el-form-item><el-button @click="handleReset">重置</el-button></el-form-item>
         <el-form-item><el-button @click="exportProducts">导出</el-button></el-form-item>
-        <el-form-item><el-button type="primary" @click="openCreate">新增商品</el-button></el-form-item>
+        <el-form-item v-if="canCreate"><el-button type="primary" @click="openCreate">新增商品</el-button></el-form-item>
       </el-form>
     </el-card>
 
@@ -25,9 +25,9 @@
         <el-table-column label="操作" width="340">
           <template #default="{ row }">
             <el-button size="small" @click="openProductDetail(row.id)">详情</el-button>
-            <el-button size="small" type="primary" @click="openEdit(row.id)">编辑</el-button>
-            <el-button size="small" type="warning" plain @click="openStatusDialog(row)">{{ row.status === 'ONLINE' ? '下架' : '上架' }}</el-button>
-            <el-button size="small" type="danger" plain @click="openViolationDialog(row)">运营处置</el-button>
+            <el-button v-if="canUpdate" size="small" type="primary" @click="openEdit(row.id)">编辑</el-button>
+            <el-button v-if="canUpdate" size="small" type="warning" plain @click="openStatusDialog(row)">{{ row.status === 'ONLINE' ? '下架' : '上架' }}</el-button>
+            <el-button v-if="canUpdate" size="small" type="danger" plain @click="openViolationDialog(row)">运营处置</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -105,7 +105,7 @@
 </template>
 
 <script setup>
-import { onActivated, onMounted, reactive, ref } from 'vue';
+import { computed, onActivated, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import AdminLayout from '../components/AdminLayout.vue';
@@ -121,6 +121,8 @@ import { adminPageCache, isCacheFresh } from '../stores/pageCache';
 const route = useRoute();
 const router = useRouter();
 const adminStore = useAdminStore();
+const canCreate = computed(() => adminStore.hasPermission('product:create'));
+const canUpdate = computed(() => adminStore.hasPermission('product:update'));
 const products = ref(adminPageCache.products.list || []);
 const loading = ref(false);
 const categories = ref(adminPageCache.products.categories || []);

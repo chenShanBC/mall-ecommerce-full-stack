@@ -23,8 +23,28 @@ public class AuthSessionService {
         authSessionManager.refreshAdminSession(nickname, roleCode, permissions);
     }
 
+    public void refreshAdminSessionByAdminId(Long adminId, String nickname, String roleCode, List<String> permissions) {
+        authSessionManager.refreshAdminSessionByAdminId(adminId, nickname, roleCode, permissions);
+    }
+
     public AuthenticatedPrincipal currentPrincipal() {
         return authSessionManager.currentPrincipal();
+    }
+
+    public void disableUserSession(Long userId) {
+        authSessionManager.disableUserSession(userId);
+    }
+
+    public void disableAdminSession(Long adminId) {
+        authSessionManager.disableAdminSession(adminId);
+    }
+
+    public void enableUserSession(Long userId) {
+        authSessionManager.enableUserSession(userId);
+    }
+
+    public boolean isUserDisabled(Long userId) {
+        return authSessionManager.isUserDisabled(userId);
     }
 
     public void logout() {

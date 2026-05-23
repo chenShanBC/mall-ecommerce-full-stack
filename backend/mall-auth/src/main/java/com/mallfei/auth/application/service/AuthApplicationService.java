@@ -27,6 +27,10 @@ public class AuthApplicationService {
         authSessionService.refreshAdminSession(nickname, roleCode, permissions);
     }
 
+    public void refreshAdminSessionByAdminId(Long adminId, String nickname, String roleCode, List<String> permissions) {
+        authSessionService.refreshAdminSessionByAdminId(adminId, nickname, roleCode, permissions);
+    }
+
     public AuthenticatedPrincipal currentPrincipal() {
         return authSessionService.currentPrincipal();
     }
@@ -35,6 +39,22 @@ public class AuthApplicationService {
         AuthenticatedPrincipal principal = currentPrincipal();
         authDomainService.ensureLoggedIn(principal);
         return principal;
+    }
+
+    public void disableUserSession(Long userId) {
+        authSessionService.disableUserSession(userId);
+    }
+
+    public void disableAdminSession(Long adminId) {
+        authSessionService.disableAdminSession(adminId);
+    }
+
+    public void enableUserSession(Long userId) {
+        authSessionService.enableUserSession(userId);
+    }
+
+    public boolean isUserDisabled(Long userId) {
+        return authSessionService.isUserDisabled(userId);
     }
 
     public void logout() {

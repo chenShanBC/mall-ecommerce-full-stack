@@ -60,16 +60,27 @@ public class AdminDomainService {
         if (adminAccountRepository.existsByUsername(username)) {
             throw BusinessException.badRequest("运营账号已存在");
         }
-        List<String> finalPermissions = roleCode.equalsIgnoreCase("SUPER_ADMIN")
-                ? AdminPermissionCatalog.superAdminPermissions()
-                : permissions;
-        return AdminAccount.create(userId, username, passwordCodec.encode(rawPassword), nickname, roleCode, finalPermissions);
+        List<String> finalPermissions = resolveAssignablePermissions(roleCode, permissions);
+        return AdminAccount.create(userId, username, passwordCodec.encode(rawPassword), nickname, AdminPermissionCatalog.normalizeRoleCode(roleCode), finalPermissions);
     }
 
     public AdminAccount resetPermissions(AdminAccount account, String roleCode, List<String> permissions) {
-        List<String> finalPermissions = roleCode.equalsIgnoreCase("SUPER_ADMIN")
-                ? AdminPermissionCatalog.superAdminPermissions()
+        List<String> finalPermissions = resolveAssignablePermissions(roleCode, permissions);
+        return account.resetPermissions(AdminPermissionCatalog.normalizeRoleCode(roleCode), finalPermissions);
+    }
+
+    private List<String> resolveAssignablePermissions(String roleCode, List<String> permissions) {
+        if (roleCode == null || roleCode.isBlank()) {
+            throw BusinessException.badRequest("角色编码不能为空");
+        }
+        String normalizedRoleCode = AdminPermissionCatalog.normalizeRoleCode(roleCode);
+        if (normalizedRoleCode.equalsIgnoreCase("SUPER_ADMIN")) {
+            return AdminPermissionCatalog.superAdminPermissions();
+        }
+        List<String> finalPermissions = permissions == null || permissions.isEmpty()
+                ? AdminPermissionCatalog.defaultPermissions(normalizedRoleCode)
                 : permissions;
-        return account.resetPermissions(roleCode, finalPermissions);
+        AdminPermissionCatalog.validateAssignable(normalizedRoleCode, finalPermissions);
+        return finalPermissions;
     }
 }

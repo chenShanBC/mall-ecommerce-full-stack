@@ -50,12 +50,21 @@ public class AlipayLoginApplicationService {
     public AlipayAuthUrlView createAuthUrl() {
         String state = UUID.randomUUID().toString().replace("-", "");
         stateRepository.saveState(state, loginProps.getStateExpireSeconds());
-        String authUrl = "https://openauth.alipay.com/oauth2/publicAppAuthorize.htm"
+        String authBase = resolveAuthBaseUrl();
+        String authUrl = authBase
                 + "?app_id=" + payProps.getAppId()
                 + "&scope=auth_user"
                 + "&redirect_uri=" + URLEncoder.encode(loginProps.getRedirectUri(), StandardCharsets.UTF_8)
                 + "&state=" + state;
         return new AlipayAuthUrlView(authUrl, state, loginProps.getStateExpireSeconds());
+    }
+
+    private String resolveAuthBaseUrl() {
+        String gateway = payProps.getGateway() == null ? "" : payProps.getGateway().toLowerCase();
+        if (gateway.contains("sandbox") || gateway.contains("alipaydev")) {
+            return "https://openauth-sandbox.dl.alipaydev.com/oauth2/publicAppAuthorize.htm";
+        }
+        return "https://openauth.alipay.com/oauth2/publicAppAuthorize.htm";
     }
 
     @Transactional
@@ -78,7 +87,6 @@ public class AlipayLoginApplicationService {
         stateRepository.saveLoginTicket(loginTicket, userId, loginProps.getLoginTicketExpireSeconds());
 
         return UriComponentsBuilder.fromUriString(loginProps.getFrontendRedirectUri())
-                .queryParam("alipay", "callback")
                 .queryParam("loginTicket", loginTicket)
                 .build(true)
                 .toUriString();
@@ -89,11 +97,40 @@ public class AlipayLoginApplicationService {
         if (userId == null) {
             throw BusinessException.badRequest("登录票据无效或已过期");
         }
+        return buildLoginResult(userId);
+    }
+
+    @Transactional
+    public UserLoginResult loginByJsapiAuthCode(String authCode) {
+        if (authCode == null || authCode.isBlank()) {
+            throw BusinessException.badRequest("授权码不能为空");
+        }
+        AlipayOAuthClient.AlipayOAuthTokenResult tokenResult = alipayOAuthClient.exchangeToken(authCode);
+        AlipayOAuthClient.AlipayOAuthUserInfo userInfo = alipayOAuthClient.fetchUserInfo(tokenResult.accessToken());
+        String alipayUserId = userInfo.userId() == null || userInfo.userId().isBlank() ? tokenResult.alipayUserId() : userInfo.userId();
+        if (alipayUserId == null || alipayUserId.isBlank()) {
+            throw BusinessException.badRequest("支付宝用户标识为空，无法登录");
+        }
+        Long userId = thirdBindRepository.findByThirdTypeAndUid(UserThirdBind.THIRD_TYPE_ALIPAY, alipayUserId)
+                .map(UserThirdBind::userId)
+                .orElseGet(() -> registerAndBind(alipayUserId, userInfo));
+        return buildLoginResult(userId);
+    }
+
+    private UserLoginResult buildLoginResult(Long userId) {
         UserAccount userAccount = userDomainService.loadById(userId);
+        ensureEnabled(userAccount);
         String token = authFacade.createLoginSession(
                 userAccount.id(), userAccount.mobile(), IdentityType.USER,
                 userAccount.nickname(), userAccount.avatarUrl(), "USER", List.of());
         return new UserLoginResult(token, userAccount.id(), userAccount.mobile(), userAccount.nickname(), userAccount.avatarUrl(), userAccount.mobile() != null && !userAccount.mobile().isBlank());
+    }
+
+    private void ensureEnabled(UserAccount userAccount) {
+        if (authFacade.isUserDisabled(userAccount.id()) || !userAccount.enabled()) {
+            authFacade.disableUserSession(userAccount.id());
+            throw new com.mallfei.common.exception.BusinessException(UserDomainService.USER_DISABLED_CODE, UserDomainService.USER_DISABLED_MESSAGE);
+        }
     }
 
     private Long registerAndBind(String alipayUserId, AlipayOAuthClient.AlipayOAuthUserInfo userInfo) {

@@ -169,6 +169,7 @@ onMounted(async () => {
     processing.value = false;
 
     if (success) {
+      localStorage.setItem('mallfei:product-sales-refresh', String(Date.now()));
       notifyOpenerRefresh();
     }
   } catch (error) {

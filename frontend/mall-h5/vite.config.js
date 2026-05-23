@@ -6,9 +6,11 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    strictPort: true,
+    allowedHosts: ['localhost', '127.0.0.1', '0.0.0.0'],
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:9090',
+        target: process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:9090',
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
@@ -16,12 +18,17 @@ export default defineConfig({
           });
         },
       },
+      '/ws': {
+        target: process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:9090',
+        changeOrigin: true,
+        ws: true,
+      },
       '/upload': {
-        target: 'http://127.0.0.1:9090',
+        target: process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:9090',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://127.0.0.1:9090',
+        target: process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:9090',
         changeOrigin: true,
       },
     },

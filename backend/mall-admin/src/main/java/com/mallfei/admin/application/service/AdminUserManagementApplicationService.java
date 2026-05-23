@@ -3,6 +3,7 @@ package com.mallfei.admin.application.service;
 import com.mallfei.admin.application.vo.AdminUserAddressView;
 import com.mallfei.admin.application.vo.AdminUserDetailView;
 import com.mallfei.admin.application.vo.AdminUserListItemView;
+import com.mallfei.auth.facade.AuthFacade;
 import com.mallfei.common.api.PageResult;
 import com.mallfei.user.domain.model.UserAccount;
 import com.mallfei.user.domain.model.UserAddress;
@@ -20,13 +21,16 @@ public class AdminUserManagementApplicationService {
     private final UserAccountRepository userAccountRepository;
     private final UserAddressRepository userAddressRepository;
     private final AdminAccountManagementApplicationService adminAccountManagementApplicationService;
+    private final AuthFacade authFacade;
 
     public AdminUserManagementApplicationService(UserAccountRepository userAccountRepository,
                                                  UserAddressRepository userAddressRepository,
-                                                 AdminAccountManagementApplicationService adminAccountManagementApplicationService) {
+                                                 AdminAccountManagementApplicationService adminAccountManagementApplicationService,
+                                                 AuthFacade authFacade) {
         this.userAccountRepository = userAccountRepository;
         this.userAddressRepository = userAddressRepository;
         this.adminAccountManagementApplicationService = adminAccountManagementApplicationService;
+        this.authFacade = authFacade;
     }
 
     public PageResult<AdminUserListItemView> users(String keyword, String status, String sortBy, String sortOrder, long page, long size) {
@@ -57,13 +61,15 @@ public class AdminUserManagementApplicationService {
 
     public AdminUserDetailView disableUser(Long userId) {
         UserAccount updated = userAccountRepository.update(userAccountRepository.findById(userId).orElseThrow().disable());
-        adminAccountManagementApplicationService.recordOperation("USER", "USER_DISABLE", "禁用C端用户 userId=" + userId, "SUCCESS");
+        authFacade.disableUserSession(userId);
+        adminAccountManagementApplicationService.recordOperation("USER", "USER_DISABLE", "禁用C端用户 userId=" + userId + "，已清理登录态并加入禁用黑名单", "SUCCESS");
         return userDetail(updated.id());
     }
 
     public AdminUserDetailView enableUser(Long userId) {
         UserAccount updated = userAccountRepository.update(userAccountRepository.findById(userId).orElseThrow().enable());
-        adminAccountManagementApplicationService.recordOperation("USER", "USER_ENABLE", "启用C端用户 userId=" + userId, "SUCCESS");
+        authFacade.enableUserSession(userId);
+        adminAccountManagementApplicationService.recordOperation("USER", "USER_ENABLE", "启用C端用户 userId=" + userId + "，已移出禁用黑名单", "SUCCESS");
         return userDetail(updated.id());
     }
 

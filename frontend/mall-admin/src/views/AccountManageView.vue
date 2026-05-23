@@ -27,9 +27,20 @@
         <el-table-column prop="status" label="状态" width="120">
           <template #default="{ row }"><el-tag :type="accountStatusMeta(row.status).type">{{ accountStatusMeta(row.status).label }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="权限" min-width="300">
+        <el-table-column label="权限" min-width="520">
           <template #default="{ row }">
-            <el-tag v-for="permission in row.permissions || []" :key="permission" size="small" class="tag">{{ permission }}</el-tag>
+            <el-tooltip
+              effect="light"
+              placement="top-start"
+              popper-class="permission-list-tooltip"
+              :content="(row.permissions || []).join('、') || '暂无权限'"
+            >
+              <div class="permission-list-cell">
+                <el-tag v-for="permission in previewPermissions(row.permissions)" :key="permission" size="small" class="tag">{{ permission }}</el-tag>
+                <el-tag v-if="hiddenPermissionCount(row.permissions) > 0" size="small" type="info" class="tag">+{{ hiddenPermissionCount(row.permissions) }}</el-tag>
+                <span v-if="!(row.permissions || []).length" class="permission-list-empty">暂无权限</span>
+              </div>
+            </el-tooltip>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="360" align="center">
@@ -56,28 +67,39 @@
         <el-form-item v-if="mode === 'create'" label="密码"><el-input v-model="form.password" type="password" show-password /></el-form-item>
         <el-form-item v-if="mode === 'create'" label="昵称"><el-input v-model="form.nickname" /></el-form-item>
         <el-form-item label="角色">
-          <el-select v-model="form.roleCode" style="width: 100%" @change="applyTemplate">
+          <el-select v-model="form.roleCode" style="width: 100%" :disabled="mode === 'edit' && form.roleCode === 'SUPER_ADMIN'" @change="applyTemplate">
             <el-option v-for="item in roles" :key="item.code" :label="`${item.name} (${item.code})`" :value="item.code" />
           </el-select>
-          <div class="role-tip">建议优先按角色模板配置，再按需做最小权限增删。</div>
+          <div v-if="form.roleCode === 'SUPER_ADMIN'" class="role-tip role-tip--warning">超级管理员是系统最高权限角色，后端会强制拥有全部权限，不支持在这里单独减权。</div>
+          <div v-else class="role-tip">建议优先按角色模板配置，再按最小权限原则增删；提交后会立刻影响菜单、按钮和接口访问。</div>
         </el-form-item>
         <el-form-item label="权限">
-          <el-checkbox-group v-model="form.permissions">
-            <el-checkbox label="user:view">用户查看</el-checkbox>
-            <el-checkbox label="user:manage">用户管理</el-checkbox>
-            <el-checkbox label="product:view">商品查看</el-checkbox>
-            <el-checkbox label="product:manage">商品编辑</el-checkbox>
-            <el-checkbox label="order:view">订单查看</el-checkbox>
-            <el-checkbox label="order:manage">订单处理</el-checkbox>
-            <el-checkbox label="stock:view">库存查看</el-checkbox>
-            <el-checkbox label="stock:manage">库存处理</el-checkbox>
-            <el-checkbox label="pay:view">支付查看</el-checkbox>
-            <el-checkbox label="pay:manage">支付处理</el-checkbox>
-            <el-checkbox label="reconcile:view">对账查看</el-checkbox>
-            <el-checkbox label="reconcile:manage">对账处理</el-checkbox>
-            <el-checkbox label="system:log:view">日志查看</el-checkbox>
-            <el-checkbox label="system:account:manage">账号管理</el-checkbox>
-          </el-checkbox-group>
+          <div class="permission-editor">
+            <div class="permission-section permission-section--base">
+              <div class="permission-section__title">默认最小权限（不可修改）</div>
+              <div class="permission-section__desc">该角色完成岗位职责所必须具备的权限，提交时后端也会强制保留。</div>
+              <div class="permission-tags">
+                <el-tag v-for="permission in defaultPermissionItems" :key="permission.code" type="success" class="permission-tag">{{ permission.label }}</el-tag>
+                <el-empty v-if="!defaultPermissionItems.length" description="暂无默认权限" :image-size="52" />
+              </div>
+            </div>
+            <div class="permission-section permission-section--optional">
+              <div class="permission-section__title">可更改权限（角色白名单剩余部分）</div>
+              <div class="permission-section__desc">只能在角色权限上限内增删，不能低于默认权限。</div>
+              <el-checkbox-group v-model="optionalPermissions" :disabled="form.roleCode === 'SUPER_ADMIN'">
+                <el-checkbox v-for="permission in optionalPermissionItems" :key="permission.code" :label="permission.code">{{ permission.label }}</el-checkbox>
+              </el-checkbox-group>
+              <el-empty v-if="!optionalPermissionItems.length" description="当前角色没有额外可选权限" :image-size="52" />
+            </div>
+            <div class="permission-section permission-section--forbidden">
+              <div class="permission-section__title">不可添加权限（超出角色白名单）</div>
+              <div class="permission-section__desc">这些权限不属于当前角色职责范围，前端不可选，后端也会拒绝提交。</div>
+              <div class="permission-tags permission-tags--muted">
+                <el-tag v-for="permission in forbiddenPermissionItems" :key="permission.code" type="info" class="permission-tag">{{ permission.label }}</el-tag>
+                <el-empty v-if="!forbiddenPermissionItems.length" description="当前角色可拥有全部权限" :image-size="52" />
+              </div>
+            </div>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -89,7 +111,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
 import AdminLayout from '../components/AdminLayout.vue';
@@ -110,8 +132,49 @@ const mode = ref('create');
 const currentAdminId = ref(null);
 const filters = reactive({ keyword: '', roleCode: '', status: '' });
 const pager = reactive({ page: 1, size: ADMIN_PAGE_SIZE, total: 0 });
-const form = reactive({ userId: null, username: '', password: '', nickname: '', roleCode: 'PRODUCT_OPERATOR', permissions: ['product:view', 'product:manage'] });
+const form = reactive({ userId: null, username: '', password: '', nickname: '', roleCode: 'PRODUCT_OPERATOR', permissions: ['product:view', 'product:create', 'product:update'] });
+const permissionOptions = [
+  { code: 'dashboard:view', label: '仪表盘查看' },
+  { code: 'user:view', label: '用户查看' },
+  { code: 'user:edit', label: '用户编辑' },
+  { code: 'user:disable', label: '用户禁启用' },
+  { code: 'product:view', label: '商品查看' },
+  { code: 'product:create', label: '商品新增' },
+  { code: 'product:update', label: '商品编辑' },
+  { code: 'product:on_sale', label: '商品上架' },
+  { code: 'product:off_sale', label: '商品下架' },
+  { code: 'category:manage', label: '类目管理' },
+  { code: 'stock:view', label: '库存查看' },
+  { code: 'stock:log:view', label: '库存日志' },
+  { code: 'stock:adjust', label: '库存调整' },
+  { code: 'order:view', label: '订单查看' },
+  { code: 'order:remark', label: '订单备注' },
+  { code: 'order:ship', label: '订单发货' },
+  { code: 'order:close', label: '订单关闭' },
+  { code: 'order:log:view', label: '订单日志' },
+  { code: 'aftersale:view', label: '售后查看' },
+  { code: 'aftersale:audit', label: '售后审核' },
+  { code: 'refund:view', label: '退款查看' },
+  { code: 'refund:execute', label: '退款/支付高危处理' },
+  { code: 'finance:view', label: '财务查看' },
+  { code: 'payment:view', label: '支付查看' },
+  { code: 'reconciliation:view', label: '对账查看' },
+  { code: 'reconciliation:handle', label: '对账处理' },
+  { code: 'admin:view', label: '账号查看' },
+  { code: 'admin:create', label: '账号新增' },
+  { code: 'admin:update', label: '账号编辑' },
+  { code: 'admin:disable', label: '账号禁启用' },
+  { code: 'role:view', label: '角色查看' },
+  { code: 'role:manage', label: '角色管理' },
+  { code: 'permission:view', label: '权限查看' },
+  { code: 'permission:assign', label: '权限分配' },
+  { code: 'log:operation:view', label: '操作日志查看' },
+];
+const permissionOptionMap = permissionOptions.reduce((acc, item) => { acc[item.code] = item; return acc; }, {});
 const accountStatusMeta = (status) => getStatusTagMeta('adminAccountStatus', status);
+const PERMISSION_PREVIEW_COUNT = 8;
+const previewPermissions = (permissions = []) => permissions.slice(0, PERMISSION_PREVIEW_COUNT);
+const hiddenPermissionCount = (permissions = []) => Math.max(permissions.length - PERMISSION_PREVIEW_COUNT, 0);
 
 const syncCurrentAdminPermissionState = async (adminId, roleCode, permissions) => {
   if (String(adminStore.adminId || '') !== String(adminId || '')) {
@@ -119,7 +182,7 @@ const syncCurrentAdminPermissionState = async (adminId, roleCode, permissions) =
   }
   adminStore.applyProfilePatch({ roleCode, permissions: [...permissions] });
   await adminStore.refreshProfile().catch(() => null);
-  if (!adminStore.hasPermission('system:account:manage')) {
+  if (!adminStore.hasAnyPermission(['admin:view', 'role:view', 'permission:view'])) {
     router.replace(adminStore.getFirstAccessiblePath());
     ElMessage.warning('当前账号权限已变更，已自动跳转到可访问页面');
   }
@@ -129,13 +192,32 @@ const getRoleDefaultPermissions = (roleCode) => {
   const defaults = roleMap.value[roleCode]?.defaultPermissions || [];
   return [...defaults];
 };
-const resetForm = () => Object.assign(form, { userId: null, username: '', password: '', nickname: '', roleCode: 'PRODUCT_OPERATOR', permissions: getRoleDefaultPermissions('PRODUCT_OPERATOR').length ? getRoleDefaultPermissions('PRODUCT_OPERATOR') : ['product:view', 'product:manage'] });
+const getRolePermissionScope = (roleCode) => {
+  const scope = roleMap.value[roleCode]?.permissionScope || roleMap.value[roleCode]?.defaultPermissions || [];
+  return [...scope];
+};
+const toPermissionItems = (permissions) => permissions.map((code) => permissionOptionMap[code] || { code, label: code });
+const currentDefaultPermissions = computed(() => getRoleDefaultPermissions(form.roleCode));
+const currentPermissionScope = computed(() => getRolePermissionScope(form.roleCode));
+const defaultPermissionItems = computed(() => toPermissionItems(currentDefaultPermissions.value));
+const optionalPermissionItems = computed(() => toPermissionItems(currentPermissionScope.value.filter((permission) => !currentDefaultPermissions.value.includes(permission))));
+const forbiddenPermissionItems = computed(() => toPermissionItems(permissionOptions.map((item) => item.code).filter((permission) => !currentPermissionScope.value.includes(permission))));
+const optionalPermissions = computed({
+  get: () => form.permissions.filter((permission) => !currentDefaultPermissions.value.includes(permission) && currentPermissionScope.value.includes(permission)),
+  set: (permissions) => {
+    form.permissions = [...new Set([...currentDefaultPermissions.value, ...permissions])];
+  },
+});
+const normalizeFormPermissions = () => {
+  form.permissions = [...new Set(form.permissions.filter((permission) => currentPermissionScope.value.includes(permission)).concat(currentDefaultPermissions.value))];
+};
+const resetForm = () => Object.assign(form, { userId: null, username: '', password: '', nickname: '', roleCode: 'PRODUCT_OPERATOR', permissions: getRoleDefaultPermissions('PRODUCT_OPERATOR').length ? getRoleDefaultPermissions('PRODUCT_OPERATOR') : ['product:view', 'product:create', 'product:update'] });
 const applyTemplate = () => {
   const permissions = getRoleDefaultPermissions(form.roleCode);
   form.permissions = permissions.length ? permissions : ['product:view'];
 };
-const openCreate = () => { mode.value = 'create'; currentAdminId.value = null; resetForm(); dialogVisible.value = true; };
-const openEdit = (row) => { mode.value = 'edit'; currentAdminId.value = row.id; Object.assign(form, { userId: row.userId, username: row.username, password: '', nickname: row.nickname, roleCode: row.roleCode, permissions: [...(row.permissions || [])] }); dialogVisible.value = true; };
+const openCreate = () => { mode.value = 'create'; currentAdminId.value = null; resetForm(); normalizeFormPermissions(); dialogVisible.value = true; };
+const openEdit = (row) => { mode.value = 'edit'; currentAdminId.value = row.id; Object.assign(form, { userId: row.userId, username: row.username, password: '', nickname: row.nickname, roleCode: row.roleCode, permissions: row.roleCode === 'SUPER_ADMIN' ? getRoleDefaultPermissions('SUPER_ADMIN') : [...(row.permissions || [])] }); normalizeFormPermissions(); dialogVisible.value = true; };
 
 const loadData = async () => {
   try {
@@ -174,6 +256,12 @@ const submit = async () => {
       await createAdminAccount({ ...form, userId: form.userId || null });
       ElMessage.success('创建成功');
     } else {
+      if (form.roleCode === 'SUPER_ADMIN') {
+        ElMessage.info('超级管理员始终拥有全部权限，无需单独编辑');
+        dialogVisible.value = false;
+        return;
+      }
+      normalizeFormPermissions();
       await updateAdminAccountPermissions(currentAdminId.value, { roleCode: form.roleCode, permissions: form.permissions });
       await syncCurrentAdminPermissionState(currentAdminId.value, form.roleCode, form.permissions);
       ElMessage.success('更新成功');
@@ -187,6 +275,9 @@ const submit = async () => {
 
 const resetPermissionsByRole = async (row) => {
   try {
+    if (row.roleCode === 'SUPER_ADMIN') {
+      return ElMessage.info('超级管理员始终拥有全部权限，无需重置');
+    }
     await confirmAction(`确认将账号“${row.username}”的权限重置为当前角色默认配置吗？`);
     const permissions = getRoleDefaultPermissions(row.roleCode);
     if (!permissions.length) {
@@ -218,8 +309,35 @@ onMounted(loadData);
 
 <style scoped>
 .tag { margin-right: 6px; margin-bottom: 6px; }
+.permission-list-cell {
+  width: 100%;
+  max-height: 58px;
+  overflow: hidden;
+  white-space: normal;
+  line-height: 28px;
+  cursor: help;
+}
+.permission-list-cell .tag {
+  margin-bottom: 0;
+  vertical-align: middle;
+}
+.permission-list-empty {
+  color: #94a3b8;
+  font-size: 12px;
+}
 .header-actions { display: flex; gap: 10px; }
 .role-tip { margin-top: 6px; color: #909399; font-size: 12px; line-height: 1.5; }
+.role-tip--warning { color: #e6a23c; }
+.permission-editor { width: 100%; display: grid; gap: 14px; }
+.permission-section { padding: 14px 16px; border-radius: 14px; border: 1px solid #e5e7eb; background: #fff; }
+.permission-section--base { background: #f0fdf4; border-color: #bbf7d0; }
+.permission-section--optional { background: #eff6ff; border-color: #bfdbfe; }
+.permission-section--forbidden { background: #f8fafc; border-color: #e2e8f0; }
+.permission-section__title { font-weight: 700; color: #1f2937; }
+.permission-section__desc { margin: 6px 0 10px; font-size: 12px; color: #64748b; line-height: 1.5; }
+.permission-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.permission-tags--muted { opacity: 0.78; }
+.permission-tag { margin: 0; }
 .toolbar-button { min-width: 96px; }
 .toolbar-button--primary { box-shadow: 0 8px 20px rgba(64, 158, 255, 0.22); }
 .account-actions {
@@ -255,5 +373,13 @@ onMounted(loadData);
 .action-button:focus {
   transform: translateY(-1px);
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+}
+</style>
+
+<style>
+.permission-list-tooltip {
+  max-width: 520px;
+  line-height: 1.8;
+  word-break: break-all;
 }
 </style>

@@ -33,7 +33,7 @@ public record AdminAccount(
     }
 
     public boolean superAdmin() {
-        return "SUPER_ADMIN".equalsIgnoreCase(roleCode);
+        return "SUPER_ADMIN".equalsIgnoreCase(AdminPermissionCatalog.normalizeRoleCode(roleCode));
     }
 
     public boolean hasPermission(String permission) {
@@ -78,7 +78,7 @@ public record AdminAccount(
         if (superAdmin()) {
             return new AdminAccount(id, userId, username, passwordHash, nickname, "SUPER_ADMIN", status, AdminPermissionCatalog.superAdminPermissions());
         }
-        return new AdminAccount(id, userId, username, passwordHash, nickname, roleCode, status, normalizePermissions(permissions));
+        return new AdminAccount(id, userId, username, passwordHash, nickname, AdminPermissionCatalog.normalizeRoleCode(roleCode), status, normalizePermissions(permissions));
     }
 
     private static List<String> normalizePermissions(List<String> permissions) {

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mallfei.admin.domain.model.AdminAccount;
+import com.mallfei.admin.domain.model.AdminPermissionCatalog;
 import com.mallfei.admin.domain.repository.AdminAccountRepository;
 import com.mallfei.admin.infrastructure.persistence.dataobject.AdminAccountDO;
 import com.mallfei.admin.infrastructure.persistence.mapper.AdminAccountMapper;
@@ -116,15 +117,20 @@ public class MybatisAdminAccountRepository implements AdminAccountRepository {
     }
 
     private AdminAccount toDomain(AdminAccountDO adminAccountDO) {
+        String roleCode = AdminPermissionCatalog.normalizeRoleCode(adminAccountDO.getRoleCode());
+        List<String> permissions = readPermissions(adminAccountDO.getPermissionsJson());
+        if (permissions.isEmpty()) {
+            permissions = AdminPermissionCatalog.defaultPermissions(roleCode);
+        }
         return new AdminAccount(
                 adminAccountDO.getId(),
                 adminAccountDO.getUserId(),
                 adminAccountDO.getUsername(),
                 adminAccountDO.getPasswordHash(),
                 adminAccountDO.getNickname(),
-                adminAccountDO.getRoleCode(),
+                roleCode,
                 adminAccountDO.getStatus(),
-                readPermissions(adminAccountDO.getPermissionsJson())
+                permissions
         );
     }
 

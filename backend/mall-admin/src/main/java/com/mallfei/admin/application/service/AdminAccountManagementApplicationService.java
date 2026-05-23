@@ -57,6 +57,7 @@ public class AdminAccountManagementApplicationService {
     public AdminAccountView disableAccount(Long adminId) {
         AdminAccount operator = requireSuperAdmin();
         AdminAccount updated = adminAccountRepository.update(adminDomainService.loadById(adminId).disable());
+        authFacade.disableAdminSession(updated.id());
         writeLog(operator, "SYSTEM", "ACCOUNT_DISABLE", "禁用运营账号：" + updated.username(), "SUCCESS");
         return toView(updated);
     }
@@ -73,6 +74,7 @@ public class AdminAccountManagementApplicationService {
         AdminAccount target = adminDomainService.loadById(adminId);
         List<String> permissions = Boolean.TRUE.equals(request.useDefaultPermissions()) ? AdminPermissionCatalog.defaultPermissions(request.roleCode()) : target.permissions();
         AdminAccount updated = adminAccountRepository.update(adminDomainService.resetPermissions(target, request.roleCode(), permissions));
+        authFacade.refreshAdminSessionByAdminId(updated.id(), updated.nickname(), updated.roleCode(), updated.permissions());
         writeLog(operator, "SYSTEM", "ACCOUNT_ROLE_ASSIGN", "分配运营角色：" + updated.username() + " -> " + updated.roleCode(), "SUCCESS");
         return toView(updated);
     }
@@ -81,9 +83,7 @@ public class AdminAccountManagementApplicationService {
         AdminAccount operator = requireSuperAdmin();
         AdminAccount target = adminDomainService.loadById(adminId);
         AdminAccount updated = adminAccountRepository.update(adminDomainService.resetPermissions(target, request.roleCode(), request.permissions()));
-        if (operator.id().equals(updated.id())) {
-            authFacade.refreshAdminSession(updated.nickname(), updated.roleCode(), updated.permissions());
-        }
+        authFacade.refreshAdminSessionByAdminId(updated.id(), updated.nickname(), updated.roleCode(), updated.permissions());
         writeLog(operator, "SYSTEM", "ACCOUNT_PERMISSION_UPDATE", "更新运营账号权限：" + updated.username() + "，角色=" + updated.roleCode(), "SUCCESS");
         return toView(updated);
     }
@@ -96,7 +96,9 @@ public class AdminAccountManagementApplicationService {
                 .filter(log -> blank(result) || result.equals(log.operationResult()))
                 .filter(log -> blank(keyword) || contains(log.operatorUsername(), keyword) || contains(log.operationModule(), keyword) || contains(log.operationType(), keyword) || contains(log.operationContent(), keyword))
                 .toList();
-        return PageResult.of(sortList(rows, logComparator(sortBy), blank(sortOrder) ? "asc" : sortOrder), page, size);
+        String actualSortBy = blank(sortBy) ? "id" : sortBy;
+        String actualSortOrder = blank(sortOrder) ? "desc" : sortOrder;
+        return PageResult.of(sortList(rows, logComparator(actualSortBy), actualSortOrder), page, size);
     }
 
     public void recordOperation(String module, String type, String content, String result) {
@@ -133,5 +135,5 @@ public class AdminAccountManagementApplicationService {
     private boolean contains(String source, String keyword) { return source != null && source.toLowerCase().contains(keyword.toLowerCase().trim()); }
     private AdminAccountView toView(AdminAccount account) { return new AdminAccountView(account.id(), account.userId(), account.username(), account.nickname(), account.roleCode(), account.status(), account.permissions(), null); }
     private AdminOperationLogView toLogView(AdminOperationLog log) { return new AdminOperationLogView(log.id(), log.operatorAdminId(), log.operatorUsername(), log.operationModule(), log.operationType(), log.operationContent(), log.operationResult(), log.createdAt()); }
-    private AdminRoleView toRoleView(AdminRole role) { return new AdminRoleView(role.code(), role.name(), role.defaultPermissions(), role.builtIn()); }
+    private AdminRoleView toRoleView(AdminRole role) { return new AdminRoleView(role.code(), role.name(), role.defaultPermissions(), AdminPermissionCatalog.permissionScope(role.code()), role.builtIn()); }
 }

@@ -12,6 +12,13 @@ export function loginCaptchaVerify(data) {
   });
 }
 
+export function checkLoginBlacklist(mobile) {
+  return request.get('/api/users/login/blacklist/status', {
+    params: { mobile },
+    skipAuth: true,
+  });
+}
+
 export function loginByPassword(data) {
   return request.post('/api/users/login/password', data, {
     skipAuth: true,
@@ -48,6 +55,12 @@ export function exchangeAlipayLoginTicket(data) {
   });
 }
 
+export function exchangeAlipayJsapiAuthCode(data) {
+  return request.post('/api/users/login/alipay/jsapi-exchange', data, {
+    skipAuth: true,
+  });
+}
+
 export function fetchCurrentUser() {
   return request.get('/api/users/me');
 }
@@ -72,6 +85,10 @@ export function uploadAvatar(file) {
 
 export function fetchAuthContext() {
   return request.get('/api/auth/context');
+}
+
+export function fetchAuthBlacklistStatus(userId) {
+  return request.get(`/api/auth/blacklist/${userId}`);
 }
 
 export function logoutUser() {

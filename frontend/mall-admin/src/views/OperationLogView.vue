@@ -19,7 +19,7 @@
         <el-button @click="exportLogs">导出</el-button>
       </div>
       <el-table v-loading="loading" :data="logs" class="admin-table admin-table--with-gap" empty-text="暂无操作日志数据" @sort-change="handleSortChange">
-        <el-table-column prop="id" label="ID" width="80" sortable="custom" />
+        <el-table-column prop="id" label="ID" width="80" sortable="custom" :sort-orders="['descending', 'ascending']" :sort-order="query.sortBy === 'id' && query.sortOrder === 'desc' ? 'descending' : null" />
         <el-table-column prop="operatorUsername" label="操作人" width="140" sortable="custom" />
         <el-table-column prop="operationModule" label="模块" width="120" sortable="custom" />
         <el-table-column prop="operationType" label="类型" width="180" sortable="custom" />
@@ -56,7 +56,7 @@ const operationResultMeta = (status) => getStatusTagMeta('operationResult', stat
 const logs = ref([]);
 const loading = ref(false);
 const filters = reactive({ keyword: String(route.query.keyword || ''), module: String(route.query.module || ''), result: String(route.query.result || '') });
-const query = reactive({ sortBy: String(route.query.sortBy || 'id'), sortOrder: String(route.query.sortOrder || 'asc') });
+const query = reactive({ sortBy: String(route.query.sortBy || 'id'), sortOrder: String(route.query.sortOrder || 'desc') });
 const pager = reactive({ page: Number(route.query.page || 1), size: Number(route.query.size || ADMIN_PAGE_SIZE), total: 0 });
 
 const syncRoute = async () => {
@@ -109,10 +109,10 @@ const exportLogs = () => {
 };
 
 const handleSearch = async () => { pager.page = 1; await syncRoute(); await loadData(); };
-const handleReset = async () => { filters.keyword = ''; filters.module = ''; filters.result = ''; query.sortBy = 'id'; query.sortOrder = 'asc'; pager.page = 1; pager.size = ADMIN_PAGE_SIZE; await syncRoute(); await loadData(); };
+const handleReset = async () => { filters.keyword = ''; filters.module = ''; filters.result = ''; query.sortBy = 'id'; query.sortOrder = 'desc'; pager.page = 1; pager.size = ADMIN_PAGE_SIZE; await syncRoute(); await loadData(); };
 const handlePageChange = async (page) => { pager.page = page; await syncRoute(); await loadData(); };
 const handleSizeChange = async (size) => { pager.size = size; pager.page = 1; await syncRoute(); await loadData(); };
-const handleSortChange = async ({ prop, order }) => { query.sortBy = prop || 'id'; query.sortOrder = order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : 'asc'; pager.page = 1; await syncRoute(); await loadData(); };
+const handleSortChange = async ({ prop, order }) => { query.sortBy = prop || 'id'; query.sortOrder = order === 'ascending' ? 'asc' : 'desc'; pager.page = 1; await syncRoute(); await loadData(); };
 const handleLogout = async () => { await adminStore.logout(); router.push('/login'); };
 
 onMounted(loadData);

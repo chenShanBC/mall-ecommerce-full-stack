@@ -193,7 +193,7 @@ public class CartApplicationService {
     }
 
     private AuthenticatedPrincipal currentUser() {
-        AuthenticatedPrincipal principal = authFacade.currentPrincipal();
+        AuthenticatedPrincipal principal = authFacade.currentRequiredPrincipal();
         if (principal == null || !principal.isUser()) throw BusinessException.forbidden("仅用户可访问当前接口");
         return principal;
     }

@@ -65,6 +65,7 @@ import { showFailToast, showSuccessToast } from 'vant';
 import { formatPrice } from '../utils/format';
 import { buildProductVisual, isInvalidImageUrl } from '../utils/productVisual';
 import { getFallbackCartItems, mergeCartItems, removeFallbackCartItem, updateFallbackCartItem } from '../utils/cartFallback';
+import { ensureAccessGate } from '../utils/requireLogin';
 
 const props = defineProps({
   right: {
@@ -166,7 +167,10 @@ const handleDelete = async (item) => {
   }
 };
 
-const openCartPage = () => {
+const openCartPage = async () => {
+  if (!await ensureAccessGate(router, '/cart', { force: true })) {
+    return;
+  }
   showPreview.value = false;
   router.push('/cart');
 };

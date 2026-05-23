@@ -3,5 +3,19 @@ import { createPinia } from 'pinia';
 import 'element-plus/dist/index.css';
 import App from './App.vue';
 import router from './router';
+import { useAdminStore } from './stores/admin';
 
-createApp(App).use(createPinia()).use(router).mount('#app');
+window.__mallAdminRouter = router;
+
+const app = createApp(App);
+const pinia = createPinia();
+
+app.use(pinia);
+
+const adminStore = useAdminStore(pinia);
+
+app.use(router).mount('#app');
+
+if (adminStore.token?.trim()) {
+  adminStore.initForceLogout(router);
+}

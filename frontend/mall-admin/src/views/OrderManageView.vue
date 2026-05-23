@@ -26,10 +26,10 @@
           <template #default="{ row }">
             <div class="order-actions">
               <el-button class="order-action-btn order-action-btn--detail" size="small" @click="openDetail(row.orderNo)">详情</el-button>
-              <el-button v-if="canManage" class="order-action-btn order-action-btn--warn" size="small" @click="openException(row)">异常处理</el-button>
-              <el-button v-if="canManage" class="order-action-btn order-action-btn--danger" size="small" @click="cancelOrder(row.orderNo)">取消订单</el-button>
-              <el-button v-if="canManage" class="order-action-btn order-action-btn--primary" size="small" @click="shipOrder(row.orderNo)">确认发货</el-button>
-              <el-button v-if="canManage" class="order-action-btn order-action-btn--success" size="small" @click="completeOrder(row.orderNo)">完结订单</el-button>
+              <el-button v-if="canRemark" class="order-action-btn order-action-btn--warn" size="small" @click="openException(row)">异常处理</el-button>
+              <el-button v-if="canClose" class="order-action-btn order-action-btn--danger" size="small" @click="cancelOrder(row.orderNo)">取消订单</el-button>
+              <el-button v-if="canShip" class="order-action-btn order-action-btn--primary" size="small" @click="shipOrder(row.orderNo)">确认发货</el-button>
+              <el-button v-if="canShip" class="order-action-btn order-action-btn--success" size="small" @click="completeOrder(row.orderNo)">完结订单</el-button>
             </div>
           </template>
         </el-table-column>
@@ -94,7 +94,9 @@ import { getStatusTagMeta } from '../utils/status';
 const route = useRoute();
 const router = useRouter();
 const adminStore = useAdminStore();
-const canManage = computed(() => adminStore.hasPermission('order:manage'));
+const canRemark = computed(() => adminStore.hasPermission('order:remark'));
+const canClose = computed(() => adminStore.hasPermission('order:close'));
+const canShip = computed(() => adminStore.hasPermission('order:ship'));
 const orderStatusMeta = (status) => getStatusTagMeta('order', status);
 const query = reactive({ keyword: String(route.query.keyword || ''), status: String(route.query.status || ''), sortBy: String(route.query.sortBy || 'id'), sortOrder: String(route.query.sortOrder || 'asc') });
 const pager = reactive({ page: Number(route.query.page || 1), size: Number(route.query.size || ADMIN_PAGE_SIZE), total: 0 });

@@ -21,7 +21,9 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Configuration
 public class SaTokenConfig implements WebMvcConfigurer {
@@ -57,7 +59,12 @@ public class SaTokenConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
+                .allowedOriginPatterns(
+                        "http://localhost:*",
+                        "http://127.0.0.1:*",
+                        "https://h5.mallfei.cloud",
+                        "https://admin.mallfei.cloud"
+                )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                 .allowedHeaders("*")
                 .exposedHeaders("Authorization")
@@ -74,6 +81,10 @@ public class SaTokenConfig implements WebMvcConfigurer {
                 || requestUri.startsWith("/api/users/login/password")
                 || requestUri.startsWith("/api/users/login/sms/send-code")
                 || requestUri.startsWith("/api/users/login/sms")
+                || requestUri.startsWith("/api/users/login/alipay/auth-url")
+                || requestUri.startsWith("/api/users/login/alipay/callback")
+                || requestUri.startsWith("/api/users/login/alipay/exchange")
+                || requestUri.startsWith("/api/users/login/alipay/jsapi-exchange")
                 || requestUri.startsWith("/api/admin/login/password")
                 || requestUri.startsWith("/api/products")
                 || requestUri.startsWith("/api/categories")
@@ -107,13 +118,15 @@ public class SaTokenConfig implements WebMvcConfigurer {
             }
             List<String> requiredPermissions = requiredPermissions(handlerMethod);
             if (!requiredPermissions.isEmpty()) {
+                if ("SUPER_ADMIN".equalsIgnoreCase(StpUtil.getSession().getString("roleCode"))) {
+                    return true;
+                }
                 String permissionsJson = StpUtil.getSession().getString("permissions");
-                if (permissionsJson == null) {
+                Set<String> permissions = readSessionPermissions(permissionsJson);
+                if (permissions.isEmpty()) {
                     throw BusinessException.forbidden("当前账号暂无访问权限");
                 }
-                boolean hasPermission = Arrays.stream(permissionsJson.replace("[", "").replace("]", "").replace("\"", "").split(","))
-                        .map(String::trim)
-                        .anyMatch(requiredPermissions::contains);
+                boolean hasPermission = permissions.stream().anyMatch(requiredPermissions::contains);
                 if (!hasPermission) {
                     throw BusinessException.forbidden("当前账号无权访问该功能模块");
                 }
@@ -151,6 +164,22 @@ public class SaTokenConfig implements WebMvcConfigurer {
                 return List.of(onType.value());
             }
             return List.of();
+        }
+
+        private Set<String> readSessionPermissions(String permissionsJson) {
+            if (permissionsJson == null || permissionsJson.isBlank()) {
+                return Set.of();
+            }
+            String content = permissionsJson.trim();
+            if (content.startsWith("[") && content.endsWith("]")) {
+                content = content.substring(1, content.length() - 1);
+            }
+            Set<String> permissions = new LinkedHashSet<>();
+            Arrays.stream(content.split(","))
+                    .map(item -> item.replace("\\\"", "").replace("\"", "").trim())
+                    .filter(item -> !item.isBlank())
+                    .forEach(permissions::add);
+            return permissions;
         }
     }
 }

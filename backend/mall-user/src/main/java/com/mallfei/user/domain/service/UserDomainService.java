@@ -29,6 +29,8 @@ public class UserDomainService {
     private static final int LOGIN_CAPTCHA_EXPIRE_SECONDS = 120;
     private static final int LOGIN_CAPTCHA_VERIFY_EXPIRE_SECONDS = 120;
     private static final int LOGIN_CAPTCHA_TOLERANCE = 8;
+    public static final String USER_DISABLED_MESSAGE = "该用户已禁用，详情可咨询平台/客服";
+    public static final String USER_DISABLED_CODE = "AUTH_403";
 
     private final UserAccountRepository userAccountRepository;
     private final UserAddressRepository userAddressRepository;
@@ -127,7 +129,7 @@ public class UserDomainService {
         loginSmsCodeRepository.deleteLoginCode(mobile);
         UserAccount userAccount = loadByMobile(mobile);
         if (!userAccount.enabled()) {
-            throw BusinessException.forbidden("当前用户已被禁用");
+            throw BusinessException.forbidden(USER_DISABLED_MESSAGE);
         }
         return userAccount;
     }
@@ -185,9 +187,6 @@ public class UserDomainService {
     }
 
     public void validateLogin(UserAccount userAccount, String rawPassword) {
-        if (!userAccount.enabled()) {
-            throw BusinessException.forbidden("当前用户已被禁用");
-        }
         if (!passwordCodec.matches(rawPassword, userAccount.passwordHash())) {
             throw BusinessException.badRequest("密码错误");
         }

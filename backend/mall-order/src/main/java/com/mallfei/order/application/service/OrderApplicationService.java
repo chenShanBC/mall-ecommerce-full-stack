@@ -334,7 +334,7 @@ public class OrderApplicationService {
     }
 
     private AuthenticatedPrincipal currentUser() {
-        AuthenticatedPrincipal principal = authFacade.currentPrincipal();
+        AuthenticatedPrincipal principal = authFacade.currentRequiredPrincipal();
         if (principal == null || !principal.isUser()) {
             throw BusinessException.forbidden("仅用户可访问当前接口");
         }

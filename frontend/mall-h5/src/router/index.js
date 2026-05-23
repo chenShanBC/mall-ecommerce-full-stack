@@ -10,7 +10,9 @@ import PayReturnView from '../views/PayReturnView.vue';
 import ProfileView from '../views/ProfileView.vue';
 import ProfileManageView from '../views/ProfileManageView.vue';
 import AddressView from '../views/AddressView.vue';
+import AlipayLandingView from '../views/AlipayLandingView.vue';
 import { useUserStore } from '../stores/user';
+import { FORCE_LOGOUT_GUEST_REFRESH_KEY } from '../utils/wsForceLogout';
 
 const routes = [
   {
@@ -54,6 +56,12 @@ const routes = [
     meta: { title: '登录注册' },
   },
   {
+    path: '/alipay-landing',
+    name: 'alipay-landing',
+    component: AlipayLandingView,
+    meta: { title: '支付宝登录处理中' },
+  },
+  {
     path: '/products/:id',
     name: 'product-detail',
     component: ProductDetailView,
@@ -90,24 +98,26 @@ const router = createRouter({
   routes,
 });
 
-router.beforeEach(async (to) => {
+router.beforeEach((to) => {
   const userStore = useUserStore();
+  const forceLogoutGuestRefreshing = sessionStorage.getItem(FORCE_LOGOUT_GUEST_REFRESH_KEY) === '1';
 
-  if (to.meta.requiresAuth) {
-    const isAuthenticated = await userStore.ensureValidSession();
-    if (!isAuthenticated) {
-      return {
-        path: '/login',
-        query: { redirect: to.fullPath },
-      };
+  if (forceLogoutGuestRefreshing) {
+    sessionStorage.removeItem(FORCE_LOGOUT_GUEST_REFRESH_KEY);
+    if (to.meta.requiresAuth) {
+      return '/home';
     }
   }
 
-  if (to.path === '/login') {
-    const isAuthenticated = await userStore.ensureValidSession();
-    if (isAuthenticated) {
-      return '/home';
-    }
+  if (to.meta.requiresAuth && !userStore.token?.trim()) {
+    return {
+      path: '/login',
+      query: { redirect: to.fullPath },
+    };
+  }
+
+  if (to.path === '/login' && userStore.token?.trim()) {
+    return '/home';
   }
 
   return true;

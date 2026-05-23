@@ -42,7 +42,7 @@ public class ProductViewAssembler {
 
     public ProductCardView toProductCard(ProductSpu productSpu) {
         ProductSku defaultSku = productSpu.defaultSku();
-        return new ProductCardView(productSpu.id(), productSpu.name(), productSpu.categoryId(), productSpu.mainImageUrl(), defaultSku.salePriceCent(), defaultSku.originPriceCent(), defaultSku.salesCount());
+        return new ProductCardView(productSpu.id(), productSpu.name(), productSpu.categoryId(), productSpu.mainImageUrl(), defaultSku.salePriceCent(), defaultSku.originPriceCent(), totalSales(productSpu));
     }
 
     public ProductDetailView toProductDetail(ProductSpu productSpu) {
@@ -51,7 +51,7 @@ public class ProductViewAssembler {
 
     public ProductDetailView toProductDetail(ProductSpu productSpu, Map<Long, StockSnapshot> stockBySkuId) {
         ProductSku defaultSku = productSpu.defaultSku();
-        return new ProductDetailView(productSpu.id(), productSpu.name(), productSpu.categoryId(), productSpu.mainImageUrl(), productSpu.albumImagesJson(), productSpu.description() == null ? "" : productSpu.description(), defaultSku.salePriceCent(), defaultSku.originPriceCent(), defaultSku.salesCount(), productSpu.skus().stream().map(sku -> toSkuView(sku, stockBySkuId.get(sku.id()))).toList());
+        return new ProductDetailView(productSpu.id(), productSpu.name(), productSpu.categoryId(), productSpu.mainImageUrl(), productSpu.albumImagesJson(), productSpu.description() == null ? "" : productSpu.description(), defaultSku.salePriceCent(), defaultSku.originPriceCent(), totalSales(productSpu), productSpu.skus().stream().map(sku -> toSkuView(sku, stockBySkuId.get(sku.id()))).toList());
     }
 
     public AdminProductSummaryView toAdminProductSummary(ProductSpu productSpu) {
@@ -81,5 +81,13 @@ public class ProductViewAssembler {
 
     private AdminProductSkuEditView toAdminSkuEditView(ProductSku sku, StockSnapshot stock) {
         return new AdminProductSkuEditView(sku.id(), sku.skuCode(), sku.skuName(), sku.specJson(), sku.salePriceCent(), sku.originPriceCent(), sku.status(), sku.salesCount(), stock == null ? 0 : stock.totalStock(), stock == null ? 0 : stock.availableStock(), stock == null ? 0 : stock.lockedStock(), stock == null ? "NORMAL" : stock.warningStatus());
+    }
+
+    private int totalSales(ProductSpu productSpu) {
+        return productSpu.skus().stream()
+                .map(ProductSku::salesCount)
+                .filter(value -> value != null && value > 0)
+                .mapToInt(Integer::intValue)
+                .sum();
     }
 }

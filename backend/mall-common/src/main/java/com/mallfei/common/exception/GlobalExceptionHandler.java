@@ -24,7 +24,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ApiResponse<Void> handleBusinessException(BusinessException exception) {
         log.warn("Business exception, code={}, message={}", exception.getCode(), exception.getMessage());
-        return ApiResponse.failure(exception.getCode(), safeBusinessMessage(exception));
+        String code = normalizeBusinessCode(exception.getCode());
+        return ApiResponse.failure(code, safeBusinessMessage(exception));
     }
 
     @ExceptionHandler(NotLoginException.class)
@@ -75,6 +76,19 @@ public class GlobalExceptionHandler {
             return CommonErrorCode.BAD_REQUEST.message();
         }
         return safeClientMessage(exception.getMessage(), CommonErrorCode.BAD_REQUEST.message());
+    }
+
+    private String normalizeBusinessCode(String code) {
+        if (CommonErrorCode.FORBIDDEN.code().equals(code)) {
+            return CommonErrorCode.FORBIDDEN.code();
+        }
+        if (CommonErrorCode.UNAUTHORIZED.code().equals(code)) {
+            return CommonErrorCode.UNAUTHORIZED.code();
+        }
+        if (code == null || code.isBlank()) {
+            return CommonErrorCode.BAD_REQUEST.code();
+        }
+        return code;
     }
 
     private String safeClientMessage(String message, String fallback) {

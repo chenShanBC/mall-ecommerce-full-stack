@@ -24,12 +24,32 @@ public class AuthFacade {
         authApplicationService.refreshAdminSession(nickname, roleCode, permissions);
     }
 
+    public void refreshAdminSessionByAdminId(Long adminId, String nickname, String roleCode, List<String> permissions) {
+        authApplicationService.refreshAdminSessionByAdminId(adminId, nickname, roleCode, permissions);
+    }
+
     public AuthenticatedPrincipal currentPrincipal() {
         return authApplicationService.currentPrincipal();
     }
 
     public AuthenticatedPrincipal currentRequiredPrincipal() {
         return authApplicationService.currentRequiredPrincipal();
+    }
+
+    public void disableUserSession(Long userId) {
+        authApplicationService.disableUserSession(userId);
+    }
+
+    public void disableAdminSession(Long adminId) {
+        authApplicationService.disableAdminSession(adminId);
+    }
+
+    public void enableUserSession(Long userId) {
+        authApplicationService.enableUserSession(userId);
+    }
+
+    public boolean isUserDisabled(Long userId) {
+        return authApplicationService.isUserDisabled(userId);
     }
 
     public void logout() {
