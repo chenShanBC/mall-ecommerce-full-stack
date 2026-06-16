@@ -21,13 +21,13 @@
         </div>
         <el-form :model="form" class="login-form" @submit.prevent="handleSubmit">
           <el-form-item label="账号">
-            <el-input v-model="form.username" placeholder="请输入 admin" size="large" />
+            <el-input v-model="form.username" placeholder="请输入 admin" size="large" @keyup.enter="handleSubmit" />
           </el-form-item>
           <el-form-item label="密码">
-            <el-input v-model="form.password" type="password" placeholder="请输入 123456" show-password size="large" />
+            <el-input v-model="form.password" type="password" placeholder="请输入 123456" show-password size="large" @keyup.enter="handleSubmit" />
           </el-form-item>
           <div class="tips">示例账号：admin，示例密码：123456</div>
-          <el-button class="login-button" type="primary" :loading="loading" @click="handleSubmit">登录后台</el-button>
+          <el-button class="login-button" type="primary" native-type="submit" :loading="loading">登录后台</el-button>
         </el-form>
       </section>
     </div>
@@ -50,8 +50,29 @@ const form = reactive({
   password: '123456',
 });
 
+const normalizeForceLogoutTip = (rawMessage = '') => {
+  const message = String(rawMessage || '').trim();
+  if (/其他浏览器|其他设备|已在其他|重新登录|LOGIN_REPLACED/i.test(message)) {
+    return {
+      title: '登录状态已失效',
+      content: message || '您的后台账号已在其他浏览器或设备登录，当前页面已退出。若非本人操作，请及时修改密码或联系超级管理员。',
+    };
+  }
+  if (/禁用|停用|disabled/i.test(message)) {
+    return {
+      title: '账号已被禁用',
+      content: message || '您的后台账号已被禁用，请联系超级管理员处理。',
+    };
+  }
+  return {
+    title: '登录状态已失效',
+    content: message || '您的后台登录状态已失效，请重新登录。',
+  };
+};
+
 const showForceLogoutTip = (message) => {
-  ElMessageBox.alert(message || '您的后台账号已被禁用，请联系超级管理员处理。', '账号已被禁用', {
+  const tip = normalizeForceLogoutTip(message);
+  ElMessageBox.alert(tip.content, tip.title, {
     type: 'warning',
     confirmButtonText: '知道了',
     closeOnClickModal: false,
@@ -68,11 +89,12 @@ const consumeForceLogoutTip = (fallbackMessage = '') => {
 
 onMounted(() => {
   if (route.query.reason === 'forceLogout') {
-    consumeForceLogoutTip('您的后台账号已被禁用，请联系超级管理员处理。');
+    consumeForceLogoutTip('您的后台账号已在其他浏览器或设备登录，当前页面已退出。若非本人操作，请及时修改密码或联系超级管理员。');
   }
 });
 
 const handleSubmit = async () => {
+  if (loading.value) return;
   try {
     loading.value = true;
     await adminStore.login(form);

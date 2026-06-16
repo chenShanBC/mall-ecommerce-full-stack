@@ -34,9 +34,14 @@ public class AftersaleFacade {
         return getByAftersaleNo(aftersaleNo);
     }
 
-    public AftersaleOrder reject(String aftersaleNo) {
-        AftersaleOrder rejected = getByAftersaleNo(aftersaleNo).reject(LocalDateTime.now());
+    public AftersaleOrder reject(String aftersaleNo, String reason) {
+        AftersaleOrder rejected = getByAftersaleNo(aftersaleNo).reject(reason, LocalDateTime.now());
         aftersaleDomainService.update(rejected);
         return getByAftersaleNo(aftersaleNo);
+    }
+
+    public AftersaleOrder update(AftersaleOrder aftersaleOrder) {
+        aftersaleDomainService.update(aftersaleOrder);
+        return getByAftersaleNo(aftersaleOrder.aftersaleNo());
     }
 }

@@ -5,7 +5,7 @@
     <van-loading v-if="loading" size="24px" vertical class="loading-block">加载中...</van-loading>
 
     <template v-else-if="product">
-      <img class="banner" :src="activeBanner" :alt="product.name" />
+      <img class="banner" :src="activeBanner" :alt="product.name" @error="handleBannerImageError" />
 
       <div class="info-card">
         <div class="price-row">
@@ -14,7 +14,8 @@
         </div>
         <div class="product-name">{{ product.name }}</div>
         <div class="product-meta">销量 {{ product.sales || 0 }} · {{ skuCountText }}</div>
-        <div class="product-desc">{{ product.description || '暂无商品描述' }}</div>
+        <div v-if="product.description" class="product-desc html-desc" v-html="product.description"></div>
+        <div v-else class="product-desc">暂无商品描述</div>
       </div>
 
       <div class="info-card">
@@ -24,7 +25,7 @@
             v-for="sku in normalizedSkus"
             :key="sku.id"
             class="sku-card"
-            :class="{ active: activeSku.id === sku.id, soldout: sku.stockStatus === 'soldout' }"
+            :class="{ active: activeSku.id === sku.id, soldout: !sku.selectable }"
             @click="handleSkuSelect(sku)"
           >
             <div class="sku-card-header">
@@ -44,18 +45,18 @@
 
       <div class="info-card quantity-card">
         <div class="section-title quantity-title">购买数量</div>
-        <van-stepper v-model="quantity" min="1" integer />
+        <van-stepper v-model="quantity" min="1" integer :disabled="!activeSku.selectable" />
       </div>
 
-      <FloatingCartButton bottom="156px" />
+      <FloatingCartButton bottom="156px" draggable />
 
       <div class="submit-bar">
         <div class="submit-price">
           合计 <span>¥{{ formatPrice(activeSalePrice * quantity) }}</span>
         </div>
         <div class="submit-actions">
-          <van-button plain round type="primary" :loading="addingCart" @click="addToCart">加入购物车</van-button>
-          <van-button type="primary" round @click="buyNow">立即购买</van-button>
+          <van-button plain round type="primary" :disabled="!activeSku.selectable" :loading="addingCart" @click="addToCart">加入购物车</van-button>
+          <van-button type="primary" round :disabled="!activeSku.selectable" @click="buyNow">立即购买</van-button>
         </div>
       </div>
     </template>
@@ -72,7 +73,7 @@ import { addCartItem, fetchProductDetail } from '../api';
 import FloatingCartButton from '../components/FloatingCartButton.vue';
 import { useUserStore } from '../stores/user';
 import { formatPrice, safeJsonParse } from '../utils/format';
-import { buildProductVisual, getProductImage, isInvalidImageUrl } from '../utils/productVisual';
+import { buildProductVisual, getProductImage, isInvalidImageUrl, normalizeUploadPath } from '../utils/productVisual';
 import { requireLogin } from '../utils/requireLogin';
 import { saveFallbackCartItem } from '../utils/cartFallback';
 
@@ -84,25 +85,56 @@ const addingCart = ref(false);
 const product = ref(null);
 const activeSku = ref({});
 const quantity = ref(1);
+const bannerImageFailedUrls = ref(new Set());
 
 const gallery = computed(() => {
   const images = safeJsonParse(product.value?.albumImages, []);
-  return Array.isArray(images) ? images : [];
+  return Array.isArray(images) ? images.map((image) => normalizeUploadPath(image, 'product')).filter(Boolean) : [];
+});
+
+const imageCandidates = computed(() => {
+  if (!product.value) {
+    return [];
+  }
+  return [
+    normalizeUploadPath(product.value.mainImage, 'product'),
+    normalizeUploadPath(product.value.mainImageUrl, 'product'),
+    normalizeUploadPath(product.value.imageUrl, 'product'),
+    ...gallery.value,
+  ].filter((url, index, list) => url && !isInvalidImageUrl(url) && list.indexOf(url) === index);
 });
 
 const getSkuStock = (sku = {}) => Number(sku.availableStock ?? sku.available_stock ?? sku.stock ?? sku.stockQuantity ?? sku.stockNum ?? 0);
+const isSkuOnline = (sku = {}) => String(sku.status || 'ONLINE').toUpperCase() === 'ONLINE';
+const getSkuInventoryStatus = (sku = {}) => String(sku.stockStatus || 'ACTIVE').toUpperCase();
+const getSkuWarningStatus = (sku = {}) => String(sku.warningStatus || 'NORMAL').toUpperCase();
 
-const getSkuStockView = (stock) => {
+const getSkuStockView = (stock, online = true, inventoryStatus = 'ACTIVE', warningStatus = 'NORMAL') => {
+  if (!online) {
+    return { stockText: '该规格已下架', stockStatus: 'disabled', selectable: false };
+  }
+  if (inventoryStatus === 'FROZEN') {
+    return { stockText: '库存冻结，当前不可购买', stockStatus: 'disabled', selectable: false };
+  }
+  if (inventoryStatus === 'OFFLINE') {
+    return { stockText: '库存下线，当前不可购买', stockStatus: 'disabled', selectable: false };
+  }
   if (stock <= 0) {
-    return { stockText: '已售罄', stockStatus: 'soldout' };
+    return { stockText: '已售罄', stockStatus: 'soldout', selectable: false };
+  }
+  if (warningStatus === 'LOW') {
+    return { stockText: stock <= 5 ? `仅剩 ${stock} 件，即将售罄` : `库存偏低，当前可售 ${stock} 件`, stockStatus: stock <= 5 ? 'critical' : 'low', selectable: true };
+  }
+  if (warningStatus === 'HIGH') {
+    return { stockText: '库存充足', stockStatus: 'enough', selectable: true };
   }
   if (stock <= 5) {
-    return { stockText: `仅剩 ${stock} 件，即将售罄`, stockStatus: 'critical' };
+    return { stockText: `仅剩 ${stock} 件，即将售罄`, stockStatus: 'critical', selectable: true };
   }
   if (stock <= 20) {
-    return { stockText: `仅剩 ${stock} 件`, stockStatus: 'low' };
+    return { stockText: `仅剩 ${stock} 件`, stockStatus: 'low', selectable: true };
   }
-  return { stockText: '库存充足', stockStatus: 'enough' };
+  return { stockText: '库存充足', stockStatus: 'enough', selectable: true };
 };
 
 const normalizedSkus = computed(() => {
@@ -111,10 +143,16 @@ const normalizedSkus = computed(() => {
     const parsedSpec = safeJsonParse(sku.specJson, {});
     const specEntries = Object.entries(parsedSpec || {}).map(([key, value]) => ({ key, value }));
     const stock = getSkuStock(sku);
+    const online = isSkuOnline(sku);
+    const inventoryStatus = getSkuInventoryStatus(sku);
+    const warningStatus = getSkuWarningStatus(sku);
     return {
       ...sku,
       stock,
-      ...getSkuStockView(stock),
+      online,
+      inventoryStatus,
+      warningStatus,
+      ...getSkuStockView(stock, online, inventoryStatus, warningStatus),
       specEntries,
       fallbackVisual: buildProductVisual({
         id: sku.id || index,
@@ -133,19 +171,50 @@ const skuCountText = computed(() => `${normalizedSkus.value.length || 0} 个规�
 const checkoutRedirect = computed(() => `/checkout?source=buyNow&skuId=${activeSku.value.id}&quantity=${quantity.value}&productId=${product.value.id}&salePrice=${activeSalePrice.value}`);
 
 const activeBanner = computed(() => {
-  const firstGallery = gallery.value?.[0];
-  if (firstGallery && !isInvalidImageUrl(firstGallery)) {
-    return firstGallery;
+  const failedUrls = bannerImageFailedUrls.value;
+  const availableImage = imageCandidates.value.find((url) => !failedUrls.has(url));
+  if (availableImage) {
+    return availableImage;
   }
+
+  const productImage = getProductImage(product.value || {});
+  if (!failedUrls.has(productImage) && !isInvalidImageUrl(productImage)) {
+    return productImage;
+  }
+
   if (activeSku.value?.id) {
     return activeSku.value.fallbackVisual;
   }
-  return getProductImage(product.value || {});
+  return buildProductVisual(product.value || {});
 });
 
-const handleSkuSelect = (sku) => {
+const handleBannerImageError = (event) => {
+  const failedUrl = event?.target?.currentSrc || event?.target?.src || activeBanner.value;
+  if (!failedUrl) {
+    return;
+  }
+  bannerImageFailedUrls.value = new Set([...bannerImageFailedUrls.value, failedUrl]);
+};
+
+const getSkuUnavailableText = (sku = {}) => {
+  if (sku.inventoryStatus === 'FROZEN') {
+    return '库存冻结，当前不可购买';
+  }
+  if (sku.inventoryStatus === 'OFFLINE') {
+    return '库存下线，当前不可购买';
+  }
+  if (!sku.online || sku.stockStatus === 'disabled') {
+    return '该规格暂时无法购买';
+  }
   if (sku.stockStatus === 'soldout') {
-    showFailToast('该规格已售罄');
+    return '该规格已售罄';
+  }
+  return '该规格暂不可选';
+};
+
+const handleSkuSelect = (sku) => {
+  if (!sku.selectable) {
+    showFailToast(getSkuUnavailableText(sku));
     return;
   }
   activeSku.value = sku;
@@ -156,8 +225,8 @@ const ensureSkuSelected = () => {
     showFailToast('当前商品暂无可购买规格');
     return false;
   }
-  if (activeSku.value.stockStatus === 'soldout') {
-    showFailToast('该规格已售罄');
+  if (!activeSku.value.selectable) {
+    showFailToast(getSkuUnavailableText(activeSku.value));
     return false;
   }
   return true;
@@ -166,6 +235,7 @@ const ensureSkuSelected = () => {
 const loadDetail = async () => {
   try {
     loading.value = true;
+    bannerImageFailedUrls.value = new Set();
     const { data } = await fetchProductDetail(route.params.id);
     product.value = data.data;
     if (product.value?.id != null) {
@@ -252,7 +322,7 @@ onMounted(async () => {
     }
   }
   await loadDetail();
-  activeSku.value = normalizedSkus.value.find((sku) => sku.stockStatus !== 'soldout') || {};
+  activeSku.value = normalizedSkus.value.find((sku) => sku.selectable) || {};
 });
 </script>
 
@@ -330,6 +400,19 @@ onMounted(async () => {
   color: #51607a;
 }
 
+.html-desc :deep(p) {
+  margin: 0 0 8px;
+}
+
+.html-desc :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.html-desc :deep(img) {
+  max-width: 100%;
+  border-radius: 12px;
+}
+
 .section-title {
   font-size: 16px;
   font-weight: 800;
@@ -361,6 +444,8 @@ onMounted(async () => {
   cursor: not-allowed;
   opacity: 0.48;
   filter: grayscale(0.35);
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  border-color: rgba(148, 163, 184, 0.28);
 }
 
 .sku-card-header {
@@ -397,7 +482,8 @@ onMounted(async () => {
 }
 
 .sku-card-stock--critical,
-.sku-card-stock--soldout {
+.sku-card-stock--soldout,
+.sku-card-stock--disabled {
   color: #f43f5e;
 }
 

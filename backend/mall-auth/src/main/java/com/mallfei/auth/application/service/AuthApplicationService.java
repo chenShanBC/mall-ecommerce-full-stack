@@ -1,5 +1,6 @@
 package com.mallfei.auth.application.service;
 
+import com.mallfei.auth.domain.model.AuthDeviceType;
 import com.mallfei.auth.domain.service.AuthDomainService;
 import com.mallfei.common.auth.AuthenticatedPrincipal;
 import com.mallfei.common.enums.IdentityType;
@@ -19,8 +20,8 @@ public class AuthApplicationService {
         this.authDomainService = authDomainService;
     }
 
-    public String createLoginSession(Long principalId, String account, IdentityType identityType, String nickname, String avatar, String roleCode, List<String> permissions) {
-        return authSessionService.createSession(principalId, account, identityType, nickname, avatar, roleCode, permissions);
+    public String createLoginSession(Long principalId, String account, IdentityType identityType, String nickname, String avatar, String roleCode, List<String> permissions, AuthDeviceType deviceType) {
+        return authSessionService.createSession(principalId, account, identityType, nickname, avatar, roleCode, permissions, deviceType);
     }
 
     public void refreshAdminSession(String nickname, String roleCode, List<String> permissions) {

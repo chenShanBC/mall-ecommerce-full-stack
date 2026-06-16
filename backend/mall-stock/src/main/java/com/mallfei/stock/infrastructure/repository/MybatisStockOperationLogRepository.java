@@ -6,6 +6,7 @@ import com.mallfei.stock.domain.model.StockOperationLog;
 import com.mallfei.stock.domain.repository.StockOperationLogRepository;
 import com.mallfei.stock.infrastructure.persistence.dataobject.StockOperationLogDO;
 import com.mallfei.stock.infrastructure.persistence.mapper.StockOperationLogMapper;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -21,10 +22,29 @@ public class MybatisStockOperationLogRepository implements StockOperationLogRepo
     }
 
     @Override
+    public boolean exists(Long skuId, String operationType, String businessType, String businessNo) {
+        return stockOperationLogMapper.selectCount(new LambdaQueryWrapper<StockOperationLogDO>()
+                .eq(StockOperationLogDO::getSkuId, skuId)
+                .eq(StockOperationLogDO::getOperationType, operationType)
+                .eq(StockOperationLogDO::getBusinessType, businessType)
+                .eq(StockOperationLogDO::getBusinessNo, businessNo)) > 0;
+    }
+
+    @Override
     public StockOperationLog save(StockOperationLog stockOperationLog) {
         StockOperationLogDO logDO = toDO(stockOperationLog);
         stockOperationLogMapper.insert(logDO);
         return toDomain(logDO);
+    }
+
+    @Override
+    public boolean saveIfAbsent(StockOperationLog stockOperationLog) {
+        try {
+            save(stockOperationLog);
+            return true;
+        } catch (DuplicateKeyException ignored) {
+            return false;
+        }
     }
 
     @Override

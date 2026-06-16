@@ -9,7 +9,7 @@
             <div class="order-no-label">订单编号</div>
             <div class="order-no">{{ order.orderNo }}</div>
             <div class="status-badge" :class="`status-badge--${statusClass(order.status)}`">
-              {{ formatStatus(order.status) }}
+              {{ formatStatus(order.status, 'order') }}
             </div>
             <div v-if="order.status === 'PENDING_PAYMENT'" class="countdown-text">
               支付剩余时间：{{ formatCountdown(remainingPaySeconds) }}
@@ -26,13 +26,16 @@
         <div class="card-title">收货信息</div>
         <div>{{ order.receiverName }} {{ order.receiverPhone }}</div>
         <div class="muted">{{ formatAddress(order) }}</div>
-        <div v-if="order.remark" class="muted">备注：{{ order.remark }}</div>
+        <div v-if="customerRemark" class="remark-block">
+          <span class="remark-label">备注：</span>
+          <span class="remark-content">{{ customerRemark }}</span>
+        </div>
       </div>
 
       <div class="card">
         <div class="card-title">商品信息</div>
         <div v-for="item in order.items || []" :key="item.id" class="goods-row">
-          <img class="goods-image" :src="getProductImage(itemVisual(item))" :alt="item.skuName" />
+          <img class="goods-image" :src="getProductImage(itemVisual(item))" :alt="item.skuName" @error="handleGoodsImageError($event, item)" />
           <div class="goods-main">
             <div class="goods-name">{{ item.skuName }}</div>
             <div class="muted">单价 ¥{{ formatPrice(item.salePrice) }}</div>
@@ -73,7 +76,7 @@
 
         <div class="action-group">
           <template v-if="order.status === 'PENDING_PAYMENT'">
-            <van-button type="primary" round :loading="creatingPay" :disabled="creatingPay" @click="handleCreatePayOrder">创建支付单</van-button>
+            <van-button v-if="canCreatePayOrder" type="primary" round :loading="creatingPay" :disabled="creatingPay" @click="handleCreatePayOrder">创建支付单</van-button>
             <van-button v-if="payOrderNo && selectedPayChannel === 'ALIPAY_PC'" type="primary" plain round @click="handleReopenPayPage">重新打开支付页</van-button>
             <van-button v-if="payOrderNo && selectedPayChannel === 'MOCK'" type="success" round :loading="mockingPay" @click="handleMockPay">模拟支付成功</van-button>
             <van-button v-if="payOrderNo && isAlipayChannel(selectedPayChannel)" type="warning" plain round :loading="syncingPayStatus" @click="handleManualSyncPayStatus">已支付但未刷新？点此同步状态</van-button>
@@ -82,25 +85,68 @@
           </template>
 
           <template v-else-if="order.status === 'PAID' || order.status === 'SHIPPED'">
-            <van-button type="primary" round :loading="confirmingReceipt" @click="handleConfirmReceipt">确认收货</van-button>
-            <van-button type="warning" plain round :loading="refunding" @click="handleRefundApply">申请退款</van-button>
+            <van-button v-if="order.status === 'SHIPPED'" type="primary" round :loading="confirmingReceipt" @click="handleConfirmReceipt">确认收货</van-button>
+            <van-button v-if="canApplyRefund" type="warning" plain round :loading="refunding" @click="handleRefundApply">申请退款</van-button>
           </template>
 
           <template v-else-if="order.status === 'PROCESSING'">
-            <van-button type="warning" plain round :loading="refunding" @click="handleRefundApply">申请退款</van-button>
+            <van-button v-if="canApplyRefund" type="warning" plain round :loading="refunding" @click="handleRefundApply">申请退款</van-button>
           </template>
         </div>
 
         <div v-if="payInfo" class="pay-card">
           <div class="summary-line"><span>支付单号</span><span>{{ payInfo.payOrderNo }}</span></div>
-          <div class="summary-line"><span>支付状态</span><span>{{ formatStatus(payInfo.status) }}</span></div>
+          <div class="summary-line"><span>支付状态</span><span>{{ formatStatus(payInfo.status, 'pay') }}</span></div>
           <div class="summary-line"><span>支付渠道</span><span>{{ formatPayChannel(payInfo.payChannel) }}</span></div>
           <div v-if="payInfo.redirectUrl" class="summary-line"><span>跳转地址</span><span class="muted">已生成</span></div>
         </div>
       </div>
+
+      <div v-if="latestAftersale" class="card aftersale-card" :class="`aftersale-card--${aftersaleStatusClass(latestAftersale.status)}`">
+        <div class="card-title">售后退款记录</div>
+        <div class="summary-line"><span>售后单号</span><span>{{ latestAftersale.aftersaleNo }}</span></div>
+        <div class="summary-line"><span>售后状态</span><span :class="`status-text status-text--${aftersaleStatusClass(latestAftersale.status)}`">{{ formatAftersaleStatus(latestAftersale.status) }}</span></div>
+        <div class="summary-line"><span>退款金额</span><span>¥{{ formatPrice(latestAftersale.refundAmountCent) }}</span></div>
+        <div class="summary-line"><span>申请原因</span><span>{{ latestAftersale.reason || '-' }}</span></div>
+        <div v-if="latestAftersale.rejectReason" class="aftersale-alert aftersale-alert--danger">
+          <div class="aftersale-alert__title">退款申请已被驳回</div>
+          <div class="aftersale-alert__content">{{ latestAftersale.rejectReason }}</div>
+        </div>
+        <div v-if="latestAftersale.failReason" class="aftersale-alert aftersale-alert--danger">
+          <div class="aftersale-alert__title">退款处理失败</div>
+          <div class="aftersale-alert__content">{{ latestAftersale.failReason }}</div>
+        </div>
+        <div v-if="latestAftersale.refundNo" class="summary-line"><span>退款单号</span><span>{{ latestAftersale.refundNo }}</span></div>
+        <div class="summary-line"><span>申请时间</span><span>{{ formatDateTime(latestAftersale.createdAt) }}</span></div>
+        <div v-if="latestAftersale.reviewedAt" class="summary-line"><span>审核时间</span><span>{{ formatDateTime(latestAftersale.reviewedAt) }}</span></div>
+      </div>
     </div>
 
     <van-empty v-else description="订单不存在" />
+
+    <van-popup v-model:show="refundReasonVisible" round position="bottom" class="refund-popup" safe-area-inset-bottom>
+      <div class="refund-popup__header">
+        <div>
+          <div class="refund-popup__title">申请退款</div>
+          <div class="refund-popup__subtitle">请填写退款原因，便于商家审核处理</div>
+        </div>
+      </div>
+      <van-field
+        v-model="refundReason"
+        rows="4"
+        autosize
+        type="textarea"
+        maxlength="200"
+        show-word-limit
+        placeholder="请描述退款原因，例如：商品不合适、地址变更、协商退款等"
+        class="refund-popup__field"
+      />
+      <div class="refund-popup__tips">提交后订单将进入售后审核流程，请保持电话畅通。</div>
+      <div class="refund-popup__actions">
+        <van-button round block plain @click="refundReasonVisible = false">取消</van-button>
+        <van-button type="warning" round block :loading="refunding" @click="submitRefundApply">提交申请</van-button>
+      </div>
+    </van-popup>
   </div>
 </template>
 
@@ -108,13 +154,14 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { showConfirmDialog, showDialog, showFailToast, showSuccessToast } from 'vant';
-import { applyAftersaleRefund, cancelOrder, confirmReceipt, createPayOrder, fetchOrderDetail, fetchPayOrderDetail, mockPaySuccess, repairPaidOrder, syncPayOrderStatus } from '../api';
+import { applyAftersaleRefund, cancelOrder, confirmReceipt, createPayOrder, fetchAftersales, fetchOrderDetail, fetchPayOrderDetail, mockPaySuccess, repairPaidOrder, syncPayOrderStatus } from '../api';
 import { formatAddress, formatCountdown, formatDateTime, formatPrice, formatStatus } from '../utils/format';
 import { getProductImage } from '../utils/productVisual';
 
 const route = useRoute();
 const router = useRouter();
 const order = ref(null);
+const aftersales = ref([]);
 const payInfo = ref(null);
 const payOrderNo = ref('');
 const creatingPay = ref(false);
@@ -122,6 +169,8 @@ const mockingPay = ref(false);
 const cancelling = ref(false);
 const confirmingReceipt = ref(false);
 const refunding = ref(false);
+const refundReasonVisible = ref(false);
+const refundReason = ref('');
 const syncingPayStatus = ref(false);
 const remainingPaySeconds = ref(0);
 const selectedPayChannel = ref('ALIPAY_PC');
@@ -173,14 +222,18 @@ const handlePayReturnMessage = async (event) => {
   }
 };
 
-const itemVisual = (item) => ({
+const itemVisual = (item, includeSnapshotImage = true) => ({
   id: item.skuId,
   name: item.skuName,
   skuName: item.skuName,
   skuCode: `SKU-${item.skuId}`,
-  skuImageUrl: item.skuImageUrl,
+  skuImageUrl: includeSnapshotImage ? item.skuImageUrl : '',
   categoryId: 10,
 });
+
+const handleGoodsImageError = (event, item) => {
+  event.target.src = getProductImage(itemVisual(item, false));
+};
 
 const formatPayChannel = (channel) => payChannels.find((item) => item.value === channel)?.label || channel || '--';
 const isAlipayChannel = (channel) => channel === 'ALIPAY_WAP' || channel === 'ALIPAY_PC';
@@ -226,6 +279,32 @@ const currentPayMethodLabel = computed(() => {
   }
   return order.value?.payType || '--';
 });
+const customerRemark = computed(() => normalizeCustomerRemark(order.value?.remark));
+const latestAftersale = computed(() => aftersales.value[0] || null);
+const latestAftersaleRejected = computed(() => latestAftersale.value?.status === 'REJECTED' || Boolean(latestAftersale.value?.rejectReason));
+const canCreatePayOrder = computed(() => order.value?.status === 'PENDING_PAYMENT' && !payOrderNo.value && !payInfo.value?.payOrderNo);
+const canApplyRefund = computed(() => {
+  if (!order.value) return false;
+  if (latestAftersaleRejected.value) return false;
+  return ['PAID', 'PROCESSING', 'SHIPPED'].includes(order.value.status);
+});
+
+const normalizeCustomerRemark = (remark) => {
+  if (!remark) return '';
+  const text = String(remark).trim();
+  if (text.startsWith('REFUND_REJECTED:')) {
+    return text.replace(/^REFUND_REJECTED:\s*/, '退款申请已驳回：');
+  }
+  return text;
+};
+
+const formatAftersaleStatus = (status) => formatStatus(status, 'aftersale');
+const aftersaleStatusClass = (status) => {
+  if (status === 'REFUND_SUCCESS') return 'success';
+  if (status === 'REJECTED' || status === 'REFUND_FAILED') return 'danger';
+  if (status === 'REFUND_PROCESSING' || status === 'PENDING_REVIEW' || status === 'APPROVED') return 'warning';
+  return 'primary';
+};
 
 const statusClass = (status) => {
   if (status === 'PENDING_PAYMENT') return 'warning';
@@ -307,11 +386,22 @@ const loadOrder = async () => {
   order.value = data.data;
   countdownBaseTime = Date.now();
   remainingPaySeconds.value = Number(data.data?.remainingPaySeconds || 0);
+  await loadAftersales(data.data?.orderNo);
   if (data.data?.status === 'PENDING_PAYMENT' && Number(data.data?.remainingPaySeconds || 0) === 0) {
     setTimeout(() => refreshOrderWhenCountdownEnds(), 300);
   }
   if (data.data?.status !== 'PENDING_PAYMENT') {
     stopPayStatusPolling();
+  }
+};
+
+const loadAftersales = async (orderNo = order.value?.orderNo) => {
+  if (!orderNo) return;
+  try {
+    const { data } = await fetchAftersales({ orderNo });
+    aftersales.value = data.data || [];
+  } catch {
+    aftersales.value = [];
   }
 };
 
@@ -443,6 +533,10 @@ const handleCancel = async () => {
 };
 
 const handleConfirmReceipt = async () => {
+  if (order.value?.status !== 'SHIPPED') {
+    showFailToast('仅已发货订单可以确认收货');
+    return;
+  }
   try {
     await showConfirmDialog({ title: '确认收货', message: '确认收货后订单将变为已完成，且该操作不可撤销，确认继续吗？', confirmButtonText: '确认收货', cancelButtonText: '再想想' });
     confirmingReceipt.value = true;
@@ -456,16 +550,26 @@ const handleConfirmReceipt = async () => {
   }
 };
 
-const handleRefundApply = async () => {
+const handleRefundApply = () => {
+  refundReason.value = '';
+  refundReasonVisible.value = true;
+};
+
+const submitRefundApply = async () => {
+  const normalizedReason = refundReason.value.trim();
+  if (!normalizedReason) {
+    showFailToast('请填写退款原因');
+    return;
+  }
   try {
-    await showConfirmDialog({ title: '申请退款', message: '确认发起仅退款申请吗？提交后将进入售后审核流程。', confirmButtonText: '确认申请', cancelButtonText: '再想想' });
     refunding.value = true;
-    await applyAftersaleRefund({ orderId: order.value.id, reason: '用户发起退款' });
+    await applyAftersaleRefund({ orderId: order.value.id, reason: normalizedReason });
+    refundReasonVisible.value = false;
     await loadOrder();
     await refreshPayInfo();
     showSuccessToast('退款申请已提交');
   } catch (error) {
-    if (error !== 'cancel') showFailToast(error?.response?.data?.msg || error?.response?.data?.message || '申请退款失败');
+    showFailToast(error?.response?.data?.msg || error?.response?.data?.message || '申请退款失败');
   } finally {
     refunding.value = false;
   }
@@ -510,12 +614,14 @@ onBeforeUnmount(() => {
 <style scoped>
 .page {
   min-height: 100vh;
+  padding: 12px 12px 86px;
+  box-sizing: border-box;
   background:
     radial-gradient(circle at top left, rgba(129, 140, 248, 0.2), transparent 28%),
     radial-gradient(circle at top right, rgba(236, 72, 153, 0.11), transparent 24%),
     linear-gradient(180deg, #edf3ff 0%, #f7f9ff 100%);
 }
-.content { padding: 12px 12px 24px; }
+.content { margin-top: 18px; }
 .card {
   margin-bottom: 12px;
   padding: 16px;
@@ -538,8 +644,94 @@ onBeforeUnmount(() => {
 .status-badge--refund, .status-text--refund { color: #db2777; background: #fdf2f8; border-color: #f9a8d4; }
 .status-badge--danger, .status-text--danger { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
 .status, .muted { margin-top: 8px; color: #64748b; }
+.remark-block {
+  display: flex;
+  align-items: flex-start;
+  max-width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  color: #991b1b;
+  font-size: 12px;
+  line-height: 1.55;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 14px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.remark-label {
+  flex: 0 0 auto;
+  color: #b91c1c;
+  font-weight: 700;
+}
+.remark-content {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .countdown-text { margin-top: 10px; color: #f59e0b; font-weight: 700; }
 .countdown-tip { margin-top: 6px; color: #94a3b8; font-size: 12px; }
+.aftersale-alert {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  line-height: 1.6;
+}
+.aftersale-alert--danger {
+  color: #991b1b;
+  background: linear-gradient(135deg, #fff1f2 0%, #fef2f2 100%);
+  border: 1px solid #fecaca;
+  box-shadow: 0 10px 24px rgba(220, 38, 38, 0.08);
+}
+.aftersale-alert__title {
+  font-size: 14px;
+  font-weight: 800;
+}
+.aftersale-alert__content {
+  margin-top: 4px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.refund-popup {
+  padding: 18px 16px 20px;
+  box-sizing: border-box;
+}
+.refund-popup__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.refund-popup__title {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 800;
+}
+.refund-popup__subtitle {
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 13px;
+}
+.refund-popup__field {
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+.refund-popup__tips {
+  margin: 10px 2px 16px;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.refund-popup__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
 .card-title { margin-bottom: 12px; font-size: 16px; font-weight: 700; }
 .goods-row { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
 .goods-row:last-child { border-bottom: none; }

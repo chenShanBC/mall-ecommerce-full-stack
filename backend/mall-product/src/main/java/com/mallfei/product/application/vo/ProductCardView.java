@@ -10,6 +10,8 @@ public record ProductCardView(
         String name,
         @Schema(description = "商品所属类目ID", example = "10")
         Long categoryId,
+        @Schema(description = "商品状态", example = "ONLINE")
+        String status,
         @Schema(description = "商品主图", example = "https://example.com/product-a.png")
         String mainImage,
         @Schema(description = "销售价，单位分", example = "9990")

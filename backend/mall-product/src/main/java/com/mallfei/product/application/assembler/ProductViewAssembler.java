@@ -42,7 +42,7 @@ public class ProductViewAssembler {
 
     public ProductCardView toProductCard(ProductSpu productSpu) {
         ProductSku defaultSku = productSpu.defaultSku();
-        return new ProductCardView(productSpu.id(), productSpu.name(), productSpu.categoryId(), productSpu.mainImageUrl(), defaultSku.salePriceCent(), defaultSku.originPriceCent(), totalSales(productSpu));
+        return new ProductCardView(productSpu.id(), productSpu.name(), productSpu.categoryId(), productSpu.status(), productSpu.mainImageUrl(), defaultSku.salePriceCent(), defaultSku.originPriceCent(), totalSales(productSpu));
     }
 
     public ProductDetailView toProductDetail(ProductSpu productSpu) {
@@ -59,8 +59,12 @@ public class ProductViewAssembler {
     }
 
     public AdminProductPageRowView toAdminProductPageRow(ProductSpu productSpu, int totalStock) {
+        return toAdminProductPageRow(productSpu, totalStock, monthlySales(productSpu), "NORMAL", "常规");
+    }
+
+    public AdminProductPageRowView toAdminProductPageRow(ProductSpu productSpu, int totalStock, int monthlySalesCount, String salesBand, String salesBandLabel) {
         ProductSku defaultSku = productSpu.skus().isEmpty() ? null : productSpu.defaultSku();
-        return new AdminProductPageRowView(productSpu.id(), productSpu.name(), productSpu.categoryId(), productSpu.status(), productSpu.skus().size(), defaultSku == null ? 0L : defaultSku.salePriceCent(), totalStock);
+        return new AdminProductPageRowView(productSpu.id(), productSpu.name(), productSpu.categoryId(), productSpu.status(), productSpu.skus().size(), defaultSku == null ? 0L : defaultSku.salePriceCent(), totalSales(productSpu), monthlySalesCount, salesBand, salesBandLabel, totalStock);
     }
 
     public AdminProductDetailView toAdminProductDetail(ProductSpu productSpu, Map<Long, StockSnapshot> stockBySkuId) {
@@ -76,11 +80,16 @@ public class ProductViewAssembler {
     }
 
     private ProductSkuView toSkuView(ProductSku sku, StockSnapshot stock) {
-        return new ProductSkuView(sku.id(), sku.skuCode(), sku.skuName(), sku.specJson(), sku.salePriceCent(), sku.originPriceCent(), sku.status(), sku.salesCount(), stock == null ? null : stock.availableStock());
+        return new ProductSkuView(sku.id(), sku.skuCode(), sku.skuName(), sku.specJson(), sku.salePriceCent(), sku.originPriceCent(), sku.status(), sku.salesCount(), stock == null ? null : stock.availableStock(), stock == null ? "ACTIVE" : stock.stockStatus(), stock == null ? "NORMAL" : stock.warningStatus());
     }
 
     private AdminProductSkuEditView toAdminSkuEditView(ProductSku sku, StockSnapshot stock) {
         return new AdminProductSkuEditView(sku.id(), sku.skuCode(), sku.skuName(), sku.specJson(), sku.salePriceCent(), sku.originPriceCent(), sku.status(), sku.salesCount(), stock == null ? 0 : stock.totalStock(), stock == null ? 0 : stock.availableStock(), stock == null ? 0 : stock.lockedStock(), stock == null ? "NORMAL" : stock.warningStatus());
+    }
+
+    private int monthlySales(ProductSpu productSpu) {
+        // 目前 SKU 只有累计销量字段，先用累计销量承接“月销量”展示与筛选；后续接入订单月聚合表时仅需替换这里的取数逻辑。
+        return totalSales(productSpu);
     }
 
     private int totalSales(ProductSpu productSpu) {

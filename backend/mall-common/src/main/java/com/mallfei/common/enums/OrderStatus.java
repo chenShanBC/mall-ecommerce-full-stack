@@ -7,6 +7,8 @@ public enum OrderStatus {
 
     /** 待支付：订单已创建，等待用户完成支付。 */
     PENDING_PAYMENT("PENDING_PAYMENT", "待支付"),
+    /** 支付异常：订单支付链路与支付单/渠道状态不一致，等待人工核验。 */
+    PAYMENT_EXCEPTION("PAYMENT_EXCEPTION", "支付异常"),
     /** 已支付：支付成功，等待商家处理或发货。 */
     PAID("PAID", "已支付"),
     /** 处理中：已支付后进入配货、拣货、打包等处理中阶段。 */
@@ -21,8 +23,8 @@ public enum OrderStatus {
     TIMEOUT_CANCELLED("TIMEOUT_CANCELLED", "超时取消"),
     /** 已关闭：订单被平台关闭，不再允许继续处理。 */
     CLOSED("CLOSED", "已关闭"),
-    /** 退款中：用户已发起退款申请，平台或系统处理中。 */
-    REFUND_PENDING("REFUND_PENDING", "退款中"),
+    /** 售后中：用户已发起退款/售后申请，等待审核或退款处理。 */
+    REFUND_PENDING("REFUND_PENDING", "售后中"),
     /** 已退款：退款已原路退回，订单进入退款完成状态。 */
     REFUNDED("REFUNDED", "已退款"),
     /** 退款关闭：退款申请被关闭、撤销或驳回。 */

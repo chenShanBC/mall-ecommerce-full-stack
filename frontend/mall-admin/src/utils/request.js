@@ -22,16 +22,23 @@ const redirectToLogin = (message = '') => {
 const getPayloadMessage = (payload) => String(payload?.msg || payload?.message || '');
 
 const isDisabledMessage = (message) => /禁用|停用|disabled/i.test(message || '');
+const isReplacedLoginMessage = (message) => /其他浏览器|其他设备|已在其他|互踢|踢出|replaced/i.test(message || '');
 
 const isUnauthorizedPayload = (payload) => {
   const code = String(payload?.code || '');
   const message = getPayloadMessage(payload).toLowerCase();
-  return code === UNAUTHORIZED_CODE || message.includes('未登录') || message.includes('登录已失效') || message.includes('token') || isDisabledMessage(message);
+  return code === UNAUTHORIZED_CODE || message.includes('未登录') || message.includes('登录已失效') || message.includes('token') || isDisabledMessage(message) || isReplacedLoginMessage(message);
 };
 
 const getUnauthorizedRedirectMessage = (payload) => {
   const message = getPayloadMessage(payload);
-  return isDisabledMessage(message) ? (message || '您的后台账号已被禁用，请联系超级管理员处理。') : '';
+  if (isDisabledMessage(message)) {
+    return message || '您的后台账号已被禁用，请联系超级管理员处理。';
+  }
+  if (isReplacedLoginMessage(message)) {
+    return message || '您的后台账号已在其他浏览器或设备登录，当前登录已失效。';
+  }
+  return '';
 };
 
 const request = axios.create({
@@ -49,9 +56,15 @@ request.interceptors.request.use((config) => {
 
 request.interceptors.response.use(
   (response) => {
-    if (isUnauthorizedPayload(response?.data)) {
-      redirectToLogin(getUnauthorizedRedirectMessage(response?.data));
+    const payload = response?.data;
+    if (isUnauthorizedPayload(payload)) {
+      redirectToLogin(getUnauthorizedRedirectMessage(payload));
       return Promise.reject(new Error('AUTH_401'));
+    }
+    if (payload && payload.success === false) {
+      const businessError = new Error(getPayloadMessage(payload) || '请求处理失败');
+      businessError.response = response;
+      return Promise.reject(businessError);
     }
     return response;
   },

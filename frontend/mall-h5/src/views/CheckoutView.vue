@@ -81,7 +81,7 @@ const selectedAddress = computed(() => {
       return manualSelected;
     }
   }
-  return addresses.value.find((item) => item.default) || addresses.value[0] || null;
+  return addresses.value.find((item) => Boolean(item.default ?? item.isDefault)) || addresses.value[0] || null;
 });
 
 const totalAmount = computed(() => {
@@ -92,18 +92,20 @@ const totalAmount = computed(() => {
 });
 
 const restoreSelectedAddressId = () => {
-  const cached = localStorage.getItem(SELECTED_ADDRESS_KEY);
-  if (cached) {
-    selectedAddressId.value = cached;
-  }
+  const queryAddressId = route.query.addressId;
+  selectedAddressId.value = queryAddressId != null && queryAddressId !== '' ? String(queryAddressId) : null;
 };
 
 const syncSelectedAddressId = () => {
+  if (selectedAddressId.value != null) {
+    const exists = addresses.value.some((item) => String(item.id) === String(selectedAddressId.value));
+    if (!exists) {
+      selectedAddressId.value = null;
+    }
+  }
   if (selectedAddress.value?.id != null) {
-    selectedAddressId.value = selectedAddress.value.id;
     localStorage.setItem(SELECTED_ADDRESS_KEY, String(selectedAddress.value.id));
   } else {
-    selectedAddressId.value = null;
     localStorage.removeItem(SELECTED_ADDRESS_KEY);
   }
 };

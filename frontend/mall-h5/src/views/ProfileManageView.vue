@@ -1,5 +1,7 @@
 <template>
   <div class="page">
+    <van-nav-bar class="profile-back-card" title="个人信息管理" left-arrow @click-left="handleBack" />
+
     <div class="section-card">
       <div class="section-title">个人资料</div>
       <div class="avatar-panel">
@@ -54,6 +56,10 @@ const userStore = useUserStore();
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 const backendOrigin = (() => {
+  const devApiTarget = (import.meta.env.VITE_DEV_API_TARGET || '').replace(/\/$/, '');
+  if (devApiTarget) {
+    return devApiTarget;
+  }
   if (/^https?:\/\//i.test(apiBaseUrl)) {
     return apiBaseUrl.replace(/\/api$/, '');
   }
@@ -89,7 +95,27 @@ const defaultAvatarSvg = "data:image/svg+xml;utf8," + encodeURIComponent(`
 
 const normalizeAvatarPath = (url) => {
   if (!url) return url;
-  return url.replace(/^\/upload\//i, '/uploads/');
+  const normalizedUrl = String(url).trim().replace(/^\/upload\//i, '/uploads/');
+  if (/^https:\/\/img\.mallfei\.local\//i.test(normalizedUrl)) {
+    return '';
+  }
+  return normalizedUrl;
+};
+
+const buildAvatarPathFromUploadResult = (fileInfo = {}) => {
+  const explicitUrl = fileInfo.url || fileInfo.fileUrl || fileInfo.accessUrl || fileInfo.path;
+  if (explicitUrl) {
+    return normalizeAvatarPath(explicitUrl);
+  }
+  const fileName = fileInfo.fileName || fileInfo.filename;
+  if (!fileName) {
+    return '';
+  }
+  const normalizedFileName = String(fileName).replace(/^\/+/, '');
+  if (normalizedFileName.startsWith('uploads/') || normalizedFileName.startsWith('upload/')) {
+    return normalizeAvatarPath(`/${normalizedFileName}`);
+  }
+  return `/uploads/avatar/${normalizedFileName}`;
 };
 
 const resolveAvatarUrl = (url) => {
@@ -117,6 +143,14 @@ const resetPasswordForm = () => {
   passwordForm.oldPassword = '';
   passwordForm.newPassword = '';
   passwordForm.confirmPassword = '';
+};
+
+const handleBack = () => {
+  if (window.history.length > 1) {
+    router.back();
+    return;
+  }
+  router.replace('/profile');
 };
 
 const getProfileErrorMessage = (error, fallbackMessage) => {
@@ -152,8 +186,13 @@ const handleAvatarUpload = async (fileItem) => {
   try {
     uploadingAvatar.value = true;
     const { data } = await uploadAvatar(file);
-    profileForm.avatarUrl = data.data.url;
-    await userStore.loadProfile();
+    const uploadedAvatarUrl = buildAvatarPathFromUploadResult(data?.data);
+    if (!uploadedAvatarUrl) {
+      throw new Error('上传成功，但未返回可用的头像地址');
+    }
+    profileForm.avatarUrl = uploadedAvatarUrl;
+    await persistProfile();
+    await userStore.loadProfile(true);
     syncForm();
     showSuccessToast('头像上传并保存成功');
   } catch (error) {
@@ -214,6 +253,39 @@ onMounted(async () => {
   min-height: 100vh;
   padding: 12px 12px 88px;
   background: #f6f8fb;
+}
+
+.profile-back-card {
+  margin-bottom: 12px;
+  overflow: hidden;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 40px rgba(108, 123, 225, 0.12);
+  backdrop-filter: blur(18px);
+}
+
+.profile-back-card::after {
+  display: none;
+}
+
+.profile-back-card :deep(.van-nav-bar__content) {
+  height: 56px;
+}
+
+.profile-back-card :deep(.van-nav-bar__left) {
+  padding-left: 14px;
+}
+
+.profile-back-card :deep(.van-icon-arrow-left) {
+  color: #5b6cff;
+  font-size: 20px;
+}
+
+.profile-back-card :deep(.van-nav-bar__title) {
+  color: #2d3a64;
+  font-size: 17px;
+  font-weight: 800;
 }
 
 .section-card {

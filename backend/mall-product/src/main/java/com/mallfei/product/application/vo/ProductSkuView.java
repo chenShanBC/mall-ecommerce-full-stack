@@ -21,6 +21,10 @@ public record ProductSkuView(
         @Schema(description = "销量", example = "100")
         Integer sales,
         @Schema(description = "可售库存", example = "100")
-        Integer availableStock
+        Integer availableStock,
+        @Schema(description = "库存状态", example = "ACTIVE")
+        String stockStatus,
+        @Schema(description = "库存预警状态", example = "LOW")
+        String warningStatus
 ) {
 }

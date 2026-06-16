@@ -24,6 +24,7 @@ public record PayOrder(
     public static final String STATUS_FAILED = "FAILED";
     public static final String STATUS_CLOSED = "CLOSED";
     public static final String STATUS_REFUND_PENDING = "REFUND_PENDING";
+    public static final String STATUS_REFUNDING = "REFUNDING";
     public static final String STATUS_REFUNDED = "REFUNDED";
     public static final String STATUS_PARTIALLY_REFUNDED = "PARTIALLY_REFUNDED";
     public static final String STATUS_REFUND_FAILED = "REFUND_FAILED";
@@ -69,8 +70,12 @@ public record PayOrder(
         return pending() && order.pendingPayment();
     }
 
+    public boolean shouldEscalateCallbackFor(Order order) {
+        return pending() && order.paymentException();
+    }
+
     public boolean refundable() {
-        return success() || STATUS_REFUND_PENDING.equals(payStatus) || STATUS_REFUND_FAILED.equals(payStatus);
+        return success() || STATUS_PARTIALLY_REFUNDED.equals(payStatus) || STATUS_REFUND_PENDING.equals(payStatus) || STATUS_REFUND_FAILED.equals(payStatus);
     }
 
     public PayOrder withSubmission(String submitPayload) {
@@ -96,15 +101,40 @@ public record PayOrder(
         return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_REFUND_PENDING, payChannel, transactionNo, idempotentKey, nextVersion(), payload);
     }
 
-    public PayOrder markRefundSuccess(LocalDateTime now, String reason) {
-        if (refunded()) {
+    public PayOrder markRefunding(LocalDateTime now, String reason) {
+        if (STATUS_REFUNDING.equals(payStatus)) {
             return this;
         }
-        if (!refundable()) {
+        if (!STATUS_REFUND_PENDING.equals(payStatus)) {
+            throw BusinessException.badRequest("当前支付单状态不允许进入退款处理中");
+        }
+        String payload = "{\"refundingAt\":\"" + now + "\",\"reason\":\"" + reason + "\"}";
+        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_REFUNDING, payChannel, transactionNo, idempotentKey, nextVersion(), payload);
+    }
+
+    public PayOrder markRefundSuccess(LocalDateTime now, String reason) {
+        return markRefundSuccess(now, reason, payAmountCent);
+    }
+
+    public PayOrder markRefundSuccess(LocalDateTime now, String reason, Long refundAmountCent) {
+        if (STATUS_REFUNDED.equals(payStatus)) {
+            return this;
+        }
+        if (!refundable() && !STATUS_REFUNDING.equals(payStatus)) {
             throw BusinessException.badRequest("当前支付单状态不允许退款成功");
         }
-        String payload = "{\"refundSuccessAt\":\"" + now + "\",\"reason\":\"" + reason + "\"}";
-        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_REFUNDED, payChannel, transactionNo, idempotentKey, nextVersion(), payload);
+        boolean fullRefund = refundAmountCent == null || payAmountCent == null || refundAmountCent >= payAmountCent;
+        String nextStatus = fullRefund ? STATUS_REFUNDED : STATUS_PARTIALLY_REFUNDED;
+        String payload = "{\"refundSuccessAt\":\"" + now + "\",\"reason\":\"" + reason + "\",\"refundAmountCent\":" + refundAmountCent + "}";
+        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, nextStatus, payChannel, transactionNo, idempotentKey, nextVersion(), payload);
+    }
+
+    public PayOrder markRefundFailed(LocalDateTime now, String reason) {
+        if (!STATUS_REFUND_PENDING.equals(payStatus) && !STATUS_REFUNDING.equals(payStatus)) {
+            throw BusinessException.badRequest("当前支付单状态不允许标记退款失败");
+        }
+        String payload = "{\"refundFailedAt\":\"" + now + "\",\"reason\":\"" + reason + "\"}";
+        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_REFUND_FAILED, payChannel, transactionNo, idempotentKey, nextVersion(), payload);
     }
 
     public PayOrder close(String reason) {

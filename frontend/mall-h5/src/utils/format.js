@@ -3,28 +3,61 @@ export function formatPrice(cents) {
   return value.toFixed(2);
 }
 
-export function formatStatus(status) {
-  const map = {
+const STATUS_LABELS = {
+  order: {
     PENDING_PAYMENT: '待支付',
     PAID: '已支付',
+    PAYMENT_EXCEPTION: '订单异常',
     PROCESSING: '处理中',
     SHIPPED: '已发货',
     COMPLETED: '已完成',
     CANCELLED: '已取消',
     TIMEOUT_CANCELLED: '超时取消',
     CLOSED: '已关闭',
-    REFUND_PENDING: '退款中',
+    REFUND_PENDING: '处理中',
     REFUNDED: '已退款',
     REFUND_CLOSED: '退款关闭',
     PARTIALLY_REFUNDED: '部分退款',
+  },
+  pay: {
     PENDING: '待支付',
     PAYING: '支付中',
     SUCCESS: '支付成功',
     FAILED: '支付失败',
+    REFUND_PENDING: '退款中',
+    REFUNDING: '退款中',
+    REFUNDED: '已退款',
+    PARTIALLY_REFUNDED: '部分退款',
     REFUND_FAILED: '退款失败',
+  },
+  refund: {
+    REFUND_PENDING: '待退款',
+    REFUNDING: '退款中',
     REFUND_SUCCESS: '退款成功',
-  };
-  return map[status] || status || '--';
+    REFUND_FAILED: '退款失败',
+    REFUND_CLOSED: '退款关闭',
+  },
+  aftersale: {
+    PENDING_REVIEW: '售后中',
+    APPROVED: '审核通过',
+    REJECTED: '审核驳回',
+    REFUND_PROCESSING: '退款中',
+    EFUND_PROCESSING: '退款中',
+    REFUND_SUCCESS: '退款成功',
+    REFUND_FAILED: '退款失败',
+    CANCELLED: '已取消',
+  },
+};
+
+export function formatStatus(status, kind) {
+  const normalized = String(status || '').toUpperCase();
+  if (!normalized) {
+    return '--';
+  }
+  if (kind && STATUS_LABELS[kind]?.[normalized]) {
+    return STATUS_LABELS[kind][normalized];
+  }
+  return Object.values(STATUS_LABELS).find((labels) => labels[normalized])?.[normalized] || status;
 }
 
 export function formatCountdown(totalSeconds) {

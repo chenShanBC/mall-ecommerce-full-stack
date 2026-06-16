@@ -6,15 +6,19 @@ import com.mallfei.order.application.vo.OrderPaidPreviewView;
 import com.mallfei.order.application.vo.OrderSummaryView;
 import com.mallfei.order.domain.model.Order;
 import com.mallfei.order.domain.model.OrderItem;
+import com.mallfei.order.domain.model.OrderRefund;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 
 @Component
 public class OrderViewAssembler {
 
     public OrderSummaryView toSummary(Order order, long timeoutMinutes) {
+        return toSummary(order, timeoutMinutes, null);
+    }
+
+    public OrderSummaryView toSummary(Order order, long timeoutMinutes, OrderRefund latestRefund) {
         OrderItem firstItem = order.items().isEmpty() ? null : order.items().get(0);
         return new OrderSummaryView(
                 order.id(),
@@ -25,15 +29,17 @@ public class OrderViewAssembler {
                 order.freightAmountCent(),
                 order.discountAmountCent(),
                 order.payType(),
-                order.timedOut(LocalDateTime.now(), timeoutMinutes),
+                order.timedOut(LocalDateTime.now()),
                 timeoutMinutes,
-                remainingPaySeconds(order, timeoutMinutes),
+                remainingPaySeconds(order),
                 order.itemCount(),
                 order.completedAt(),
                 firstItem != null ? firstItem.skuId() : null,
                 firstItem != null ? firstItem.spuId() : null,
                 firstItem != null ? firstItem.skuName() : null,
-                firstItem != null ? firstItem.skuImageUrl() : null
+                firstItem != null ? firstItem.skuImageUrl() : null,
+                latestRefund != null ? latestRefund.refundNo() : null,
+                latestRefund != null ? latestRefund.refundStatus() : null
         );
     }
 
@@ -59,9 +65,9 @@ public class OrderViewAssembler {
                 order.cancelledAt(),
                 order.shippedAt(),
                 order.completedAt(),
-                order.timedOut(LocalDateTime.now(), timeoutMinutes),
+                order.timedOut(LocalDateTime.now()),
                 timeoutMinutes,
-                remainingPaySeconds(order, timeoutMinutes),
+                remainingPaySeconds(order),
                 order.items().stream().map(item -> new OrderItemView(
                         item.id(),
                         item.skuId(),
@@ -84,12 +90,7 @@ public class OrderViewAssembler {
         );
     }
 
-    private long remainingPaySeconds(Order order, long timeoutMinutes) {
-        if (!order.pendingPayment()) {
-            return 0L;
-        }
-        LocalDateTime deadline = order.createdAtFromOrderNo().plusMinutes(timeoutMinutes);
-        long seconds = Duration.between(LocalDateTime.now(), deadline).getSeconds();
-        return Math.max(0L, seconds);
+    private long remainingPaySeconds(Order order) {
+        return order.remainingPaySeconds(LocalDateTime.now());
     }
 }

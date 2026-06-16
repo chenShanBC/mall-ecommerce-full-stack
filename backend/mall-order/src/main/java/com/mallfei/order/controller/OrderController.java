@@ -1,6 +1,7 @@
 package com.mallfei.order.controller;
 
 import com.mallfei.common.api.ApiResponse;
+import com.mallfei.common.api.PageResponse;
 import com.mallfei.common.auth.RequireUser;
 import com.mallfei.order.application.dto.OrderCreateRequest;
 import com.mallfei.order.application.dto.OrderRefundApplyRequest;
@@ -18,9 +19,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -36,8 +36,11 @@ public class OrderController {
 
     @Operation(summary = "获取当前用户订单列表")
     @GetMapping
-    public ApiResponse<List<OrderSummaryView>> list() {
-        return ApiResponse.success(orderApplicationService.currentUserOrders());
+    public ApiResponse<PageResponse<OrderSummaryView>> list(@RequestParam(defaultValue = "1") long page,
+                                                            @RequestParam(defaultValue = "10") long size,
+                                                            @RequestParam(defaultValue = "ALL") String status,
+                                                            @RequestParam(required = false) String keyword) {
+        return ApiResponse.success(orderApplicationService.currentUserOrders(page, size, status, keyword));
     }
 
     @Operation(summary = "获取订单详情")

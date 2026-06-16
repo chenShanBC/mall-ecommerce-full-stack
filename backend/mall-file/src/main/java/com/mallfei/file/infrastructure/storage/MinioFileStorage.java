@@ -13,4 +13,9 @@ public class MinioFileStorage implements FileStorage {
     public StoredFile storeAvatar(MultipartFile file, String extension) {
         throw BusinessException.badRequest("当前环境暂未启用 MinIO 文件存储");
     }
+
+    @Override
+    public StoredFile storeProductImage(MultipartFile file, String extension) {
+        throw BusinessException.badRequest("当前环境暂未启用 MinIO 文件存储");
+    }
 }

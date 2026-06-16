@@ -89,7 +89,7 @@ public class MybatisPayOrderRepository implements PayOrderRepository {
 
     @Override
     public long countPending() {
-        return payOrderMapper.selectCount(new LambdaQueryWrapper<PayOrderDO>().in(PayOrderDO::getPayStatus, List.of(PayOrder.STATUS_PENDING, PayOrder.STATUS_PAYING)));
+        return payOrderMapper.selectCount(new LambdaQueryWrapper<PayOrderDO>().eq(PayOrderDO::getPayStatus, PayOrder.STATUS_PENDING));
     }
 
     @Override

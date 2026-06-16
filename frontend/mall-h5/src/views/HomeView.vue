@@ -54,25 +54,34 @@
         <span class="section-desc">支持详情、立即购买、订单支付联调</span>
       </div>
 
-      <van-empty v-if="!filteredProducts.length" description="暂无匹配商品" />
+      <van-empty v-if="!filteredProducts.length && !productsLoading" description="暂无匹配商品" />
 
-      <div v-else class="product-grid">
-        <div v-for="item in filteredProducts" :key="item.id" class="product-card" @click="goDetail(item.id)">
-          <img class="product-image" :src="getProductImage(item)" :alt="item.name" />
-          <div class="product-body">
-            <div class="product-name van-multi-ellipsis--l2">{{ item.name }}</div>
-            <div class="product-sales">销量 {{ item.sales || 0 }}</div>
-            <div class="product-price-row">
-              <span class="price">¥{{ formatPrice(item.salePrice) }}</span>
-              <span class="origin">¥{{ formatPrice(item.originPrice) }}</span>
+      <van-list
+        v-else
+        v-model:loading="productsLoading"
+        :finished="productsFinished"
+        finished-text="没有更多商品了"
+        loading-text="商品加载中..."
+        @load="loadMoreProducts"
+      >
+        <div class="product-grid">
+          <div v-for="item in filteredProducts" :key="item.id" class="product-card" @click="goDetail(item.id)">
+            <img class="product-image" :src="getProductImage(item)" :alt="item.name" />
+            <div class="product-body">
+              <div class="product-name van-multi-ellipsis--l2">{{ item.name }}</div>
+              <div class="product-sales">销量 {{ item.sales || 0 }}</div>
+              <div class="product-price-row">
+                <span class="price">¥{{ formatPrice(item.salePrice) }}</span>
+                <span class="origin">¥{{ formatPrice(item.originPrice) }}</span>
+              </div>
+              <van-button size="small" type="primary" round block @click.stop="goDetail(item.id)">查看详情</van-button>
             </div>
-            <van-button size="small" type="primary" round block @click.stop="goDetail(item.id)">查看详情</van-button>
           </div>
         </div>
-      </div>
+      </van-list>
     </div>
 
-    <FloatingCartButton />
+    <FloatingCartButton draggable />
   </div>
 </template>
 
@@ -93,6 +102,7 @@ const HOME_CATEGORIES_CACHE_KEY = 'mallfei:h5-home-categories-cache-v1';
 const HOME_PRODUCTS_CACHE_KEY = 'mallfei:h5-home-products-cache-v1';
 const HOME_CATEGORIES_CACHE_TTL = 30 * 60 * 1000;
 const HOME_PRODUCTS_CACHE_TTL = 3 * 60 * 1000;
+const PRODUCT_PAGE_SIZE = 10;
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -102,6 +112,10 @@ const products = ref([]);
 const activeCategoryId = ref(null);
 const categoriesLoadedAt = ref(0);
 const productsLoadedAt = ref(0);
+const productPageNum = ref(1);
+const productTotal = ref(0);
+const productsLoading = ref(false);
+const productsFinished = ref(false);
 
 const normalizeText = (value = '') => String(value).toLowerCase().replace(/\s+/g, '');
 
@@ -186,10 +200,15 @@ const categoryDescendantsMap = computed(() => {
   return result;
 });
 
+const isProductOnline = (item = {}) => String(item.status || 'ONLINE').toUpperCase() === 'ONLINE';
+
 const filteredProducts = computed(() => {
   const search = keyword.value.trim();
   const categoryScope = activeCategoryId.value ? categoryDescendantsMap.value.get(activeCategoryId.value) : null;
   return products.value.filter((item) => {
+    if (!isProductOnline(item)) {
+      return false;
+    }
     const matchKeyword = matchesProductKeyword(item, search);
     const matchCategory = !categoryScope || categoryScope.has(item.categoryId);
     return matchKeyword && matchCategory;
@@ -211,6 +230,9 @@ const saveProductsCache = () => {
     localStorage.setItem(HOME_PRODUCTS_CACHE_KEY, JSON.stringify({
       ts: Date.now(),
       products: products.value,
+      total: productTotal.value,
+      pageNum: productPageNum.value,
+      finished: productsFinished.value,
     }));
   } catch {
   }
@@ -237,6 +259,9 @@ const loadProductsCache = () => {
     const parsed = JSON.parse(raw);
     if (!parsed || Date.now() - Number(parsed.ts || 0) > HOME_PRODUCTS_CACHE_TTL) return false;
     products.value = Array.isArray(parsed.products) ? parsed.products : [];
+    productTotal.value = Number(parsed.total || products.value.length);
+    productPageNum.value = Number(parsed.pageNum || Math.floor(products.value.length / PRODUCT_PAGE_SIZE) + 1);
+    productsFinished.value = Boolean(parsed.finished || (productTotal.value > 0 && products.value.length >= productTotal.value));
     productsLoadedAt.value = Number(parsed.ts || Date.now());
     return true;
   } catch {
@@ -256,11 +281,35 @@ const loadCategories = async () => {
   saveCategoriesCache();
 };
 
-const loadProducts = async () => {
-  const productRes = await fetchProductPage();
-  products.value = normalizeProductsWithCategoryName(productRes.data.data?.records || []);
-  productsLoadedAt.value = Date.now();
-  saveProductsCache();
+const loadProducts = async ({ reset = true } = {}) => {
+  if (reset) {
+    productPageNum.value = 1;
+    productTotal.value = 0;
+    productsFinished.value = false;
+  }
+  if (productsFinished.value && !reset) {
+    productsLoading.value = false;
+    return;
+  }
+  try {
+    productsLoading.value = true;
+    const pageToLoad = productPageNum.value;
+    const productRes = await fetchProductPage({ page: pageToLoad, size: PRODUCT_PAGE_SIZE });
+    const pageData = productRes.data.data || {};
+    const nextRecords = normalizeProductsWithCategoryName(pageData.records || []);
+    products.value = reset ? nextRecords : [...products.value, ...nextRecords];
+    productTotal.value = Number(pageData.total || products.value.length);
+    productPageNum.value = pageToLoad + 1;
+    productsFinished.value = nextRecords.length < PRODUCT_PAGE_SIZE || products.value.length >= productTotal.value;
+    productsLoadedAt.value = Date.now();
+    saveProductsCache();
+  } finally {
+    productsLoading.value = false;
+  }
+};
+
+const loadMoreProducts = async () => {
+  await loadProducts({ reset: false });
 };
 
 const refreshSingleProductInCache = async (productId) => {

@@ -65,24 +65,33 @@ public class ProductDomainService {
     }
 
     public ProductSpu createProduct(AdminCreateProductRequest request) {
+        validateInitialStock(request.skus().stream().map(AdminCreateProductRequest.SkuInput::initialStock).toList());
         return productRepository.save(buildProductSpu(null, request.name(), request.categoryId(), request.mainImageUrl(), request.description(), "ONLINE", request.skus().stream().map(this::toSku).toList()));
     }
 
     public ProductSpu updateProduct(Long productId, AdminUpdateProductRequest request) {
         ProductSpu existing = loadProduct(productId);
+        validateInitialStock(request.skus().stream().map(AdminUpdateProductRequest.SkuInput::initialStock).toList());
+        if (existing.online()) {
+            boolean hasNewSku = request.skus().stream().anyMatch(sku -> sku.id() == null);
+            if (hasNewSku) {
+                throw BusinessException.badRequest("商品已上架，新增SKU及初始库存请先下架或通过库存模块处理");
+            }
+        }
         return productRepository.update(existing.applyUpdate(
                 request.name(),
                 request.categoryId(),
                 request.mainImageUrl(),
                 request.description(),
                 request.status(),
-                request.skus().stream().map(this::toSku).toList()
+                request.skus().stream().map(sku -> toSku(sku, existing)).toList()
         ));
     }
 
     public ProductSpu updateProductStatus(Long productId, String status) {
-        loadProduct(productId);
-        productRepository.updateStatus(productId, status);
+        ProductSpu existing = loadProduct(productId);
+        ProductSpu candidate = existing.applyStatus(status);
+        productRepository.updateStatus(productId, candidate.status());
         return loadProduct(productId);
     }
 
@@ -101,14 +110,25 @@ public class ProductDomainService {
     }
 
     private ProductSpu buildProductSpu(Long id, String name, Long categoryId, String mainImageUrl, String description, String status, List<ProductSku> skus) {
-        return new ProductSpu(id, name, categoryId, mainImageUrl, "[]", description, status, skus);
+        return ProductSpu.create(id, name, categoryId, mainImageUrl, "[]", description, status, skus);
+    }
+
+    private void validateInitialStock(List<Integer> initialStocks) {
+        if (initialStocks.stream().anyMatch(stock -> stock == null || stock < 0)) {
+            throw BusinessException.badRequest("初始库存不能小于0");
+        }
     }
 
     private ProductSku toSku(AdminCreateProductRequest.SkuInput skuInput) {
         return new ProductSku(null, null, skuInput.skuCode(), skuInput.skuName(), skuInput.specJson() == null ? "{}" : skuInput.specJson(), skuInput.salePriceCent(), skuInput.originPriceCent(), 0, "ONLINE");
     }
 
-    private ProductSku toSku(AdminUpdateProductRequest.SkuInput skuInput) {
-        return new ProductSku(skuInput.id(), null, skuInput.skuCode(), skuInput.skuName(), skuInput.specJson() == null ? "{}" : skuInput.specJson(), skuInput.salePriceCent(), skuInput.originPriceCent(), 0, skuInput.status());
+    private ProductSku toSku(AdminUpdateProductRequest.SkuInput skuInput, ProductSpu existing) {
+        int currentSalesCount = existing.skus().stream()
+                .filter(sku -> skuInput.id() != null && skuInput.id().equals(sku.id()))
+                .map(ProductSku::salesCount)
+                .findFirst()
+                .orElse(0);
+        return new ProductSku(skuInput.id(), null, skuInput.skuCode(), skuInput.skuName(), skuInput.specJson() == null ? "{}" : skuInput.specJson(), skuInput.salePriceCent(), skuInput.originPriceCent(), currentSalesCount, skuInput.status());
     }
 }

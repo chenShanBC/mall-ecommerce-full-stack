@@ -1,11 +1,15 @@
 package com.mallfei.stock.application.dto;
 
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 
 public record StockAdjustRequest(
-        @NotNull(message = "调整后总库存不能为空") Integer totalStock,
-        @NotNull(message = "调整后可用库存不能为空") Integer availableStock,
-        @NotNull(message = "调整后锁定库存不能为空") Integer lockedStock,
-        String reason
+        String adjustmentType,
+        @Min(value = 1, message = "调整数量必须大于 0") Integer changeQuantity,
+        @Min(value = 0, message = "总库存不能为负数") Integer totalStock,
+        @Min(value = 0, message = "可用库存不能为负数") Integer availableStock,
+        @Min(value = 0, message = "锁定库存不能为负数") Integer lockedStock,
+        @NotBlank(message = "库存调整原因不能为空") String reason,
+        String remark
 ) {
 }

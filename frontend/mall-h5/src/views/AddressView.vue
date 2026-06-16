@@ -63,7 +63,11 @@
             />
             <van-field v-model="form.detailAddress" label="详细地址" placeholder="请输入详细地址" />
             <van-field v-model="form.postalCode" label="邮编" placeholder="请输入邮编" />
-            <van-switch-cell v-model="form.isDefault" title="设为默认地址" />
+            <van-cell title="设为默认地址" center>
+              <template #right-icon>
+                <van-switch v-model="form.isDefault" size="24px" />
+              </template>
+            </van-cell>
           </van-cell-group>
           <div class="submit-area">
             <van-button round block type="primary" native-type="submit" :loading="submitting">保存地址</van-button>
@@ -88,7 +92,7 @@ import { computed, reactive, ref } from 'vue';
 import { showConfirmDialog, showFailToast, showSuccessToast } from 'vant';
 import { useRoute, useRouter } from 'vue-router';
 import { createUserAddress, deleteUserAddress, fetchUserAddresses, setDefaultAddress, updateUserAddress } from '../api';
-import { areaTree } from '../utils/area';
+import { areaList } from '../utils/area';
 import { formatAddress } from '../utils/format';
 
 const SELECTED_ADDRESS_KEY = 'mall-h5-selected-address-id';
@@ -117,12 +121,6 @@ const form = reactive({
 
 const isSelectMode = computed(() => route.query.mode === 'select');
 const returnPath = computed(() => route.query.from || '/checkout');
-
-const areaList = {
-  province_list: Object.fromEntries(areaTree.map((item) => [item.value, item.text])),
-  city_list: Object.fromEntries(areaTree.flatMap((item) => item.children.map((city) => [city.value, city.text]))),
-  county_list: Object.fromEntries(areaTree.flatMap((item) => item.children.flatMap((city) => city.children.map((county) => [county.value, county.text])))),
-};
 
 const regionText = computed(() => [form.provinceName, form.cityName, form.districtName].filter(Boolean).join(' / '));
 const isValidMobile = (mobile) => /^1\d{10}$/.test(mobile || '');
@@ -284,7 +282,12 @@ const handleAddressClick = (item) => {
   selectedAddressId.value = String(item.id);
   localStorage.setItem(SELECTED_ADDRESS_KEY, String(item.id));
   showSuccessToast('收货地址已选择');
-  router.replace(returnPath.value);
+  router.replace({
+    path: returnPath.value,
+    query: {
+      addressId: String(item.id),
+    },
+  });
 };
 
 const handleBack = () => {

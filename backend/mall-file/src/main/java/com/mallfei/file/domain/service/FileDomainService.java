@@ -26,19 +26,27 @@ public class FileDomainService {
     }
 
     public String validateAvatarFile(MultipartFile file) {
+        return validateImageFile(file, "头像");
+    }
+
+    public String validateProductImageFile(MultipartFile file) {
+        return validateImageFile(file, "商品图片");
+    }
+
+    private String validateImageFile(MultipartFile file, String sceneName) {
         if (file == null || file.isEmpty()) {
-            throw BusinessException.badRequest("请选择要上传的头像图片");
+            throw BusinessException.badRequest("请选择要上传的" + sceneName);
         }
         if (file.getSize() > fileStorageProperties.getMaxAvatarSize()) {
-            throw BusinessException.badRequest("头像图片不能超过2MB");
+            throw BusinessException.badRequest(sceneName + "不能超过2MB");
         }
         String extension = resolveExtension(file.getOriginalFilename());
         if (!ALLOWED_SUFFIXES.contains(extension)) {
-            throw BusinessException.badRequest("头像仅支持 jpg、jpeg、png、webp 格式");
+            throw BusinessException.badRequest(sceneName + "仅支持 jpg、jpeg、png、webp 格式");
         }
         String contentType = file.getContentType();
         if (!StringUtils.hasText(contentType) || !ALLOWED_CONTENT_TYPES.contains(contentType)) {
-            throw BusinessException.badRequest("头像文件类型不支持");
+            throw BusinessException.badRequest(sceneName + "文件类型不支持");
         }
         return extension;
     }

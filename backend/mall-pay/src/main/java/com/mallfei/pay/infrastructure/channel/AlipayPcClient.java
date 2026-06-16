@@ -10,6 +10,7 @@ import com.mallfei.pay.domain.service.PayChannelSubmitResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.Map;
 
 @Component
@@ -37,7 +38,13 @@ public class AlipayPcClient extends AlipayClient {
 
     @Override
     public PayChannelSubmitResult submit(PayOrder payOrder, String returnUrl) {
+        return submit(payOrder, returnUrl, null);
+    }
+
+    @Override
+    public PayChannelSubmitResult submit(PayOrder payOrder, String returnUrl, Duration remainingPayTime) {
         ensureConfigured();
+        this.remainingPayTime = remainingPayTime;
         try {
             String bizContent = buildBizContent(payOrder);
             Map<String, String> signParams = buildSignParams(payOrder, bizContent, returnUrl);

@@ -13,7 +13,7 @@
 
       <el-form :inline="true" :model="filters" class="admin-filter-form">
         <el-form-item label="关键词"><el-input v-model="filters.keyword" clearable placeholder="账号 / 昵称 / 角色" style="width: 240px" @keyup.enter="handleSearch" /></el-form-item>
-        <el-form-item label="角色"><el-select v-model="filters.roleCode" clearable placeholder="全部角色" style="width: 180px"><el-option v-for="item in roles" :key="item.code" :label="item.name" :value="item.code" /></el-select></el-form-item>
+        <el-form-item label="角色"><el-select v-model="filters.roleCode" clearable placeholder="全部角色" style="width: 180px"><el-option v-for="item in roleOptions" :key="item.code" :label="item.name" :value="item.code" /></el-select></el-form-item>
         <el-form-item label="状态"><el-select v-model="filters.status" clearable placeholder="全部状态" style="width: 160px"><el-option label="启用" value="ENABLED" /><el-option label="禁用" value="DISABLED" /></el-select></el-form-item>
         <el-form-item><el-button type="primary" @click="handleSearch">查询</el-button></el-form-item>
         <el-form-item><el-button @click="handleReset">重置</el-button></el-form-item>
@@ -23,7 +23,11 @@
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="username" label="账号" width="140" />
         <el-table-column prop="nickname" label="昵称" width="140" />
-        <el-table-column prop="roleCode" label="角色" width="160" />
+        <el-table-column label="角色" width="180">
+          <template #default="{ row }">
+            <el-tag type="info">{{ getRoleLabel(row.roleCode) }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="120">
           <template #default="{ row }"><el-tag :type="accountStatusMeta(row.status).type">{{ accountStatusMeta(row.status).label }}</el-tag></template>
         </el-table-column>
@@ -33,10 +37,10 @@
               effect="light"
               placement="top-start"
               popper-class="permission-list-tooltip"
-              :content="(row.permissions || []).join('、') || '暂无权限'"
+              :content="formatPermissionLabels(row.permissions)"
             >
               <div class="permission-list-cell">
-                <el-tag v-for="permission in previewPermissions(row.permissions)" :key="permission" size="small" class="tag">{{ permission }}</el-tag>
+                <el-tag v-for="permission in previewPermissions(row.permissions)" :key="permission" size="small" class="tag">{{ getPermissionLabel(permission) }}</el-tag>
                 <el-tag v-if="hiddenPermissionCount(row.permissions) > 0" size="small" type="info" class="tag">+{{ hiddenPermissionCount(row.permissions) }}</el-tag>
                 <span v-if="!(row.permissions || []).length" class="permission-list-empty">暂无权限</span>
               </div>
@@ -68,7 +72,7 @@
         <el-form-item v-if="mode === 'create'" label="昵称"><el-input v-model="form.nickname" /></el-form-item>
         <el-form-item label="角色">
           <el-select v-model="form.roleCode" style="width: 100%" :disabled="mode === 'edit' && form.roleCode === 'SUPER_ADMIN'" @change="applyTemplate">
-            <el-option v-for="item in roles" :key="item.code" :label="`${item.name} (${item.code})`" :value="item.code" />
+            <el-option v-for="item in roleOptions" :key="item.code" :label="`${item.name}（${item.code}）`" :value="item.code" />
           </el-select>
           <div v-if="form.roleCode === 'SUPER_ADMIN'" class="role-tip role-tip--warning">超级管理员是系统最高权限角色，后端会强制拥有全部权限，不支持在这里单独减权。</div>
           <div v-else class="role-tip">建议优先按角色模板配置，再按最小权限原则增删；提交后会立刻影响菜单、按钮和接口访问。</div>
@@ -132,34 +136,76 @@ const mode = ref('create');
 const currentAdminId = ref(null);
 const filters = reactive({ keyword: '', roleCode: '', status: '' });
 const pager = reactive({ page: 1, size: ADMIN_PAGE_SIZE, total: 0 });
-const form = reactive({ userId: null, username: '', password: '', nickname: '', roleCode: 'PRODUCT_OPERATOR', permissions: ['product:view', 'product:create', 'product:update'] });
+const form = reactive({ userId: null, username: '', password: '', nickname: '', roleCode: 'PRODUCT_OPERATOR', permissions: ['dashboard:view', 'dashboard:products:view', 'product:view', 'product:create', 'product:update'] });
 const permissionOptions = [
-  { code: 'dashboard:view', label: '仪表盘查看' },
-  { code: 'user:view', label: '用户查看' },
-  { code: 'user:edit', label: '用户编辑' },
-  { code: 'user:disable', label: '用户禁启用' },
+  { code: 'dashboard:view', label: '仪表盘访问' },
+  { code: 'dashboard:operations:view', label: '运营视角看板' },
+  { code: 'dashboard:finance:view', label: '财务视角看板' },
+  { code: 'dashboard:warehouse:view', label: '仓储视角看板' },
+  { code: 'dashboard:products:view', label: '商品视角看板' },
+  { code: 'user:view', label: '用户列表查看' },
+  { code: 'user:detail:view', label: '用户详情查看' },
+  { code: 'user:address:view', label: '用户地址查看' },
+  { code: 'user:edit', label: '用户资料编辑' },
+  { code: 'user:disable', label: '用户启停' },
+  { code: 'user:export', label: '用户数据导出' },
   { code: 'product:view', label: '商品查看' },
-  { code: 'product:create', label: '商品新增' },
-  { code: 'product:update', label: '商品编辑' },
+  { code: 'product:detail:view', label: '商品详情查看' },
+  { code: 'product:create', label: '商品创建' },
+  { code: 'product:update', label: '商品更新' },
   { code: 'product:on_sale', label: '商品上架' },
   { code: 'product:off_sale', label: '商品下架' },
+  { code: 'product:status:update', label: '商品状态调整' },
+  { code: 'product:sales:view', label: '商品销售表现查看' },
+  { code: 'product:sales-threshold:view', label: '商品销售阈值查看' },
+  { code: 'product:sales-threshold:config', label: '商品销售阈值配置' },
+  { code: 'product:violation:handle', label: '商品违规处理' },
   { code: 'category:manage', label: '类目管理' },
   { code: 'stock:view', label: '库存查看' },
-  { code: 'stock:log:view', label: '库存日志' },
+  { code: 'stock:log:view', label: '库存流水查看' },
   { code: 'stock:adjust', label: '库存调整' },
-  { code: 'order:view', label: '订单查看' },
+  { code: 'stock:policy:update', label: '库存策略调整' },
+  { code: 'stock:warning:view', label: '库存预警查看' },
+  { code: 'stock:warning:handle', label: '库存预警处理' },
+  { code: 'stock:reconcile:view', label: '库存对账查看' },
+  { code: 'stock:reconcile:check', label: '库存一致性校验' },
+  { code: 'stock:reconcile:repair', label: '库存对账修复' },
+  { code: 'order:view', label: '订单列表查看' },
+  { code: 'order:detail:view', label: '订单详情查看' },
   { code: 'order:remark', label: '订单备注' },
-  { code: 'order:ship', label: '订单发货' },
+  { code: 'order:receiver:update', label: '订单收货信息修改' },
+  { code: 'order:ship', label: '订单发货/完结' },
   { code: 'order:close', label: '订单关闭' },
-  { code: 'order:log:view', label: '订单日志' },
-  { code: 'aftersale:view', label: '售后查看' },
+  { code: 'order:exception:view', label: '订单异常查看' },
+  { code: 'order:exception:handle', label: '订单异常处理' },
+  { code: 'order:payment-exception:handle', label: '支付异常处理' },
+  { code: 'order:confirm-paid', label: '人工确认支付' },
+  { code: 'order:sku:switch', label: '订单 SKU 切换' },
+  { code: 'order:log:view', label: '订单日志查看' },
+  { code: 'aftersale:view', label: '售后列表查看' },
+  { code: 'aftersale:detail:view', label: '售后详情查看' },
   { code: 'aftersale:audit', label: '售后审核' },
+  { code: 'aftersale:review', label: '售后复核' },
+  { code: 'aftersale:refund:view', label: '售后退款查看' },
   { code: 'refund:view', label: '退款查看' },
-  { code: 'refund:execute', label: '退款/支付高危处理' },
-  { code: 'finance:view', label: '财务查看' },
-  { code: 'payment:view', label: '支付查看' },
+  { code: 'refund:execute', label: '退款/支付关闭执行' },
+  { code: 'refund:sync', label: '退款状态同步' },
+  { code: 'finance:view', label: '财务业务查看' },
+  { code: 'payment:view', label: '支付单查看' },
+  { code: 'payment:detail:view', label: '支付单详情查看' },
+  { code: 'payment:close', label: '支付单关闭' },
+  { code: 'payment:sync', label: '支付状态同步' },
+  { code: 'payment:repair', label: '支付状态修复' },
+  { code: 'payment:callback:view', label: '支付回调查看' },
   { code: 'reconciliation:view', label: '对账查看' },
-  { code: 'reconciliation:handle', label: '对账处理' },
+  { code: 'reconciliation:task:create', label: '对账任务创建' },
+  { code: 'reconciliation:task:run', label: '对账任务执行' },
+  { code: 'reconciliation:task:archive', label: '对账任务归档' },
+  { code: 'reconciliation:bill:import', label: '渠道账单导入' },
+  { code: 'reconciliation:diff:handle', label: '对账差异处理' },
+  { code: 'reconciliation:diff:repair', label: '对账差异修复' },
+  { code: 'reconciliation:hanging:follow', label: '挂账跟进闭环' },
+  { code: 'reconciliation:handle', label: '对账处理（兼容旧权限）' },
   { code: 'admin:view', label: '账号查看' },
   { code: 'admin:create', label: '账号新增' },
   { code: 'admin:update', label: '账号编辑' },
@@ -171,6 +217,29 @@ const permissionOptions = [
   { code: 'log:operation:view', label: '操作日志查看' },
 ];
 const permissionOptionMap = permissionOptions.reduce((acc, item) => { acc[item.code] = item; return acc; }, {});
+const roleDisplayMap = {
+  SUPER_ADMIN: '超级管理员',
+  FINANCE_OPERATOR: '财务人员',
+  ORDER_OPERATOR: '订单运营',
+  WAREHOUSE_OPERATOR: '仓储人员',
+  PRODUCT_OPERATOR: '商品运营',
+  FINANCE_STAFF: '财务人员',
+  WAREHOUSE_MANAGER: '仓储人员',
+  OPERATION_STAFF: '商品运营',
+  CUSTOMER_SERVICE_MANAGER: '订单运营',
+  CUSTOMER_SERVICE: '订单运营',
+  AUDIT_OPERATOR: '财务人员',
+};
+const roleOptions = [
+  { code: 'SUPER_ADMIN', name: '超级管理员' },
+  { code: 'FINANCE_OPERATOR', name: '财务人员' },
+  { code: 'ORDER_OPERATOR', name: '订单运营' },
+  { code: 'WAREHOUSE_OPERATOR', name: '仓储人员' },
+  { code: 'PRODUCT_OPERATOR', name: '商品运营' },
+];
+const getRoleLabel = (roleCode) => roleDisplayMap[roleCode] || roleCode || '未知角色';
+const getPermissionLabel = (code) => permissionOptionMap[code]?.label || code;
+const formatPermissionLabels = (permissions = []) => (permissions || []).map(getPermissionLabel).join('、') || '暂无权限';
 const accountStatusMeta = (status) => getStatusTagMeta('adminAccountStatus', status);
 const PERMISSION_PREVIEW_COUNT = 8;
 const previewPermissions = (permissions = []) => permissions.slice(0, PERMISSION_PREVIEW_COUNT);
@@ -227,7 +296,11 @@ const loadData = async () => {
     ]);
     accounts.value = accountRes.data.data?.records || [];
     pager.total = accountRes.data.data?.total || 0;
-    roles.value = roleRes.data.data || [];
+    const backendRoles = roleRes.data.data || [];
+    roles.value = roleOptions.map((option) => {
+      const backendRole = backendRoles.find((item) => item.code === option.code) || {};
+      return { ...backendRole, code: option.code, name: option.name };
+    });
     roleMap.value = roles.value.reduce((acc, item) => { acc[item.code] = item; return acc; }, {});
   } catch (error) {
     ElMessage.error(error?.response?.data?.msg || '加载账号失败');
@@ -244,9 +317,9 @@ const exportAccounts = () => {
     { label: 'ID', value: 'id' },
     { label: '账号', value: 'username' },
     { label: '昵称', value: 'nickname' },
-    { label: '角色', value: 'roleCode' },
+    { label: '角色', value: (row) => getRoleLabel(row.roleCode) },
     { label: '状态', value: 'status' },
-    { label: '权限', value: (row) => (row.permissions || []).join(' | ') },
+    { label: '权限', value: (row) => (row.permissions || []).map(getPermissionLabel).join(' | ') },
   ]);
 };
 

@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 public record StockOperationLogSnapshot(
         Long id,
         Long skuId,
+        String skuName,
         String operationType,
         String businessType,
         String businessNo,

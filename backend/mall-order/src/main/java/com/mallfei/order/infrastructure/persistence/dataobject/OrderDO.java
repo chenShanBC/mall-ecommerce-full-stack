@@ -30,6 +30,10 @@ public class OrderDO {
     private LocalDateTime cancelledAt;
     private LocalDateTime shippedAt;
     private LocalDateTime completedAt;
+    private LocalDateTime expireTime;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+    private LocalDateTime deletedAt;
     private Integer userDeleted;
     private LocalDateTime userDeletedAt;
     private Integer version;
@@ -74,6 +78,14 @@ public class OrderDO {
     public void setShippedAt(LocalDateTime shippedAt) { this.shippedAt = shippedAt; }
     public LocalDateTime getCompletedAt() { return completedAt; }
     public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
+    public LocalDateTime getExpireTime() { return expireTime; }
+    public void setExpireTime(LocalDateTime expireTime) { this.expireTime = expireTime; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+    public LocalDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
     public Integer getUserDeleted() { return userDeleted; }
     public void setUserDeleted(Integer userDeleted) { this.userDeleted = userDeleted; }
     public LocalDateTime getUserDeletedAt() { return userDeletedAt; }

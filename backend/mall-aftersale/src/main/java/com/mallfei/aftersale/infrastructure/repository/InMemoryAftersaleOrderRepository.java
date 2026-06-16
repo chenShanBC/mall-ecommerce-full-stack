@@ -2,8 +2,6 @@ package com.mallfei.aftersale.infrastructure.repository;
 
 import com.mallfei.aftersale.domain.model.AftersaleOrder;
 import com.mallfei.aftersale.domain.repository.AftersaleOrderRepository;
-import org.springframework.stereotype.Repository;
-
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -11,7 +9,6 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-@Repository
 public class InMemoryAftersaleOrderRepository implements AftersaleOrderRepository {
 
     private final AtomicLong idGenerator = new AtomicLong(1);
@@ -26,9 +23,14 @@ public class InMemoryAftersaleOrderRepository implements AftersaleOrderRepositor
                 aftersaleOrder.userId(),
                 aftersaleOrder.aftersaleType(),
                 aftersaleOrder.status(),
+                aftersaleOrder.originOrderStatus(),
                 aftersaleOrder.refundAmountCent(),
                 aftersaleOrder.reason(),
+                aftersaleOrder.rejectReason(),
+                aftersaleOrder.refundNo(),
+                aftersaleOrder.failReason(),
                 aftersaleOrder.version(),
+                aftersaleOrder.reviewedAt(),
                 aftersaleOrder.createdAt(),
                 aftersaleOrder.updatedAt()
         );

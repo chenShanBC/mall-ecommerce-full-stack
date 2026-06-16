@@ -20,8 +20,12 @@ public record AdminAftersaleDetailView(
         String status,
         @Schema(description = "退款金额，单位分", example = "9900")
         Long refundAmount,
-        @Schema(description = "售后原因", example = "商品与描述不符")
+        @Schema(description = "用户申请原因", example = "商品与描述不符")
         String reason,
+        @Schema(description = "商家驳回原因", example = "商品已影响二次销售")
+        String rejectReason,
+        @Schema(description = "退款失败原因", example = "渠道退款失败")
+        String failReason,
         @Schema(description = "创建时间")
         LocalDateTime createdAt,
         @Schema(description = "更新时间")

@@ -7,11 +7,13 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.mallfei.common.auth.RequireAdmin;
 import com.mallfei.common.auth.RequireLogin;
 import com.mallfei.common.auth.RequirePermission;
+import com.mallfei.auth.infrastructure.config.AuthSessionProperties;
 import com.mallfei.common.auth.RequireUser;
 import com.mallfei.common.enums.IdentityType;
 import com.mallfei.common.exception.BusinessException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.web.method.HandlerMethod;
@@ -26,6 +28,7 @@ import java.util.List;
 import java.util.Set;
 
 @Configuration
+@EnableConfigurationProperties(AuthSessionProperties.class)
 public class SaTokenConfig implements WebMvcConfigurer {
 
     @Override
@@ -62,6 +65,8 @@ public class SaTokenConfig implements WebMvcConfigurer {
                 .allowedOriginPatterns(
                         "http://localhost:*",
                         "http://127.0.0.1:*",
+                        "https://mallfei.cloud",
+                        "https://www.mallfei.cloud",
                         "https://h5.mallfei.cloud",
                         "https://admin.mallfei.cloud"
                 )
@@ -118,11 +123,11 @@ public class SaTokenConfig implements WebMvcConfigurer {
             }
             List<String> requiredPermissions = requiredPermissions(handlerMethod);
             if (!requiredPermissions.isEmpty()) {
-                if ("SUPER_ADMIN".equalsIgnoreCase(StpUtil.getSession().getString("roleCode"))) {
-                    return true;
-                }
                 String permissionsJson = StpUtil.getSession().getString("permissions");
                 Set<String> permissions = readSessionPermissions(permissionsJson);
+                if (isSuperAdminRole(StpUtil.getSession().getString("roleCode")) || permissions.contains("*")) {
+                    return true;
+                }
                 if (permissions.isEmpty()) {
                     throw BusinessException.forbidden("当前账号暂无访问权限");
                 }
@@ -164,6 +169,14 @@ public class SaTokenConfig implements WebMvcConfigurer {
                 return List.of(onType.value());
             }
             return List.of();
+        }
+
+        private boolean isSuperAdminRole(String roleCode) {
+            if (roleCode == null) {
+                return false;
+            }
+            String normalized = roleCode.trim().toUpperCase();
+            return "SUPER_ADMIN".equals(normalized) || "SUPER".equals(normalized) || "SUPERADMIN".equals(normalized) || "ADMIN".equals(normalized);
         }
 
         private Set<String> readSessionPermissions(String permissionsJson) {

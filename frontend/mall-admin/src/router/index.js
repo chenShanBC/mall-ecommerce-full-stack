@@ -21,7 +21,7 @@ const routes = [
   { path: '/orders', name: 'orders', component: OrderManageView, meta: { requiresAuth: true, permission: 'order:view' } },
   { path: '/aftersales', name: 'aftersales', component: AftersaleManageView, meta: { requiresAuth: true, permission: 'aftersale:view' } },
   { path: '/pays', name: 'pays', component: PayManageView, meta: { requiresAuth: true, permission: 'payment:view' } },
-  { path: '/reconciliations', name: 'reconciliations', component: ReconciliationManageView, meta: { requiresAuth: true, permission: 'reconciliation:view' } },
+  { path: '/reconciliations', name: 'reconciliations', component: ReconciliationManageView, meta: { requiresAuth: true, permissions: ['reconciliation:view', 'stock:reconcile:view'] } },
   { path: '/products', name: 'products', component: ProductManageView, meta: { requiresAuth: true, permission: 'product:view' } },
   { path: '/stocks', name: 'stocks', component: StockManageView, meta: { requiresAuth: true, permission: 'stock:view' } },
   { path: '/users', name: 'users', component: UserManageView, meta: { requiresAuth: true, permission: 'user:view' } },
@@ -33,7 +33,10 @@ const routes = [
   { path: '/login', name: 'login', component: LoginView },
 ];
 
-const router = createRouter({ history: createWebHistory(), routes });
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes,
+});
 
 router.beforeEach(async (to) => {
   const adminStore = useAdminStore();

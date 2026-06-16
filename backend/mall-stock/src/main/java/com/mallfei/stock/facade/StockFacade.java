@@ -8,6 +8,7 @@ import com.mallfei.stock.application.dto.StockQuery;
 import com.mallfei.stock.application.dto.StockView;
 import com.mallfei.stock.application.service.StockApplicationService;
 import com.mallfei.stock.application.service.StockOperationLogApplicationService;
+import com.mallfei.stock.application.vo.StockConsistencyCheckView;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -35,6 +36,11 @@ public class StockFacade {
     public StockSnapshot updateStockPolicy(Long skuId, String stockStatus, Integer lowStockThreshold, Integer highStockThreshold, String reason) { return toSnapshot(stockApplicationService.updateStockPolicy(skuId, stockStatus, lowStockThreshold, highStockThreshold, reason)); }
     public StockSnapshot adjustStock(Long skuId, StockAdjustRequest request) { return toSnapshot(stockApplicationService.adjustStock(skuId, request)); }
     public StockSnapshot syncStock(Long skuId) { return toSnapshot(stockApplicationService.syncStock(skuId)); }
+    public StockConsistencyCheckView checkConsistency(Long skuId) { return stockApplicationService.checkConsistency(skuId); }
+    public PageResult<com.mallfei.stock.application.vo.StockReconciliationRecordView> pageReconciliationRecords(Long skuId, String status, long page, long size, String sortBy, String sortOrder) { return stockApplicationService.pageReconciliationRecords(skuId, status, page, size, sortBy, sortOrder); }
+    public com.mallfei.stock.application.vo.StockReconciliationRecordView reconciliationRecord(Long id) { return stockApplicationService.reconciliationRecord(id); }
+    public com.mallfei.stock.application.vo.StockReconciliationRecordView repairReconciliationRecord(Long id, String remark) { return stockApplicationService.repairReconciliationRecord(id, remark); }
+    public com.mallfei.stock.application.vo.StockReconciliationRecordView ignoreReconciliationRecord(Long id, String remark) { return stockApplicationService.ignoreReconciliationRecord(id, remark); }
     public StockOperationResultSnapshot reserve(StockOperationRequest request) { return toOperationSnapshot(stockApplicationService.reserve(request)); }
     public StockOperationResultSnapshot cancel(StockOperationRequest request) { return toOperationSnapshot(stockApplicationService.cancel(request)); }
     public StockOperationResultSnapshot confirm(StockOperationRequest request) { return toOperationSnapshot(stockApplicationService.confirm(request)); }
@@ -44,7 +50,7 @@ public class StockFacade {
     public StockOperationResultSnapshot deduct(StockOperationRequest request) { return toOperationSnapshot(stockApplicationService.deduct(request)); }
 
     private StockSnapshot toSnapshot(StockView source) {
-        return new StockSnapshot(source.skuId(), source.totalStock(), source.lockedStock(), source.availableStock(), source.stockStatus(), source.lowStockThreshold(), source.highStockThreshold(), source.warningStatus(), source.source());
+        return new StockSnapshot(source.skuId(), null, source.totalStock(), source.lockedStock(), source.availableStock(), source.stockStatus(), source.lowStockThreshold(), source.highStockThreshold(), source.warningStatus(), source.source());
     }
 
     private StockOperationResultSnapshot toOperationSnapshot(StockOperationResult source) {
@@ -52,6 +58,6 @@ public class StockFacade {
     }
 
     private StockOperationLogSnapshot toSnapshot(com.mallfei.stock.domain.model.StockOperationLog log) {
-        return new StockOperationLogSnapshot(log.id(), log.skuId(), log.operationType(), log.businessType(), log.businessNo(), log.changeQuantity(), log.beforeTotalStock(), log.beforeLockedStock(), log.beforeAvailableStock(), log.afterTotalStock(), log.afterLockedStock(), log.afterAvailableStock(), log.remark(), log.operatorType(), log.operatorId(), log.operatorName(), log.sourceType(), log.createdAt());
+        return new StockOperationLogSnapshot(log.id(), log.skuId(), null, log.operationType(), log.businessType(), log.businessNo(), log.changeQuantity(), log.beforeTotalStock(), log.beforeLockedStock(), log.beforeAvailableStock(), log.afterTotalStock(), log.afterLockedStock(), log.afterAvailableStock(), log.remark(), log.operatorType(), log.operatorId(), log.operatorName(), log.sourceType(), log.createdAt());
     }
 }

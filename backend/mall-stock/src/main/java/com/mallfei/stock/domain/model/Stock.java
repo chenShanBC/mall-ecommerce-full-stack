@@ -37,10 +37,10 @@ public record Stock(
 
     public void ensureSellable() {
         if (STATUS_OFFLINE.equals(stockStatus)) {
-            throw BusinessException.badRequest("SKU库存状态为下架，无法销售: " + skuId);
+            throw BusinessException.badRequest("SKU库存已下线，无法预占销售库存: " + skuId);
         }
         if (STATUS_FROZEN.equals(stockStatus)) {
-            throw BusinessException.badRequest("SKU库存已冻结，无法销售: " + skuId);
+            throw BusinessException.badRequest("SKU库存已冻结，无法预占销售库存: " + skuId);
         }
     }
 
@@ -82,12 +82,94 @@ public record Stock(
         return copy(currentTotal - confirmQuantity, currentLocked - confirmQuantity, currentAvailable, stockStatus, lowStockThreshold, highStockThreshold);
     }
 
+    public Stock confirmConvergent(Integer quantity) {
+        int confirmQuantity = quantity == null ? 0 : quantity;
+        int currentTotal = totalStock == null ? 0 : totalStock;
+        int currentLocked = lockedStock == null ? 0 : lockedStock;
+        int currentAvailable = availableStock == null ? 0 : availableStock;
+        if (confirmQuantity <= 0) {
+            return this;
+        }
+        if (currentLocked >= confirmQuantity && currentTotal >= confirmQuantity) {
+            return copy(currentTotal - confirmQuantity, currentLocked - confirmQuantity, currentAvailable, stockStatus, lowStockThreshold, highStockThreshold);
+        }
+        if (currentAvailable >= confirmQuantity && currentTotal >= confirmQuantity) {
+            return copy(currentTotal - confirmQuantity, currentLocked, currentAvailable - confirmQuantity, stockStatus, lowStockThreshold, highStockThreshold);
+        }
+        throw BusinessException.badRequest("库存确认最终态收敛失败，库存不足: " + skuId);
+    }
+
     public Stock restore(Integer quantity) {
         int restoreQuantity = quantity == null ? 0 : quantity;
         int currentAvailable = availableStock == null ? 0 : availableStock;
         int currentTotal = totalStock == null ? 0 : totalStock;
         int nextAvailable = currentAvailable + restoreQuantity;
         return copy(currentTotal + restoreQuantity, lockedStock, nextAvailable, stockStatus, lowStockThreshold, highStockThreshold);
+    }
+
+    public Stock adjust(StockAdjustmentCommand command) {
+        StockAdjustmentCommand actual = command == null ? StockAdjustmentCommand.direct(totalStock, availableStock, lockedStock, "") : command;
+        return switch (actual.type()) {
+            case REPLENISH, INVENTORY_GAIN -> increaseAvailableAndTotal(actual.changeQuantity());
+            case INVENTORY_LOSS -> decreaseAvailableAndTotal(actual.changeQuantity());
+            case MANUAL_UNLOCK -> unlock(actual.changeQuantity());
+            case FORCE_DEDUCT -> forceDeduct(actual.changeQuantity());
+            case OTHER -> directAdjust(actual.targetTotalStock(), actual.targetAvailableStock(), actual.targetLockedStock());
+        };
+    }
+
+    public Stock directAdjust(Integer targetTotalStock, Integer targetAvailableStock, Integer targetLockedStock) {
+        int nextTotal = nonNegative(targetTotalStock, "总库存不能为负数");
+        int nextAvailable = nonNegative(targetAvailableStock, "可用库存不能为负数");
+        int nextLocked = nonNegative(targetLockedStock, "锁定库存不能为负数");
+        ensureStockInvariant(nextTotal, nextAvailable, nextLocked);
+        return copy(nextTotal, nextLocked, nextAvailable, stockStatus, lowStockThreshold, highStockThreshold);
+    }
+
+    private Stock increaseAvailableAndTotal(Integer quantity) {
+        int change = positive(quantity);
+        int currentTotal = safeTotalStock();
+        int currentAvailable = safeAvailableStock();
+        int currentLocked = safeLockedStock();
+        return directAdjust(currentTotal + change, currentAvailable + change, currentLocked);
+    }
+
+    private Stock decreaseAvailableAndTotal(Integer quantity) {
+        int change = positive(quantity);
+        int currentTotal = safeTotalStock();
+        int currentAvailable = safeAvailableStock();
+        int currentLocked = safeLockedStock();
+        if (currentAvailable < change) {
+            throw BusinessException.badRequest("可用库存不足，无法执行盘亏");
+        }
+        return directAdjust(currentTotal - change, currentAvailable - change, currentLocked);
+    }
+
+    private Stock unlock(Integer quantity) {
+        int change = positive(quantity);
+        int currentTotal = safeTotalStock();
+        int currentAvailable = safeAvailableStock();
+        int currentLocked = safeLockedStock();
+        if (currentLocked < change) {
+            throw BusinessException.badRequest("锁定库存不足，无法手动解锁");
+        }
+        return directAdjust(currentTotal, currentAvailable + change, currentLocked - change);
+    }
+
+    private Stock forceDeduct(Integer quantity) {
+        int change = positive(quantity);
+        int currentTotal = safeTotalStock();
+        int currentAvailable = safeAvailableStock();
+        int currentLocked = safeLockedStock();
+        if (currentTotal < change) {
+            throw BusinessException.badRequest("总库存不足，无法强制扣减");
+        }
+        int availableDeduct = Math.min(currentAvailable, change);
+        int remain = change - availableDeduct;
+        if (currentLocked < remain) {
+            throw BusinessException.badRequest("库存不足，无法强制扣减");
+        }
+        return directAdjust(currentTotal - change, currentAvailable - availableDeduct, currentLocked - remain);
     }
 
     public Stock applyPolicy(String stockStatus, Integer lowStockThreshold, Integer highStockThreshold) {
@@ -140,6 +222,41 @@ public record Stock(
             return stockStatus;
         }
         return STATUS_ACTIVE;
+    }
+
+    private static int positive(Integer quantity) {
+        if (quantity == null || quantity <= 0) {
+            throw BusinessException.badRequest("调整数量必须大于 0");
+        }
+        return quantity;
+    }
+
+    private static int nonNegative(Integer value, String message) {
+        if (value == null || value < 0) {
+            throw BusinessException.badRequest(message);
+        }
+        return value;
+    }
+
+    private static void ensureStockInvariant(int totalStock, int availableStock, int lockedStock) {
+        if (totalStock < lockedStock) {
+            throw BusinessException.badRequest("总库存不能小于锁定库存");
+        }
+        if (totalStock != availableStock + lockedStock) {
+            throw BusinessException.badRequest("总库存必须等于可用库存加锁定库存");
+        }
+    }
+
+    private int safeTotalStock() {
+        return Math.max(0, totalStock == null ? 0 : totalStock);
+    }
+
+    private int safeAvailableStock() {
+        return Math.max(0, availableStock == null ? 0 : availableStock);
+    }
+
+    private int safeLockedStock() {
+        return Math.max(0, lockedStock == null ? 0 : lockedStock);
     }
 
     private int safeLowThreshold() {

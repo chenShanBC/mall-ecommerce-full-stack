@@ -6,12 +6,14 @@ export const adminPageCache = reactive({
   dashboard: {
     overview: {},
     products: [],
+    productStats: { total: 0, online: 0, offline: 0 },
     warnings: [],
     loaded: false,
     updatedAt: 0,
   },
   products: {
-    filters: { keyword: '', categoryId: null, status: '' },
+    filters: { keyword: '', categoryId: null, status: '', salesBand: '', hotSalesThreshold: 100, lowSalesThreshold: 10 },
+    query: { sortBy: 'id', sortOrder: 'desc' },
     pager: { page: 1, size: 10, total: 0 },
     list: [],
     categories: [],

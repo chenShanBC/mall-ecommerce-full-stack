@@ -39,6 +39,10 @@ public record OrderSummaryView(
         @Schema(description = "首个商品SKU 名称", example = "曜讯 蓝牙音箱 户外版")
         String firstSkuName,
         @Schema(description = "首个商品图片", example = "https://cdn.mallfei.com/product/speaker.png")
-        String firstSkuImageUrl
+        String firstSkuImageUrl,
+        @Schema(description = "最新退款单号", example = "ORF202606020001")
+        String latestRefundNo,
+        @Schema(description = "最新退款状态", example = "REFUND_PENDING")
+        String latestRefundStatus
 ) {
 }

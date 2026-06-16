@@ -72,12 +72,42 @@ public class MybatisStockRepository implements StockRepository {
         if (affected <= 0) throw BusinessException.badRequest("库存更新失败，未匹配到可更新记录: sku=" + stock.skuId());
     }
 
+    @Override
+    public void applyReservedSync(Long skuId, Integer quantity) {
+        int affected = stockMapper.applyReservedSync(skuId, quantity);
+        if (affected <= 0) throw BusinessException.badRequest("库存预占落库失败，库存不足或状态不可售: sku=" + skuId);
+    }
+
+    @Override
+    public void applyCancelledSync(Long skuId, Integer quantity) {
+        int affected = stockMapper.applyCancelledSync(skuId, quantity);
+        if (affected <= 0) throw BusinessException.badRequest("库存取消落库失败，锁定库存不足: sku=" + skuId);
+    }
+
+    @Override
+    public void applyConfirmedSync(Long skuId, Integer quantity) {
+        int affected = stockMapper.applyConfirmedSync(skuId, quantity);
+        if (affected <= 0) throw BusinessException.badRequest("库存确认落库失败，锁定库存不足: sku=" + skuId);
+    }
+
+    @Override
+    public void calibrateSnapshot(Long skuId, Integer lockedStock, Integer availableStock, String warningStatus) {
+        int affected = stockMapper.calibrateSnapshot(skuId, lockedStock, availableStock, warningStatus);
+        if (affected <= 0) throw BusinessException.badRequest("库存快照校准失败，未匹配到库存记录: sku=" + skuId);
+    }
+
     private LambdaQueryWrapper<StockDO> buildQueryWrapper(StockQuery query) {
         LambdaQueryWrapper<StockDO> wrapper = new LambdaQueryWrapper<>();
         if (query != null) {
             if (query.skuId() != null) wrapper.eq(StockDO::getSkuId, query.skuId());
             if (query.stockStatus() != null && !query.stockStatus().isBlank()) wrapper.eq(StockDO::getStockStatus, query.stockStatus());
-            if (query.warningStatus() != null && !query.warningStatus().isBlank()) wrapper.eq(StockDO::getWarningStatus, query.warningStatus());
+            if (query.warningStatus() != null && !query.warningStatus().isBlank()) {
+                if ("WARNING".equalsIgnoreCase(query.warningStatus())) {
+                    wrapper.in(StockDO::getWarningStatus, Stock.WARNING_LOW, Stock.WARNING_HIGH);
+                } else {
+                    wrapper.eq(StockDO::getWarningStatus, query.warningStatus());
+                }
+            }
         }
         return wrapper;
     }

@@ -17,4 +17,8 @@ public class FileFacade {
     public FileUploadResult uploadAvatar(MultipartFile file) {
         return fileApplicationService.uploadAvatar(file);
     }
+
+    public FileUploadResult uploadProductImage(MultipartFile file) {
+        return fileApplicationService.uploadProductImage(file);
+    }
 }

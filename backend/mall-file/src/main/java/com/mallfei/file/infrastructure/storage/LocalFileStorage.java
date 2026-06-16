@@ -27,9 +27,18 @@ public class LocalFileStorage implements FileStorage {
 
     @Override
     public StoredFile storeAvatar(MultipartFile file, String extension) {
+        return store(file, extension, "avatar");
+    }
+
+    @Override
+    public StoredFile storeProductImage(MultipartFile file, String extension) {
+        return store(file, extension, "product");
+    }
+
+    private StoredFile store(MultipartFile file, String extension, String bizDir) {
         String dateDir = DATE_DIR_FORMATTER.format(LocalDate.now());
         String fileName = UUID.randomUUID().toString().replace("-", "") + "." + extension;
-        String relativePath = "avatar/" + dateDir + "/" + fileName;
+        String relativePath = bizDir + "/" + dateDir + "/" + fileName;
 
         Path rootDir = Paths.get(fileStorageProperties.getUploadDir()).toAbsolutePath().normalize();
         Path target = rootDir.resolve(relativePath).normalize();

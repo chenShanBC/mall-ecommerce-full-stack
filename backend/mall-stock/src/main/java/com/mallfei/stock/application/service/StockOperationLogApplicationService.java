@@ -26,13 +26,25 @@ public class StockOperationLogApplicationService {
                        Stock after,
                        String remark,
                        String sourceType) {
+        recordIfAbsent(skuId, operationType, businessType, businessNo, changeQuantity, before, after, remark, sourceType);
+    }
+
+    public boolean recordIfAbsent(Long skuId,
+                                  String operationType,
+                                  String businessType,
+                                  String businessNo,
+                                  Integer changeQuantity,
+                                  Stock before,
+                                  Stock after,
+                                  String remark,
+                                  String sourceType) {
         String operatorType = "SYSTEM";
         String operatorName = "system";
         if ("ADMIN".equalsIgnoreCase(businessType) || "ADMIN_UI".equalsIgnoreCase(sourceType)) {
             operatorType = "ADMIN";
             operatorName = "admin";
         }
-        stockOperationLogRepository.save(StockOperationLog.of(
+        return stockOperationLogRepository.saveIfAbsent(StockOperationLog.of(
                 skuId,
                 operationType,
                 businessType,

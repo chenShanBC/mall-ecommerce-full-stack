@@ -95,4 +95,13 @@ public class PayController {
     public ApiResponse<PayOrderView> repairPaidOrder(@PathVariable String orderNo) {
         return ApiResponse.success(payApplicationService.repairPaidOrder(orderNo));
     }
+
+    @RequireLogin
+    @Operation(summary = "同步退款状态")
+    @PostMapping("/orders/{orderNo}/refunds/{refundNo}/sync-status")
+    public ApiResponse<PayOrderView> reconcileRefund(@PathVariable String orderNo,
+                                                     @PathVariable String refundNo,
+                                                     @RequestParam(required = false) Long refundAmountCent) {
+        return ApiResponse.success(payApplicationService.reconcileRefund(orderNo, refundNo, refundAmountCent));
+    }
 }

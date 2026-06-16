@@ -7,6 +7,7 @@ import com.mallfei.admin.application.vo.AdminLoginResult;
 import com.mallfei.admin.domain.model.AdminAccount;
 import com.mallfei.admin.domain.repository.AdminAccountRepository;
 import com.mallfei.admin.domain.service.AdminDomainService;
+import com.mallfei.auth.domain.model.AuthDeviceType;
 import com.mallfei.auth.facade.AuthFacade;
 import com.mallfei.common.auth.AuthenticatedPrincipal;
 import com.mallfei.common.enums.IdentityType;
@@ -39,7 +40,8 @@ public class AdminApplicationService {
                 adminAccount.nickname(),
                 "https://via.placeholder.com/120x120.png?text=admin",
                 adminAccount.roleCode(),
-                adminAccount.permissions()
+                adminAccount.permissions(),
+                AuthDeviceType.ADMIN_WEB
         );
         return new AdminLoginResult(token, adminAccount.id(), adminAccount.username(), adminAccount.nickname(), adminAccount.roleCode(), adminAccount.permissions());
     }
@@ -47,6 +49,7 @@ public class AdminApplicationService {
     public AuthenticatedPrincipal currentAdmin() {
         AuthenticatedPrincipal principal = authFacade.currentPrincipal();
         AdminAccount adminAccount = adminDomainService.loadById(principal.principalId());
+        authFacade.refreshAdminSession(adminAccount.nickname(), adminAccount.roleCode(), adminAccount.permissions());
         return new AuthenticatedPrincipal(
                 principal.loginId(),
                 adminAccount.id(),

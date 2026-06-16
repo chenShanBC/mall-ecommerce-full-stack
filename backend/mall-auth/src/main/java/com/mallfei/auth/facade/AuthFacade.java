@@ -1,6 +1,7 @@
 package com.mallfei.auth.facade;
 
 import com.mallfei.auth.application.service.AuthApplicationService;
+import com.mallfei.auth.domain.model.AuthDeviceType;
 import com.mallfei.common.auth.AuthenticatedPrincipal;
 import com.mallfei.common.enums.IdentityType;
 import org.springframework.stereotype.Component;
@@ -17,7 +18,11 @@ public class AuthFacade {
     }
 
     public String createLoginSession(Long principalId, String account, IdentityType identityType, String nickname, String avatar, String roleCode, List<String> permissions) {
-        return authApplicationService.createLoginSession(principalId, account, identityType, nickname, avatar, roleCode, permissions);
+        return createLoginSession(principalId, account, identityType, nickname, avatar, roleCode, permissions, AuthDeviceType.defaultOf(identityType));
+    }
+
+    public String createLoginSession(Long principalId, String account, IdentityType identityType, String nickname, String avatar, String roleCode, List<String> permissions, AuthDeviceType deviceType) {
+        return authApplicationService.createLoginSession(principalId, account, identityType, nickname, avatar, roleCode, permissions, deviceType);
     }
 
     public void refreshAdminSession(String nickname, String roleCode, List<String> permissions) {

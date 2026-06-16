@@ -7,7 +7,11 @@ import java.time.LocalDateTime;
 
 public interface StockOperationLogRepository {
 
+    boolean exists(Long skuId, String operationType, String businessType, String businessNo);
+
     StockOperationLog save(StockOperationLog stockOperationLog);
+
+    boolean saveIfAbsent(StockOperationLog stockOperationLog);
 
     PageResult<StockOperationLog> page(Long skuId,
                                        String operationType,

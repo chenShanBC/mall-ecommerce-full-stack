@@ -43,12 +43,24 @@ public class FileApplicationService {
     public FileUploadResult uploadAvatar(MultipartFile file) {
         String extension = fileDomainService.validateAvatarFile(file);
         StoredFile storedFile = fileStorage.storeAvatar(file, extension);
+        FileUploadResult result = saveFileRecord(storedFile, "USER_AVATAR", "头像上传失败");
+        userApplicationService.updateCurrentUserAvatar(result.url());
+        return result;
+    }
+
+    public FileUploadResult uploadProductImage(MultipartFile file) {
+        String extension = fileDomainService.validateProductImageFile(file);
+        StoredFile storedFile = fileStorage.storeProductImage(file, extension);
+        return saveFileRecord(storedFile, "PRODUCT_IMAGE", "商品图片上传失败");
+    }
+
+    private FileUploadResult saveFileRecord(StoredFile storedFile, String bizType, String errorMessage) {
         String accessUrl = normalizePublicBasePath(fileStorageProperties.getPublicBasePath()) + "/" + storedFile.relativePath();
         AuthenticatedPrincipal principal = authFacade.currentRequiredPrincipal();
         try {
             FileRecord savedRecord = fileRecordRepository.save(new FileRecord(
                     null,
-                    "USER_AVATAR",
+                    bizType,
                     storedFile.storageType(),
                     storedFile.fileName(),
                     storedFile.originalFileName(),
@@ -62,7 +74,6 @@ public class FileApplicationService {
                     principal.nickname(),
                     "ACTIVE"
             ));
-            userApplicationService.updateCurrentUserAvatar(savedRecord.accessUrl());
             return new FileUploadResult(
                     savedRecord.id(),
                     savedRecord.storageType(),
@@ -73,7 +84,6 @@ public class FileApplicationService {
             );
         } catch (Exception ex) {
             if (isMissingFileRecordTable(ex)) {
-                userApplicationService.updateCurrentUserAvatar(accessUrl);
                 return new FileUploadResult(
                         null,
                         storedFile.storageType(),
@@ -83,7 +93,7 @@ public class FileApplicationService {
                         storedFile.size()
                 );
             }
-            throw BusinessException.badRequest("头像上传失败");
+            throw BusinessException.badRequest(errorMessage);
         }
     }
 

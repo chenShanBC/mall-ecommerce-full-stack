@@ -3,10 +3,8 @@
     <el-card class="admin-page-card">
       <div class="admin-filter-bar">
         <el-input v-model="query.keyword" placeholder="售后单号 / 订单号" clearable style="width: 280px" @keyup.enter="loadData" />
-        <el-select v-model="query.status" clearable placeholder="售后状态" style="width: 180px">
-          <el-option label="待审核" value="PENDING_REVIEW" />
-          <el-option label="已通过" value="APPROVED" />
-          <el-option label="已驳回" value="REJECTED" />
+        <el-select v-model="query.status" clearable placeholder="全部售后状态" style="width: 180px">
+          <el-option v-for="option in aftersaleStatusOptions" :key="option.value" :label="option.label" :value="option.value" />
         </el-select>
         <el-button type="primary" @click="loadData">查询</el-button>
       </div>
@@ -15,19 +13,31 @@
         <el-table-column prop="aftersaleNo" label="售后单号" min-width="190" />
         <el-table-column prop="orderNo" label="订单号" min-width="180" />
         <el-table-column prop="userId" label="用户ID" width="100" />
-        <el-table-column prop="aftersaleType" label="类型" width="130" />
+        <el-table-column prop="aftersaleType" label="类型" width="130">
+          <template #default="{ row }">{{ aftersaleTypeLabel(row.aftersaleType) }}</template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="140">
           <template #default="{ row }">
             <el-tag :type="aftersaleStatusMeta(row.status).type">{{ aftersaleStatusMeta(row.status).label }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="refundAmount" label="退款金额(分)" width="140" />
-        <el-table-column prop="reason" label="原因" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="refundAmount" label="退款金额(分)" width="140">
+          <template #default="{ row }">{{ row.refundAmount ?? row.refundAmountCent ?? '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="reason" label="申请原因" min-width="180" :show-overflow-tooltip="{ effect: 'light', placement: 'bottom-start', showAfter: 300, offset: 8, popperClass: 'admin-table-tooltip' }">
+          <template #default="{ row }">{{ row.reason || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="rejectReason" label="驳回原因" min-width="180" :show-overflow-tooltip="{ effect: 'light', placement: 'bottom-start', showAfter: 300, offset: 8, popperClass: 'admin-table-tooltip' }">
+          <template #default="{ row }">{{ row.rejectReason || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="failReason" label="失败原因" min-width="180" :show-overflow-tooltip="{ effect: 'light', placement: 'bottom-start', showAfter: 300, offset: 8, popperClass: 'admin-table-tooltip' }">
+          <template #default="{ row }">{{ row.failReason || '-' }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="280">
           <template #default="{ row }">
             <el-button size="small" @click="openDetail(row.aftersaleNo)">详情</el-button>
-            <el-button v-if="row.status === 'PENDING_REVIEW' && canManage" size="small" type="success" @click="review(row.aftersaleNo, 'APPROVE')">通过</el-button>
-            <el-button v-if="row.status === 'PENDING_REVIEW' && canManage" size="small" type="danger" @click="review(row.aftersaleNo, 'REJECT')">驳回</el-button>
+            <el-button v-if="isPendingReview(row)" size="small" type="success" @click="openReviewDialog(row, 'APPROVE')">通过</el-button>
+            <el-button v-if="isPendingReview(row)" size="small" type="danger" @click="openReviewDialog(row, 'REJECT')">驳回</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -38,19 +48,34 @@
         <div class="admin-detail__item"><span class="admin-detail__label">售后单号</span>{{ detail.aftersaleNo }}</div>
         <div class="admin-detail__item"><span class="admin-detail__label">订单号</span>{{ detail.orderNo }}</div>
         <div class="admin-detail__item"><span class="admin-detail__label">用户ID</span>{{ detail.userId }}</div>
-        <div class="admin-detail__item"><span class="admin-detail__label">售后类型</span>{{ detail.aftersaleType }}</div>
+        <div class="admin-detail__item"><span class="admin-detail__label">售后类型</span>{{ aftersaleTypeLabel(detail.aftersaleType) }}</div>
         <div class="admin-detail__item"><span class="admin-detail__label">售后状态</span><el-tag :type="aftersaleStatusMeta(detail.status).type">{{ aftersaleStatusMeta(detail.status).label }}</el-tag></div>
-        <div class="admin-detail__item"><span class="admin-detail__label">退款金额</span>{{ detail.refundAmount }}</div>
-        <div class="admin-detail__item full"><span class="admin-detail__label">原因</span>{{ detail.reason }}</div>
+        <div class="admin-detail__item"><span class="admin-detail__label">退款金额</span>{{ detail.refundAmount ?? detail.refundAmountCent ?? '-' }}</div>
+        <div class="admin-detail__item full"><span class="admin-detail__label">申请原因</span>{{ detail.reason || '-' }}</div>
+        <div class="admin-detail__item full"><span class="admin-detail__label">驳回原因</span>{{ detail.rejectReason || '-' }}</div>
+        <div class="admin-detail__item full"><span class="admin-detail__label">失败原因</span>{{ detail.failReason || '-' }}</div>
       </div>
+    </el-dialog>
+
+    <el-dialog v-model="reviewVisible" :title="reviewForm.action === 'APPROVE' ? '通过售后申请' : '驳回售后申请'" width="460px" append-to-body destroy-on-close align-center class="admin-beauty-dialog">
+      <el-form :model="reviewForm" label-width="90px" class="admin-dialog-form">
+        <el-form-item label="售后单号"><span>{{ reviewForm.aftersaleNo }}</span></el-form-item>
+        <el-form-item :label="reviewForm.action === 'APPROVE' ? '审核备注' : '驳回原因'">
+          <el-input v-model="reviewForm.reason" type="textarea" :rows="4" maxlength="200" show-word-limit :placeholder="reviewForm.action === 'APPROVE' ? '请输入审核备注，例如：同意退款' : '请输入驳回原因，用户将在 H5 端看到该原因'" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="reviewVisible = false">取消</el-button>
+        <el-button :type="reviewForm.action === 'APPROVE' ? 'success' : 'danger'" :loading="reviewSubmitting" @click="submitReview">{{ reviewForm.action === 'APPROVE' ? '确认通过' : '确认驳回' }}</el-button>
+      </template>
     </el-dialog>
   </AdminLayout>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import AdminLayout from '../components/AdminLayout.vue';
 import { fetchAdminAftersaleDetail, fetchAdminAftersales, reviewAdminAftersale } from '../api';
 import { useAdminStore } from '../stores/admin';
@@ -58,19 +83,50 @@ import { confirmAction } from '../utils/action';
 import { getStatusTagMeta } from '../utils/status';
 
 const router = useRouter();
+const route = useRoute();
 const adminStore = useAdminStore();
-const canManage = computed(() => adminStore.hasPermission('order:manage'));
-const aftersaleStatusMeta = (status) => getStatusTagMeta('aftersale', status);
 const query = reactive({ keyword: '', status: '' });
+const aftersaleStatusOptions = [
+  { label: '待审核', value: 'PENDING_REVIEW' },
+  { label: '审核通过', value: 'APPROVED' },
+  { label: '审核驳回', value: 'REJECTED' },
+  { label: '退款处理中', value: 'REFUNDING' },
+  { label: '退款处理中', value: 'REFUND_PROCESSING' },
+  { label: '退款成功', value: 'REFUND_SUCCESS' },
+  { label: '退款失败', value: 'REFUND_FAILED' },
+  { label: '退款关闭', value: 'REFUND_CLOSED' },
+  { label: '已取消', value: 'CANCELLED' },
+];
+const normalizeStatus = (status) => String(status || '').toUpperCase();
+const aftersaleTypeLabel = (type) => {
+  const maps = {
+    REFUND_ONLY: '仅退款',
+    RETURN_REFUND: '退货退款',
+    EXCHANGE: '换货',
+    REFUND: '退款',
+  };
+  return maps[normalizeStatus(type)] || type || '-';
+};
+const isPendingReview = (row) => normalizeStatus(row?.status) === 'PENDING_REVIEW';
+const aftersaleStatusMeta = (status) => getStatusTagMeta('aftersale', status);
+const applyRouteQuery = () => {
+  query.keyword = String(route.query.keyword || '');
+  query.status = route.query.status ? String(route.query.status) : '';
+};
 const rows = ref([]);
 const loading = ref(false);
 const detailVisible = ref(false);
+const reviewVisible = ref(false);
+const reviewSubmitting = ref(false);
 const detail = ref(null);
+const reviewForm = reactive({ aftersaleNo: '', action: 'APPROVE', reason: '' });
 
 const loadData = async () => {
   loading.value = true;
   try {
-    const { data } = await fetchAdminAftersales(query);
+    const params = { keyword: query.keyword.trim() };
+    if (query.status) params.status = query.status;
+    const { data } = await fetchAdminAftersales(params);
     rows.value = data.data?.records || [];
   } catch (error) {
     ElMessage.error(error?.response?.data?.msg || '售后列表加载失败');
@@ -85,17 +141,28 @@ const openDetail = async (aftersaleNo) => {
   detailVisible.value = true;
 };
 
-const review = async (aftersaleNo, action) => {
+const openReviewDialog = (row, action) => {
+  reviewForm.aftersaleNo = row.aftersaleNo;
+  reviewForm.action = action;
+  reviewForm.reason = '';
+  reviewVisible.value = true;
+};
+
+const submitReview = async () => {
   try {
-    await confirmAction(`确认${action === 'APPROVE' ? '通过' : '驳回'}售后单 ${aftersaleNo} 吗？`);
-    await reviewAdminAftersale(aftersaleNo, { action });
-    ElMessage.success('操作成功');
+    await confirmAction(`确认${reviewForm.action === 'APPROVE' ? '通过' : '驳回'}售后单 ${reviewForm.aftersaleNo} 吗？`);
+    reviewSubmitting.value = true;
+    await reviewAdminAftersale(reviewForm.aftersaleNo, { action: reviewForm.action, reason: reviewForm.reason });
+    ElMessage.success(reviewForm.action === 'APPROVE' ? '已生成退款单，请联系支付管理去同步完成退款' : '已驳回退款申请');
+    reviewVisible.value = false;
     await loadData();
-    if (detail.value?.aftersaleNo === aftersaleNo) {
-      await openDetail(aftersaleNo);
+    if (detail.value?.aftersaleNo === reviewForm.aftersaleNo) {
+      await openDetail(reviewForm.aftersaleNo);
     }
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error?.response?.data?.msg || '售后审核失败');
+  } finally {
+    reviewSubmitting.value = false;
   }
 };
 
@@ -104,5 +171,16 @@ const handleLogout = async () => {
   router.push('/login');
 };
 
-onMounted(loadData);
+onMounted(() => {
+  applyRouteQuery();
+  loadData();
+});
+watch(() => route.query.status, () => {
+  applyRouteQuery();
+  loadData();
+});
+watch(() => route.query.keyword, () => {
+  applyRouteQuery();
+  loadData();
+});
 </script>

@@ -62,14 +62,14 @@ public class AdminUserManagementApplicationService {
     public AdminUserDetailView disableUser(Long userId) {
         UserAccount updated = userAccountRepository.update(userAccountRepository.findById(userId).orElseThrow().disable());
         authFacade.disableUserSession(userId);
-        adminAccountManagementApplicationService.recordOperation("USER", "USER_DISABLE", "禁用C端用户 userId=" + userId + "，已清理登录态并加入禁用黑名单", "SUCCESS");
+        adminAccountManagementApplicationService.recordOperation("USER", "USER_DISABLE", "禁用C端用户：userId=" + userId, "SUCCESS");
         return userDetail(updated.id());
     }
 
     public AdminUserDetailView enableUser(Long userId) {
         UserAccount updated = userAccountRepository.update(userAccountRepository.findById(userId).orElseThrow().enable());
         authFacade.enableUserSession(userId);
-        adminAccountManagementApplicationService.recordOperation("USER", "USER_ENABLE", "启用C端用户 userId=" + userId + "，已移出禁用黑名单", "SUCCESS");
+        adminAccountManagementApplicationService.recordOperation("USER", "USER_ENABLE", "启用C端用户：userId=" + userId, "SUCCESS");
         return userDetail(updated.id());
     }
 

@@ -8,6 +8,8 @@ public record AdminStockOperationLogView(
         Long id,
         @Schema(description = "SKU ID", example = "1001")
         Long skuId,
+        @Schema(description = "SKU 名称", example = "黑色 128G")
+        String skuName,
         @Schema(description = "操作类型", example = "MANUAL_ADJUST")
         String operationType,
         @Schema(description = "业务类型", example = "ADMIN")

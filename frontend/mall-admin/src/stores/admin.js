@@ -32,6 +32,7 @@ export const useAdminStore = defineStore('admin', {
         { permission: 'stock:view', path: '/stocks' },
         { permission: 'payment:view', path: '/pays' },
         { permission: 'reconciliation:view', path: '/reconciliations' },
+        { permission: 'stock:reconcile:view', path: '/reconciliations?type=stock' },
         { permission: 'user:view', path: '/users' },
         { permission: 'admin:view', path: '/accounts' },
         { permission: 'log:operation:view', path: '/operation-logs' },
@@ -49,15 +50,13 @@ export const useAdminStore = defineStore('admin', {
       if (!router) return;
       initAdminForceLogoutSocket(this, router);
     },
+    clearProductSalesThresholdSession() {
+      const adminId = this.adminId || 'anonymous';
+      sessionStorage.removeItem(`mallfei-admin-product-sales-threshold-session:${adminId}`);
+    },
     clearLocalSession() {
-      this.token = '';
-      this.profile = null;
-      this.dashboard = null;
-      this.profileLoaded = false;
-      this.profileLoadingPromise = null;
-      this.sessionCheckPromise = null;
-      localStorage.removeItem('mall-admin-token');
-      localStorage.removeItem('mall-admin-profile');
+      this.clearProductSalesThresholdSession();
+      this.clearLocalSession();
     },
     async login(form) {
       const { data } = await adminLogin(form);

@@ -1,7 +1,16 @@
 <template>
-  <div class="floating-cart" :style="floatingStyle">
+  <div
+    ref="floatingRef"
+    class="floating-cart"
+    :class="{ 'floating-cart--dragging': dragging }"
+    :style="floatingStyle"
+    @touchstart.passive="handleDragStart"
+    @touchmove.prevent="handleDragMove"
+    @touchend="handleDragEnd"
+    @mousedown="handleMouseDown"
+  >
     <van-badge :content="badgeCount" :show-zero="false" :max="99">
-      <van-button class="floating-cart-btn" round type="primary" @click="showPreview = true">
+      <van-button class="floating-cart-btn" round type="primary" @click="handleButtonClick">
         <van-icon name="shopping-cart-o" size="22" />
       </van-button>
     </van-badge>
@@ -76,21 +85,43 @@ const props = defineProps({
     type: String,
     default: '96px',
   },
+  draggable: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const CART_REFRESH_EVENT = 'mallfei:cart-changed';
+const FLOATING_CART_POSITION_KEY = 'mallfei:h5-floating-cart-position-v1';
+const BUTTON_SIZE = 52;
+const EDGE_PADDING = 12;
 
 const router = useRouter();
 const showPreview = ref(false);
+const floatingRef = ref(null);
+const position = ref(null);
+const dragging = ref(false);
+const movedDuringDrag = ref(false);
+const dragStart = ref({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
 const remoteQuantity = ref(0);
 const fallbackQuantity = ref(0);
 const previewItems = ref([]);
 
 const badgeCount = computed(() => Math.max(remoteQuantity.value, fallbackQuantity.value));
-const floatingStyle = computed(() => ({
-  right: props.right,
-  bottom: props.bottom,
-}));
+const floatingStyle = computed(() => {
+  if (props.draggable && position.value) {
+    return {
+      left: `${position.value.left}px`,
+      top: `${position.value.top}px`,
+      right: 'auto',
+      bottom: 'auto',
+    };
+  }
+  return {
+    right: props.right,
+    bottom: props.bottom,
+  };
+});
 const totalQuantity = computed(() => previewItems.value.reduce((sum, item) => sum + Number(item.quantity || 0), 0));
 const totalAmount = computed(() => previewItems.value.reduce((sum, item) => sum + Number(item.subtotalAmount || 0), 0));
 
@@ -175,6 +206,105 @@ const openCartPage = async () => {
   router.push('/cart');
 };
 
+const getViewportPoint = (event) => {
+  const touch = event.touches?.[0] || event.changedTouches?.[0];
+  return {
+    x: touch ? touch.clientX : event.clientX,
+    y: touch ? touch.clientY : event.clientY,
+  };
+};
+
+const clampPosition = (left, top) => ({
+  left: Math.min(Math.max(left, EDGE_PADDING), window.innerWidth - BUTTON_SIZE - EDGE_PADDING),
+  top: Math.min(Math.max(top, EDGE_PADDING), window.innerHeight - BUTTON_SIZE - EDGE_PADDING),
+});
+
+const initDraggablePosition = () => {
+  if (!props.draggable || typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(FLOATING_CART_POSITION_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      position.value = clampPosition(Number(saved.left || 0), Number(saved.top || 0));
+      return;
+    }
+  } catch {
+  }
+  const right = Number.parseInt(props.right, 10) || 18;
+  const bottom = Number.parseInt(props.bottom, 10) || 96;
+  position.value = clampPosition(window.innerWidth - BUTTON_SIZE - right, window.innerHeight - BUTTON_SIZE - bottom);
+};
+
+const persistDraggablePosition = () => {
+  if (!props.draggable || !position.value) return;
+  try {
+    localStorage.setItem(FLOATING_CART_POSITION_KEY, JSON.stringify(position.value));
+  } catch {
+  }
+};
+
+const handleDragStart = (event) => {
+  if (!props.draggable || showPreview.value) return;
+  const point = getViewportPoint(event);
+  const rect = floatingRef.value?.getBoundingClientRect();
+  dragging.value = true;
+  movedDuringDrag.value = false;
+  dragStart.value = {
+    pointerX: point.x,
+    pointerY: point.y,
+    left: position.value?.left ?? rect?.left ?? 0,
+    top: position.value?.top ?? rect?.top ?? 0,
+  };
+};
+
+const handleDragMove = (event) => {
+  if (!dragging.value) return;
+  const point = getViewportPoint(event);
+  const deltaX = point.x - dragStart.value.pointerX;
+  const deltaY = point.y - dragStart.value.pointerY;
+  if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+    movedDuringDrag.value = true;
+  }
+  position.value = clampPosition(dragStart.value.left + deltaX, dragStart.value.top + deltaY);
+};
+
+const handleDragEnd = () => {
+  if (!dragging.value) return;
+  dragging.value = false;
+  persistDraggablePosition();
+  window.setTimeout(() => {
+    movedDuringDrag.value = false;
+  }, 80);
+};
+
+const handleMouseMove = (event) => {
+  handleDragMove(event);
+};
+
+const handleMouseUp = () => {
+  document.removeEventListener('mousemove', handleMouseMove);
+  document.removeEventListener('mouseup', handleMouseUp);
+  handleDragEnd();
+};
+
+const handleMouseDown = (event) => {
+  if (!props.draggable) return;
+  handleDragStart(event);
+  document.addEventListener('mousemove', handleMouseMove);
+  document.addEventListener('mouseup', handleMouseUp);
+};
+
+const handleButtonClick = () => {
+  if (movedDuringDrag.value) return;
+  showPreview.value = true;
+};
+
+const handleResize = () => {
+  if (!props.draggable || !position.value) return;
+  position.value = clampPosition(position.value.left, position.value.top);
+  persistDraggablePosition();
+};
+
 const handleCartChanged = async () => {
   await loadQuantity();
   if (showPreview.value) {
@@ -183,12 +313,20 @@ const handleCartChanged = async () => {
 };
 
 onMounted(() => {
+  initDraggablePosition();
   loadQuantity();
   window.addEventListener(CART_REFRESH_EVENT, handleCartChanged);
+  window.addEventListener('resize', handleResize);
 });
-onActivated(loadQuantity);
+onActivated(() => {
+  initDraggablePosition();
+  loadQuantity();
+});
 onBeforeUnmount(() => {
   window.removeEventListener(CART_REFRESH_EVENT, handleCartChanged);
+  window.removeEventListener('resize', handleResize);
+  document.removeEventListener('mousemove', handleMouseMove);
+  document.removeEventListener('mouseup', handleMouseUp);
 });
 </script>
 
@@ -196,6 +334,13 @@ onBeforeUnmount(() => {
 .floating-cart {
   position: fixed;
   z-index: 30;
+  touch-action: none;
+  user-select: none;
+}
+
+.floating-cart--dragging {
+  opacity: 0.88;
+  transform: scale(1.04);
 }
 
 .floating-cart-btn {

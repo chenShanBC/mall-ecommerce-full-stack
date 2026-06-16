@@ -16,6 +16,14 @@ public record AdminProductPageRowView(
         Integer skuCount,
         @Schema(description = "销售价，单位分", example = "9990")
         Long salePrice,
+        @Schema(description = "累计销量", example = "128")
+        Integer salesCount,
+        @Schema(description = "月销量", example = "38")
+        Integer monthlySalesCount,
+        @Schema(description = "销售分层：HOT-热销，LOW-低销，NORMAL-常规", example = "HOT")
+        String salesBand,
+        @Schema(description = "销售分层展示文案", example = "热销")
+        String salesBandLabel,
         @Schema(description = "库存", example = "0")
         Integer stock
 ) {

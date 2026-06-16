@@ -33,8 +33,10 @@ public class StockDomainService {
     public Stock updatePolicy(Long skuId, String stockStatus, Integer lowStockThreshold, Integer highStockThreshold) { Stock updated = loadStock(skuId).applyPolicy(stockStatus, lowStockThreshold, highStockThreshold); saveStock(updated); return updated; }
     public List<StockLockRecord> loadBusinessRecords(String businessType, String businessNo) { return stockLockRepository.findByBusiness(businessType, businessNo); }
     public StockLockRecord loadBusinessRecord(String businessType, String businessNo, Long skuId) { return stockLockRepository.findByBusiness(businessType, businessNo, skuId).orElse(null); }
+    public long sumReservedQuantity(Long skuId) { return stockLockRepository.sumReservedQuantity(skuId); }
     public StockLockRecord saveReservation(StockLockRecord stockLockRecord) { return stockLockRepository.save(stockLockRecord); }
     public void saveStock(Stock stock) { if (stock.id() == null) { stockRepository.save(stock); return; } stockRepository.update(stock); }
+    public void calibrateSnapshot(Long skuId, Integer lockedStock, Integer availableStock, String warningStatus) { stockRepository.calibrateSnapshot(skuId, lockedStock, availableStock, warningStatus); }
     public void validateReserveResult(Long result, Long skuId) { if (result == null) throw BusinessException.badRequest("Redis库存预占失败: " + skuId); if (result == -1L) throw BusinessException.badRequest("SKU库存不足: " + skuId); if (result == -2L) throw BusinessException.badRequest("SKU Redis库存未初始化: " + skuId); if (result == -3L) throw BusinessException.badRequest("当前业务单库存状态不允许重复预占: " + skuId); }
     public void validateCancelResult(Long result, Long skuId) { if (result == null) throw BusinessException.badRequest("库存取消失败: " + skuId); if (result == -3L) throw BusinessException.badRequest("库存已确认，不能取消: " + skuId); }
     public void validateConfirmResult(Long result, Long skuId) { if (result == null || result == -1L || result == -2L) throw BusinessException.badRequest("库存确认失败: " + skuId); if (result == -3L) throw BusinessException.badRequest("库存已取消，不能确认: " + skuId); }

@@ -1,10 +1,13 @@
 <template>
   <div class="app-shell">
-    <router-view v-slot="{ Component, route }">
-      <keep-alive :include="cachedRouteNames">
-        <component :is="Component" :key="route.name" />
-      </keep-alive>
-    </router-view>
+    <main class="app-shell__main">
+      <router-view v-slot="{ Component, route }">
+        <keep-alive :include="cachedRouteNames">
+          <component :is="Component" :key="route.name" />
+        </keep-alive>
+      </router-view>
+    </main>
+    <SiteFooter />
     <van-tabbar
       v-if="showTabbar"
       :model-value="activeTab"
@@ -21,6 +24,7 @@
 <script setup>
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import SiteFooter from './components/SiteFooter.vue';
 import { requireLogin } from './utils/requireLogin';
 
 const route = useRoute();
@@ -53,11 +57,46 @@ const handleTabChange = async (name) => {
 
 <style scoped>
 .app-shell {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   background:
     radial-gradient(circle at top left, rgba(129, 140, 248, 0.22), transparent 28%),
     radial-gradient(circle at top right, rgba(236, 72, 153, 0.14), transparent 24%),
     linear-gradient(180deg, #edf3ff 0%, #f7f9ff 100%);
+}
+
+.app-shell__main {
+  flex: 1 0 auto;
+}
+
+.app-shell__backbar {
+  --van-nav-bar-height: 48px;
+  --van-nav-bar-background: rgba(255, 255, 255, 0.9);
+  --van-nav-bar-title-text-color: #2d3a64;
+  --van-nav-bar-icon-color: #2d3a64;
+  z-index: 1200;
+  backdrop-filter: blur(18px);
+}
+
+.app-shell__backbar :deep(.van-nav-bar__content) {
+  margin: 8px 12px 0;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow: 0 14px 34px rgba(108, 123, 225, 0.14);
+  overflow: hidden;
+}
+
+.app-shell__backbar :deep(.van-nav-bar__left) {
+  left: 8px;
+  height: 100%;
+  padding: 0 12px;
+}
+
+.app-shell__backbar :deep(.van-icon-arrow-left) {
+  font-size: 22px;
+  font-weight: 800;
 }
 
 :deep(.van-tabbar) {

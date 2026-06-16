@@ -99,8 +99,8 @@ export function fetchCategories() {
   return request.get('/api/categories');
 }
 
-export function fetchProductPage() {
-  return request.get('/api/products');
+export function fetchProductPage(params = {}) {
+  return request.get('/api/products', { params });
 }
 
 export function fetchProductDetail(productId) {
@@ -151,8 +151,8 @@ export function createOrder(data) {
   return request.post('/api/orders', data);
 }
 
-export function fetchOrders() {
-  return request.get('/api/orders');
+export function fetchOrders(params = {}) {
+  return request.get('/api/orders', { params });
 }
 
 export function fetchOrderDetail(orderId) {
@@ -177,6 +177,10 @@ export function applyOrderRefund(orderId, data) {
 
 export function applyAftersaleRefund(data) {
   return request.post('/api/aftersales/refund', data);
+}
+
+export function fetchAftersales(params = {}) {
+  return request.get('/api/aftersales', { params });
 }
 
 export function createPayOrder(orderNo, payChannel = 'MOCK', returnPath = '/orders') {

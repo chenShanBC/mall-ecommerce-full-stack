@@ -15,8 +15,10 @@ public enum PayStatus {
     FAILED("FAILED", "支付失败"),
     /** 已关闭：支付单关闭，不再允许支付。 */
     CLOSED("CLOSED", "已关闭"),
-    /** 退款中：已发起退款，等待渠道退款结果。 */
-    REFUND_PENDING("REFUND_PENDING", "退款中"),
+    /** 退款待处理：退款申请已创建，等待进入渠道退款。 */
+    REFUND_PENDING("REFUND_PENDING", "退款待处理"),
+    /** 退款中：已提交渠道，等待渠道退款结果。 */
+    REFUNDING("REFUNDING", "退款中"),
     /** 已退款：已完成原路退款。 */
     REFUNDED("REFUNDED", "已退款"),
     /** 部分退款：支付单发生部分金额退款。 */

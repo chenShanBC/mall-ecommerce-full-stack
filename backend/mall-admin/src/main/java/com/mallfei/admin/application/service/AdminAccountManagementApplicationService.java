@@ -5,6 +5,7 @@ import com.mallfei.admin.application.dto.AdminCreateAccountRequest;
 import com.mallfei.admin.application.dto.AdminUpdateAccountPermissionRequest;
 import com.mallfei.admin.application.vo.AdminAccountView;
 import com.mallfei.admin.application.vo.AdminOperationLogView;
+import com.mallfei.admin.application.vo.AdminPermissionView;
 import com.mallfei.admin.application.vo.AdminRoleView;
 import com.mallfei.admin.domain.model.AdminAccount;
 import com.mallfei.admin.domain.model.AdminOperationLog;
@@ -40,22 +41,23 @@ public class AdminAccountManagementApplicationService {
     }
 
     public PageResult<AdminAccountView> listAccounts(String keyword, String roleCode, String status, long page, long size) {
-        requireSuperAdmin();
+        requirePermission(AdminPermissionCatalog.ADMIN_VIEW);
         PageResult<AdminAccount> result = adminAccountRepository.search(keyword, roleCode, status, page, size);
         return new PageResult<>(result.page(), result.size(), result.total(), result.pages(), result.records().stream().map(this::toView).toList());
     }
-    public Map<String, List<String>> permissionTemplates() { requireSuperAdmin(); return AdminPermissionCatalog.rolePermissionTemplates(); }
-    public List<AdminRoleView> roles() { requireSuperAdmin(); return AdminPermissionCatalog.builtInRoles().stream().map(this::toRoleView).toList(); }
+    public Map<String, List<String>> permissionTemplates() { requirePermission(AdminPermissionCatalog.PERMISSION_VIEW); return AdminPermissionCatalog.rolePermissionTemplates(); }
+    public List<AdminPermissionView> permissions() { requirePermission(AdminPermissionCatalog.PERMISSION_VIEW); return AdminPermissionCatalog.permissionDefinitions().stream().map(permission -> new AdminPermissionView(permission.code(), permission.name(), permission.groupCode(), permission.groupName(), permission.sensitive())).toList(); }
+    public List<AdminRoleView> roles() { requirePermission(AdminPermissionCatalog.ROLE_VIEW); return AdminPermissionCatalog.builtInRoles().stream().map(this::toRoleView).toList(); }
 
     public AdminAccountView createAccount(AdminCreateAccountRequest request) {
-        AdminAccount operator = requireSuperAdmin();
+        AdminAccount operator = requirePermission(AdminPermissionCatalog.ADMIN_CREATE);
         AdminAccount created = adminAccountRepository.save(adminDomainService.createAccount(request.userId(), request.username(), request.password(), request.nickname(), request.roleCode(), request.permissions()));
         writeLog(operator, "SYSTEM", "ACCOUNT_CREATE", "创建运营账号：" + created.username() + "，角色=" + created.roleCode(), "SUCCESS");
         return toView(created);
     }
 
     public AdminAccountView disableAccount(Long adminId) {
-        AdminAccount operator = requireSuperAdmin();
+        AdminAccount operator = requirePermission(AdminPermissionCatalog.ADMIN_DISABLE);
         AdminAccount updated = adminAccountRepository.update(adminDomainService.loadById(adminId).disable());
         authFacade.disableAdminSession(updated.id());
         writeLog(operator, "SYSTEM", "ACCOUNT_DISABLE", "禁用运营账号：" + updated.username(), "SUCCESS");
@@ -63,14 +65,14 @@ public class AdminAccountManagementApplicationService {
     }
 
     public AdminAccountView enableAccount(Long adminId) {
-        AdminAccount operator = requireSuperAdmin();
+        AdminAccount operator = requirePermission(AdminPermissionCatalog.ADMIN_DISABLE);
         AdminAccount updated = adminAccountRepository.update(adminDomainService.loadById(adminId).enable());
         writeLog(operator, "SYSTEM", "ACCOUNT_ENABLE", "启用运营账号：" + updated.username(), "SUCCESS");
         return toView(updated);
     }
 
     public AdminAccountView assignRole(Long adminId, AdminAssignRoleRequest request) {
-        AdminAccount operator = requireSuperAdmin();
+        AdminAccount operator = requirePermission(AdminPermissionCatalog.ADMIN_UPDATE);
         AdminAccount target = adminDomainService.loadById(adminId);
         List<String> permissions = Boolean.TRUE.equals(request.useDefaultPermissions()) ? AdminPermissionCatalog.defaultPermissions(request.roleCode()) : target.permissions();
         AdminAccount updated = adminAccountRepository.update(adminDomainService.resetPermissions(target, request.roleCode(), permissions));
@@ -80,7 +82,7 @@ public class AdminAccountManagementApplicationService {
     }
 
     public AdminAccountView updatePermissions(Long adminId, AdminUpdateAccountPermissionRequest request) {
-        AdminAccount operator = requireSuperAdmin();
+        AdminAccount operator = requirePermission(AdminPermissionCatalog.PERMISSION_ASSIGN);
         AdminAccount target = adminDomainService.loadById(adminId);
         AdminAccount updated = adminAccountRepository.update(adminDomainService.resetPermissions(target, request.roleCode(), request.permissions()));
         authFacade.refreshAdminSessionByAdminId(updated.id(), updated.nickname(), updated.roleCode(), updated.permissions());
@@ -89,7 +91,7 @@ public class AdminAccountManagementApplicationService {
     }
 
     public PageResult<AdminOperationLogView> operationLogs(String keyword, String module, String result, long page, long size, String sortBy, String sortOrder) {
-        requireSuperAdmin();
+        requirePermission(AdminPermissionCatalog.LOG_OPERATION_VIEW);
         List<AdminOperationLogView> rows = adminOperationLogRepository.findAll().stream()
                 .map(this::toLogView)
                 .filter(log -> blank(module) || module.equals(log.operationModule()))
@@ -111,9 +113,9 @@ public class AdminAccountManagementApplicationService {
         return adminDomainService.loadById(principal.principalId());
     }
 
-    private AdminAccount requireSuperAdmin() {
+    private AdminAccount requirePermission(String permission) {
         AdminAccount operator = requireAdminOperator();
-        if (!operator.superAdmin()) throw BusinessException.forbidden("仅超级管理员可执行当前操作");
+        if (!operator.superAdmin() && !operator.hasPermission(permission)) throw BusinessException.forbidden("缺少后台权限：" + permission);
         return operator;
     }
 

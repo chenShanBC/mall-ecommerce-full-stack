@@ -24,6 +24,14 @@ public record AdminOrderDetailView(
         Integer itemCount,
         @Schema(description = "收货电话", example = "13800138000")
         String receiverPhone,
+        @Schema(description = "收货省份", example = "北京市")
+        String receiverProvinceName,
+        @Schema(description = "收货城市", example = "北京市")
+        String receiverCityName,
+        @Schema(description = "收货区县", example = "朝阳区")
+        String receiverDistrictName,
+        @Schema(description = "收货详细地址", example = "望京 SOHO T3 3003")
+        String receiverDetailAddress,
         @Schema(description = "完整地址", example = "北京市北京市朝阳区望京 SOHO T3 3003")
         String address,
         @Schema(description = "订单备注", example = "manual order test")

@@ -23,21 +23,33 @@
             {{ tab.label }}
           </div>
         </div>
+        <div class="history-filter-tip">
+          默认隐藏 10 天前已完成的订单；待处理、退款、取消等状态订单仍会保留展示。
+        </div>
       </div>
 
       <div class="order-list">
-        <van-empty v-if="!filteredOrders.length" description="暂无订单" />
-        <div v-for="item in filteredOrders" :key="item.id" class="order-card" @click="goDetail(item.id)">
+        <van-empty v-if="!orders.length && !ordersLoading" description="暂无订单" />
+        <van-list
+          v-else
+          v-model:loading="ordersLoading"
+          :finished="ordersFinished"
+          finished-text="没有更多订单了"
+          loading-text="订单加载中..."
+          @load="loadMoreOrders"
+        >
+        <div v-for="item in orders" :key="item.id" class="order-card" @click="goDetail(item.id)">
         <div class="order-top">
           <div class="order-top-label">订单编号</div>
           <div class="order-top-no">{{ item.orderNo }}</div>
-          <div class="status-pill" :class="`status-pill--${statusPillClass(item.status)}`">
-            {{ formatStatus(item.status) }}
+          <div class="status-pill" :class="`status-pill--${statusPillClass(displayStatus(item))}`">
+            {{ formatOrderListStatus(item) }}
           </div>
+          <div v-if="isAftersaleRejected(item)" class="rejected-watermark">售后已驳回</div>
         </div>
 
         <div class="order-body">
-          <img class="order-image" :src="getOrderVisual(item)" :alt="item.firstSkuName || item.orderNo" />
+          <img class="order-image" :src="getOrderVisual(item)" :alt="item.firstSkuName || item.orderNo" @error="handleOrderImageError($event, item)" />
           <div class="order-main">
             <div v-if="item.firstSkuName" class="product-name van-multi-ellipsis--l2">{{ item.firstSkuName }}</div>
             <div class="order-info">商品数量：{{ item.itemCount }} 件</div>
@@ -65,12 +77,12 @@
                 取消订单
               </van-button>
               <van-button
-                v-if="item.status === 'PAID' || item.status === 'SHIPPED'"
+                v-if="item.status === 'SHIPPED'"
                 type="primary"
                 size="small"
                 round
                 :loading="confirmingOrderId === item.id"
-                @click.stop="handleConfirmReceipt(item.id)"
+                @click.stop="handleConfirmReceipt(item)"
               >
                 确认收货
               </van-button>
@@ -81,9 +93,10 @@
                 size="small"
                 round
                 :loading="refundingOrderId === item.id"
+                :disabled="isAftersaleRejected(item)"
                 @click.stop="handleRefundApply(item)"
               >
-                申请退款
+                {{ isAftersaleRejected(item) ? '已驳回' : '申请退款' }}
               </van-button>
               <van-button
                 v-if="canDeleteOrder(item.status)"
@@ -100,16 +113,17 @@
           </div>
         </div>
       </div>
+        </van-list>
     </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { showConfirmDialog, showFailToast, showSuccessToast } from 'vant';
-import { applyOrderRefund, cancelOrder, confirmReceipt, deleteUserOrder, fetchOrders, repairPaidOrder, syncPayOrderStatus } from '../api';
+import { applyAftersaleRefund, cancelOrder, confirmReceipt, deleteUserOrder, fetchAftersales, fetchOrders, repairPaidOrder, syncPayOrderStatus } from '../api';
 import { formatCountdown, formatDateTime, formatPrice, formatStatus } from '../utils/format';
 import { getProductImage } from '../utils/productVisual';
 import { useUserStore } from '../stores/user';
@@ -119,10 +133,18 @@ const ORDER_CACHE_KEY = 'mallfei:h5-orders-cache-v1';
 const ORDER_CACHE_TTL = 60 * 1000;
 const ORDER_SUMMARY_CACHE_KEY = 'mallfei:h5-orders-summary-cache-v1';
 const ORDER_SUMMARY_CACHE_TTL = 3 * 60 * 1000;
+const HOME_PRODUCTS_CACHE_KEY = 'mallfei:h5-home-products-cache-v1';
+const SALES_REFRESH_KEY = 'mallfei:product-sales-refresh';
+const ORDER_PAGE_SIZE = 10;
 
 const router = useRouter();
 const userStore = useUserStore();
 const orders = ref([]);
+const aftersaleStatusByOrderNo = ref({});
+const orderPageNum = ref(1);
+const orderTotal = ref(0);
+const ordersLoading = ref(false);
+const ordersFinished = ref(false);
 let sessionProbeTimer = null;
 const keyword = ref('');
 const activeStatus = ref('ALL');
@@ -138,32 +160,22 @@ let payStatusPollAttempts = 0;
 
 const statusTabs = [
   { label: '全部', value: 'ALL' },
-  { label: '待支付', value: 'PENDING_PAYMENT' },
-  { label: '已支付', value: 'PAID' },
-  { label: '处理中', value: 'PROCESSING' },
-  { label: '已发货', value: 'SHIPPED' },
-  { label: '已完成', value: 'COMPLETED' },
-  { label: '已退款', value: 'REFUNDED' },
+  { label: '待支付', value: 'PENDING_PAYMENT_GROUP' },
+  { label: '已支付', value: 'PAID_GROUP' },
+  { label: '处理中', value: 'PROCESSING_GROUP' },
+  { label: '已发货', value: 'SHIPPED_GROUP' },
+  { label: '已完成', value: 'COMPLETED_GROUP' },
+  { label: '已退款', value: 'REFUNDED_GROUP' },
   { label: '已取消', value: 'CANCELLED_GROUP' },
 ];
 
-const filteredOrders = computed(() => {
-  const normalizedKeyword = keyword.value.trim().toLowerCase();
-  return orders.value.filter((item) => {
-    const matchStatus = activeStatus.value === 'ALL'
-      || (activeStatus.value === 'CANCELLED_GROUP'
-        ? ['CANCELLED', 'TIMEOUT_CANCELLED', 'CLOSED'].includes(item.status)
-        : item.status === activeStatus.value);
+const resetOrderPagination = () => {
+  orderPageNum.value = 1;
+  orderTotal.value = 0;
+  ordersFinished.value = false;
+};
 
-    const matchKeyword = !normalizedKeyword
-      || String(item.orderNo || '').toLowerCase().includes(normalizedKeyword)
-      || String(item.firstSkuName || '').toLowerCase().includes(normalizedKeyword);
-
-    return matchStatus && matchKeyword;
-  });
-});
-
-const getOrderVisual = (item) => getProductImage({
+const getOrderVisualProduct = (item) => ({
   id: item.firstSkuId || item.id,
   name: item.firstSkuName || `云仓 订单商品 ${item.itemCount || 1}件`,
   skuName: item.firstSkuName || item.orderNo,
@@ -172,6 +184,29 @@ const getOrderVisual = (item) => getProductImage({
   categoryId: 10,
 });
 
+const getOrderVisual = (item) => getProductImage(getOrderVisualProduct(item));
+
+const handleOrderImageError = (event, item) => {
+  event.target.src = getProductImage({ ...getOrderVisualProduct(item), skuImageUrl: '' });
+};
+
+const terminalStatuses = ['COMPLETED', 'REFUNDED', 'CANCELLED', 'TIMEOUT_CANCELLED', 'CLOSED', 'REFUND_CLOSED'];
+const aftersaleStatusOf = (item) => aftersaleStatusByOrderNo.value[item?.orderNo] || '';
+const isTerminalOrder = (item) => terminalStatuses.includes(item?.status);
+const isAftersaleRejected = (item) => !isTerminalOrder(item) && aftersaleStatusOf(item) === 'REJECTED';
+
+const refundTerminalStatuses = ['REFUND_SUCCESS', 'REFUND_FAILED', 'REFUND_CLOSED'];
+
+const displayStatus = (item) => {
+  if (refundTerminalStatuses.includes(item?.latestRefundStatus)) {
+    return item.latestRefundStatus;
+  }
+  return item?.status;
+};
+
+const displayStatusKind = (item) => (refundTerminalStatuses.includes(item?.latestRefundStatus) ? 'refund' : 'order');
+const formatOrderListStatus = (item) => formatStatus(displayStatus(item), displayStatusKind(item));
+
 const statusPillClass = (status) => {
   if (status === 'PENDING_PAYMENT') {
     return 'warning';
@@ -179,7 +214,7 @@ const statusPillClass = (status) => {
   if (status === 'PAID') {
     return 'paid';
   }
-  if (status === 'PROCESSING') {
+  if (status === 'PROCESSING' || status === 'PAYMENT_EXCEPTION') {
     return 'processing';
   }
   if (status === 'SHIPPED') {
@@ -188,8 +223,14 @@ const statusPillClass = (status) => {
   if (status === 'COMPLETED') {
     return 'success';
   }
-  if (status === 'REFUNDED') {
+  if (status === 'REFUND_PENDING' || status === 'REFUNDING' || status === 'REFUND_PROCESSING' || status === 'EFUND_PROCESSING' || status === 'PENDING_REVIEW') {
+    return 'warning';
+  }
+  if (status === 'REFUNDED' || status === 'REFUND_SUCCESS') {
     return 'refund';
+  }
+  if (status === 'REFUND_FAILED') {
+    return 'danger';
   }
   if (status === 'CANCELLED' || status === 'TIMEOUT_CANCELLED' || status === 'CLOSED' || status === 'REFUND_CLOSED') {
     return 'danger';
@@ -197,9 +238,41 @@ const statusPillClass = (status) => {
   return 'primary';
 };
 
-const terminalStatuses = ['COMPLETED', 'REFUNDED', 'CANCELLED', 'TIMEOUT_CANCELLED', 'CLOSED', 'REFUND_CLOSED'];
 const showRefundButton = (status) => ['PAID', 'PROCESSING', 'SHIPPED'].includes(status);
 const canDeleteOrder = (status) => terminalStatuses.includes(status);
+
+const normalizeListData = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.records)) return payload.records;
+  if (Array.isArray(payload?.list)) return payload.list;
+  if (Array.isArray(payload?.rows)) return payload.rows;
+  return [];
+};
+
+const normalizeOrderRecord = (item = {}) => ({
+  ...item,
+  itemCount: Number(item.itemCount ?? item.totalCount ?? item.quantity ?? 0),
+  payAmount: item.payAmount ?? item.totalAmount ?? item.amount ?? 0,
+  firstSkuName: item.firstSkuName || item.productName || item.skuName || '',
+  firstSkuImageUrl: item.firstSkuImageUrl || item.skuImageUrl || item.productImage || item.mainImage || '',
+});
+
+const normalizeOrderRecords = (payload) => normalizeListData(payload).map(normalizeOrderRecord);
+
+const refreshAftersaleMarkers = async () => {
+  try {
+    const { data } = await fetchAftersales();
+    const markers = {};
+    normalizeOrderRecords(data?.data).forEach((item) => {
+      if (item?.orderNo && item?.status) {
+        markers[item.orderNo] = item.status;
+      }
+    });
+    aftersaleStatusByOrderNo.value = markers;
+  } catch {
+    aftersaleStatusByOrderNo.value = {};
+  }
+};
 const showActions = (status) => status === 'PENDING_PAYMENT' || status === 'PAID' || status === 'SHIPPED' || showRefundButton(status) || canDeleteOrder(status);
 
 const stopPayStatusPolling = () => {
@@ -302,6 +375,9 @@ const restoreOrdersCache = () => {
     if (!parsed?.updatedAt || !Array.isArray(parsed?.orders)) return false;
     if (Date.now() - Number(parsed.updatedAt) > ORDER_CACHE_TTL) return false;
     orders.value = parsed.orders;
+    orderTotal.value = Number(parsed.total || orders.value.length);
+    orderPageNum.value = Number(parsed.pageNum || Math.floor(orders.value.length / ORDER_PAGE_SIZE) + 1);
+    ordersFinished.value = Boolean(parsed.finished || (orderTotal.value > 0 && orders.value.length >= orderTotal.value));
     countdownBaseTime = Date.now();
     return true;
   } catch {
@@ -317,6 +393,9 @@ const restoreOrdersSummaryCache = () => {
     if (!parsed?.updatedAt || !Array.isArray(parsed?.orders)) return false;
     if (Date.now() - Number(parsed.updatedAt) > ORDER_SUMMARY_CACHE_TTL) return false;
     orders.value = parsed.orders;
+    orderTotal.value = Number(parsed.total || orders.value.length);
+    orderPageNum.value = Number(parsed.pageNum || Math.floor(orders.value.length / ORDER_PAGE_SIZE) + 1);
+    ordersFinished.value = Boolean(parsed.finished || (orderTotal.value > 0 && orders.value.length >= orderTotal.value));
     countdownBaseTime = Date.now();
     return true;
   } catch {
@@ -326,22 +405,48 @@ const restoreOrdersSummaryCache = () => {
 
 const persistOrdersCache = () => {
   try {
-    const payload = { updatedAt: Date.now(), orders: orders.value };
+    const payload = {
+      updatedAt: Date.now(),
+      orders: orders.value,
+      total: orderTotal.value,
+      pageNum: orderPageNum.value,
+      finished: ordersFinished.value,
+    };
     localStorage.setItem(ORDER_CACHE_KEY, JSON.stringify(payload));
   } catch {
   }
 };
 
-const loadOrders = async (showError = true) => {
+const loadOrders = async (showError = true, { reset = true } = {}) => {
+  if (reset) {
+    resetOrderPagination();
+  }
+  if (ordersFinished.value && !reset) {
+    ordersLoading.value = false;
+    return;
+  }
   try {
     const valid = await requireLogin(router, '/orders', { force: false });
     if (!valid) {
       return;
     }
-    const { data } = await fetchOrders();
+    ordersLoading.value = true;
+    const pageToLoad = orderPageNum.value;
+    const { data } = await fetchOrders({
+      page: pageToLoad,
+      size: ORDER_PAGE_SIZE,
+      status: activeStatus.value === 'ALL' ? undefined : activeStatus.value,
+      keyword: keyword.value.trim() || undefined,
+    });
+    const pageData = data.data || {};
+    const nextRecords = normalizeOrderRecords(pageData);
     countdownBaseTime = Date.now();
-    orders.value = data.data || [];
+    orders.value = reset ? nextRecords : [...orders.value, ...nextRecords];
+    orderTotal.value = Number(pageData.total || orders.value.length);
+    orderPageNum.value = pageToLoad + 1;
+    ordersFinished.value = nextRecords.length < ORDER_PAGE_SIZE || orders.value.length >= orderTotal.value;
     persistOrdersCache();
+    await refreshAftersaleMarkers();
     if (orders.value.some((item) => item.status === 'PENDING_PAYMENT' && Number(item.remainingPaySeconds || 0) === 0)) {
       setTimeout(() => {
         refreshOrdersWhenCountdownEnds();
@@ -351,23 +456,50 @@ const loadOrders = async (showError = true) => {
     if (showError) {
       showFailToast(error?.response?.data?.msg || error?.response?.data?.message || '订单列表加载失败');
     }
+  } finally {
+    ordersLoading.value = false;
+  }
+};
+
+const loadMoreOrders = async () => {
+  await loadOrders(true, { reset: false });
+};
+
+const markProductSalesStale = (order = null) => {
+  try {
+    localStorage.removeItem(HOME_PRODUCTS_CACHE_KEY);
+    localStorage.setItem(SALES_REFRESH_KEY, String(Date.now()));
+    const firstProductId = order?.firstSpuId || order?.firstProductId || order?.productId;
+    if (firstProductId) {
+      localStorage.setItem('mallfei:last-visited-product-id', String(firstProductId));
+    }
+  } catch {
   }
 };
 
 const prefetchOrderSummary = async () => {
   try {
-    const { data } = await fetchOrders();
-    const summaryOrders = data.data || [];
-    localStorage.setItem(ORDER_SUMMARY_CACHE_KEY, JSON.stringify({ updatedAt: Date.now(), orders: summaryOrders }));
+    const { data } = await fetchOrders({ page: 1, size: ORDER_PAGE_SIZE });
+    const pageData = data.data || {};
+    const summaryOrders = normalizeOrderRecords(pageData);
+    localStorage.setItem(ORDER_SUMMARY_CACHE_KEY, JSON.stringify({
+      updatedAt: Date.now(),
+      orders: summaryOrders,
+      total: Number(pageData.total || summaryOrders.length),
+      pageNum: 2,
+      finished: summaryOrders.length < ORDER_PAGE_SIZE || summaryOrders.length >= Number(pageData.total || summaryOrders.length),
+    }));
   } catch {
   }
 };
 
 const handleFilterChange = () => {
+  loadOrders(false);
 };
 
 const handleStatusChange = (status) => {
   activeStatus.value = status;
+  loadOrders(false);
 };
 
 const handleCancelOrder = async (order) => {
@@ -391,7 +523,11 @@ const handleCancelOrder = async (order) => {
   }
 };
 
-const handleConfirmReceipt = async (orderId) => {
+const handleConfirmReceipt = async (order) => {
+  if (order?.status !== 'SHIPPED') {
+    showFailToast('仅已发货订单可以确认收货');
+    return;
+  }
   try {
     await showConfirmDialog({
       title: '确认收货',
@@ -399,8 +535,9 @@ const handleConfirmReceipt = async (orderId) => {
       confirmButtonText: '确认收货',
       cancelButtonText: '再想想',
     });
-    confirmingOrderId.value = orderId;
-    await confirmReceipt(orderId);
+    confirmingOrderId.value = order.id;
+    await confirmReceipt(order.id);
+    markProductSalesStale(order);
     await loadOrders();
     showSuccessToast('确认收货成功');
   } catch (error) {
@@ -416,16 +553,17 @@ const handleRefundApply = async (order) => {
   try {
     await showConfirmDialog({
       title: '申请退款',
-      message: `确认对订单 ${order.orderNo} 发起退款吗？退款完成后订单状态将变为“已退款”。`,
-      confirmButtonText: '确认退款',
+      message: `确认对订单 ${order.orderNo} 发起售后退款申请吗？提交后将等待商家审核。`,
+      confirmButtonText: '提交申请',
       cancelButtonText: '再想想',
     });
     refundingOrderId.value = order.id;
-    await applyOrderRefund(order.id, {
+    await applyAftersaleRefund({
+      orderId: order.id,
       reason: '用户在订单列表发起退款',
     });
     await loadOrders();
-    showSuccessToast('退款已完成');
+    showSuccessToast('售后申请已提交，等待商家审核');
   } catch (error) {
     if (error !== 'cancel') {
       showFailToast(error?.response?.data?.msg || error?.response?.data?.message || '申请退款失败');
@@ -555,6 +693,16 @@ onBeforeUnmount(() => {
   border-color: #bfdbfe;
 }
 
+.history-filter-tip {
+  margin: 10px 2px 0;
+  padding: 9px 11px;
+  border-radius: 14px;
+  background: rgba(99, 102, 241, 0.08);
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .order-list {
   display: flex;
   flex-direction: column;
@@ -562,6 +710,8 @@ onBeforeUnmount(() => {
 }
 
 .order-card {
+  position: relative;
+  overflow: hidden;
   padding: 14px;
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(226, 232, 240, 0.7);
@@ -586,7 +736,7 @@ onBeforeUnmount(() => {
 .order-top-no {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1.35;
   font-weight: 700;
   color: #0f172a;
@@ -649,6 +799,27 @@ onBeforeUnmount(() => {
   color: #dc2626;
   background: #fef2f2;
   border-color: #fecaca;
+}
+
+.rejected-watermark {
+  position: absolute;
+  top: 8px;
+  left: -34px;
+  z-index: 2;
+  width: 118px;
+  padding: 3px 0;
+  transform: rotate(-28deg);
+  transform-origin: center;
+  color: rgba(220, 38, 38, 0.44);
+  background: rgba(254, 226, 226, 0.24);
+  border-top: 1px solid rgba(248, 113, 113, 0.28);
+  border-bottom: 1px solid rgba(248, 113, 113, 0.28);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
+  letter-spacing: 1px;
+  pointer-events: none;
 }
 
 .order-body {

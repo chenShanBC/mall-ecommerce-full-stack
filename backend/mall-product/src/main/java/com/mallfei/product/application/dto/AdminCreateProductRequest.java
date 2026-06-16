@@ -23,9 +23,9 @@ public record AdminCreateProductRequest(
 ) {
     @Schema(name = "AdminCreateProductSkuInput", description = "创建商品SKU请求")
     public record SkuInput(
-            @Schema(description = "SKU编码", example = "TEST-SKU-001")
+            @Schema(description = "SKU编码，前端可视化规格自动生成", example = "TEST-SKU-001")
             @NotBlank(message = "SKU编码不能为空") String skuCode,
-            @Schema(description = "SKU名称", example = "手测商品A-默认规格")
+            @Schema(description = "SKU名称，前端可视化规格自动生成", example = "手测商品A-默认规格")
             @NotBlank(message = "SKU名称不能为空") String skuName,
             @Schema(description = "规格JSON", example = "{\"color\":\"black\"}")
             String specJson,

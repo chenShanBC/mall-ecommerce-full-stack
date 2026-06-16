@@ -1,5 +1,7 @@
 package com.mallfei.auth.application.service;
 
+import com.mallfei.auth.domain.model.AuthDeviceType;
+import com.mallfei.auth.domain.model.LoginSessionCommand;
 import com.mallfei.common.auth.AuthenticatedPrincipal;
 import com.mallfei.common.enums.IdentityType;
 import org.springframework.stereotype.Service;
@@ -15,8 +17,8 @@ public class AuthSessionService {
         this.authSessionManager = authSessionManager;
     }
 
-    public String createSession(Long principalId, String account, IdentityType identityType, String nickname, String avatar, String roleCode, List<String> permissions) {
-        return authSessionManager.createSession(principalId, account, identityType, nickname, avatar, roleCode, permissions).token();
+    public String createSession(Long principalId, String account, IdentityType identityType, String nickname, String avatar, String roleCode, List<String> permissions, AuthDeviceType deviceType) {
+        return authSessionManager.createSession(new LoginSessionCommand(principalId, account, identityType, nickname, avatar, roleCode, permissions, deviceType)).token();
     }
 
     public void refreshAdminSession(String nickname, String roleCode, List<String> permissions) {

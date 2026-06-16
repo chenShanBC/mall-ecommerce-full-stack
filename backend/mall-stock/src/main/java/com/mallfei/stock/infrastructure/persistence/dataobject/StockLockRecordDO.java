@@ -20,6 +20,9 @@ public class StockLockRecordDO {
     private LocalDateTime lockTime;
     private LocalDateTime releaseTime;
     private LocalDateTime deductTime;
+    private Boolean reservedSynced;
+    private Boolean cancelledSynced;
+    private Boolean confirmedSynced;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -41,4 +44,10 @@ public class StockLockRecordDO {
     public void setReleaseTime(LocalDateTime releaseTime) { this.releaseTime = releaseTime; }
     public LocalDateTime getDeductTime() { return deductTime; }
     public void setDeductTime(LocalDateTime deductTime) { this.deductTime = deductTime; }
+    public Boolean getReservedSynced() { return reservedSynced; }
+    public void setReservedSynced(Boolean reservedSynced) { this.reservedSynced = reservedSynced; }
+    public Boolean getCancelledSynced() { return cancelledSynced; }
+    public void setCancelledSynced(Boolean cancelledSynced) { this.cancelledSynced = cancelledSynced; }
+    public Boolean getConfirmedSynced() { return confirmedSynced; }
+    public void setConfirmedSynced(Boolean confirmedSynced) { this.confirmedSynced = confirmedSynced; }
 }

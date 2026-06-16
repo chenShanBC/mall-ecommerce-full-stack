@@ -24,4 +24,12 @@ public interface StockRepository {
     Stock save(Stock stock);
 
     void update(Stock stock);
+
+    void applyReservedSync(Long skuId, Integer quantity);
+
+    void applyCancelledSync(Long skuId, Integer quantity);
+
+    void applyConfirmedSync(Long skuId, Integer quantity);
+
+    void calibrateSnapshot(Long skuId, Integer lockedStock, Integer availableStock, String warningStatus);
 }

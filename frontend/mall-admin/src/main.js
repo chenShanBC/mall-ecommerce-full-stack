@@ -1,6 +1,8 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import 'element-plus/dist/index.css';
+import './styles/admin-dialog.css';
+import './styles/admin-table.css';
 import App from './App.vue';
 import router from './router';
 import { useAdminStore } from './stores/admin';

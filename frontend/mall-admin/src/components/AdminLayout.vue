@@ -11,27 +11,27 @@
       <el-menu :default-active="route.path" class="admin-menu" @select="handleMenuSelect">
         <el-menu-item index="/dashboard">仪表盘</el-menu-item>
         <el-menu-item v-if="adminStore.hasPermission('user:view')" index="/users">用户管理</el-menu-item>
-        <el-menu-item v-if="adminStore.hasPermission('product:view')" index="/products">商品管理</el-menu-item>
+        <el-menu-item v-if="canShowProductMenu" index="/products">商品管理</el-menu-item>
         <el-menu-item v-if="adminStore.hasPermission('stock:view')" index="/stocks">库存管理</el-menu-item>
-        <el-menu-item v-if="adminStore.hasPermission('order:view')" index="/orders">订单管控</el-menu-item>
+        <el-menu-item v-if="adminStore.hasPermission('stock:log:view')" index="/stock-logs">库存日志</el-menu-item>
+        <el-menu-item v-if="adminStore.hasPermission('order:view')" index="/orders">订单管理</el-menu-item>
         <el-menu-item v-if="adminStore.hasPermission('aftersale:view')" index="/aftersales">售后管理</el-menu-item>
-        <el-menu-item v-if="adminStore.hasPermission('payment:view')" index="/pays">支付单管控</el-menu-item>
-        <el-menu-item v-if="adminStore.hasPermission('reconciliation:view')" index="/reconciliations">对账运营</el-menu-item>
+        <el-menu-item v-if="adminStore.hasAnyPermission(['payment:view', 'refund:execute'])" index="/pays">支付管理</el-menu-item>
+        <el-menu-item v-if="adminStore.hasAnyPermission(['reconciliation:view', 'stock:reconcile:view'])" :index="reconciliationMenuPath">对账管理</el-menu-item>
         <el-menu-item v-if="adminStore.hasAnyPermission(['admin:view', 'role:view', 'permission:view'])" index="/accounts">账号权限</el-menu-item>
         <el-menu-item v-if="adminStore.hasPermission('log:operation:view')" index="/operation-logs">操作日志</el-menu-item>
         <el-menu-item index="/profile">个人中心</el-menu-item>
-        <el-menu-item v-if="adminStore.hasPermission('stock:log:view')" index="/stock-logs">库存日志</el-menu-item>
       </el-menu>
       <div class="aside-footer">
         <div class="aside-footer__label">当前角色</div>
-        <div class="aside-footer__value">{{ adminStore.profile?.roleCode || '-' }}</div>
+        <div class="aside-footer__value">{{ currentRoleLabel }}</div>
       </div>
     </el-aside>
     <el-container>
       <el-header class="header">
         <div>
           <div class="title">{{ title }}</div>
-          <div class="sub-title">当前登录：{{ adminStore.profile?.nickname || '未加载' }} / {{ adminStore.profile?.roleCode || '-' }}</div>
+          <div class="sub-title">当前登录：{{ adminStore.profile?.nickname || '未加载' }} / {{ currentRoleLabel }}</div>
         </div>
         <div class="header-center">
           <div class="header-search-shell">
@@ -49,6 +49,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAdminStore } from '../stores/admin';
 
@@ -57,6 +58,22 @@ defineEmits(['refresh', 'logout']);
 const route = useRoute();
 const router = useRouter();
 const adminStore = useAdminStore();
+const roleLabelMap = {
+  SUPER_ADMIN: '超级管理员',
+  FINANCE_OPERATOR: '财务人员',
+  ORDER_OPERATOR: '订单运营',
+  WAREHOUSE_OPERATOR: '仓储人员',
+  PRODUCT_OPERATOR: '商品运营',
+  FINANCE_STAFF: '财务人员',
+  OPERATION_STAFF: '商品运营',
+  WAREHOUSE_MANAGER: '仓储人员',
+  CUSTOMER_SERVICE_MANAGER: '订单运营',
+  CUSTOMER_SERVICE: '订单运营',
+  AUDIT_OPERATOR: '财务人员',
+};
+const currentRoleLabel = computed(() => roleLabelMap[adminStore.profile?.roleCode] || adminStore.profile?.roleCode || '-');
+const canShowProductMenu = computed(() => adminStore.hasPermission('product:view') && adminStore.hasAnyPermission(['product:create', 'product:update', 'product:on_sale', 'product:off_sale', 'product:status:update', 'product:sales:view', 'category:manage']));
+const reconciliationMenuPath = computed(() => adminStore.hasPermission('reconciliation:view') ? '/reconciliations' : '/reconciliations?tab=stock');
 
 const handleMenuSelect = async (path) => {
   if (path === route.path) {

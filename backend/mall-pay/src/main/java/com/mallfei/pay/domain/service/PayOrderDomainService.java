@@ -36,7 +36,7 @@ public class PayOrderDomainService {
     public void ensureExistingPayOrderUsable(PayOrder payOrder, Order order) { if (!payOrder.reusableFor(order)) throw BusinessException.badRequest("当前订单状态不允许继续创建支付单"); }
     public void ensureCanCallbackSuccess(PayOrder payOrder, Order order) { if (!payOrder.canCallbackSuccessFor(order)) throw BusinessException.badRequest("当前支付单或订单状态不允许支付成功回调"); }
     public boolean reconcileAmount(Order order, PayOrder payOrder) { return payOrder == null || payOrder.amountConsistentWith(order.payAmountCent()); }
-    public boolean reconcileStatus(Order order, PayOrder payOrder) { if (payOrder == null) return true; if (payOrder.success() && !order.paidOrAfter()) return false; return !(payOrder.pending() && order.cancelled()); }
+    public boolean reconcileStatus(Order order, PayOrder payOrder) { if (payOrder == null) return true; if (order.paymentException()) return false; if (payOrder.success() && !order.paidOrAfter()) return false; return !(payOrder.pending() && order.cancelled()); }
 
     private void ensureOrderCanCreatePayOrder(Order order, String message) { if (!order.pendingPayment()) throw BusinessException.badRequest(message); }
 }

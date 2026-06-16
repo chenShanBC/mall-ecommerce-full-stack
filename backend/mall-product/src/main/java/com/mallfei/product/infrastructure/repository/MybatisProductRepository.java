@@ -106,11 +106,25 @@ public class MybatisProductRepository implements ProductRepository {
 
     @Override
     @Transactional
-    public void incrementSkuSales(List<SkuSalesIncrement> items) { for (SkuSalesIncrement item : items) { ProductSkuDO skuDO = productSkuMapper.selectById(item.skuId()); if (skuDO == null) continue; int current = skuDO.getSalesCount() == null ? 0 : skuDO.getSalesCount(); int inc = item.quantity() == null ? 0 : item.quantity(); skuDO.setSalesCount(current + inc); productSkuMapper.updateById(skuDO); } }
+    public void incrementSkuSales(List<SkuSalesIncrement> items) {
+        for (SkuSalesIncrement item : items) {
+            if (item.skuId() == null || item.quantity() == null || item.quantity() <= 0) {
+                continue;
+            }
+            productSkuMapper.incrementSales(item.skuId(), item.quantity());
+        }
+    }
 
     @Override
     @Transactional
-    public void decrementSkuSales(List<SkuSalesIncrement> items) { for (SkuSalesIncrement item : items) { ProductSkuDO skuDO = productSkuMapper.selectById(item.skuId()); if (skuDO == null) continue; int current = skuDO.getSalesCount() == null ? 0 : skuDO.getSalesCount(); int dec = item.quantity() == null ? 0 : item.quantity(); skuDO.setSalesCount(Math.max(0, current - dec)); productSkuMapper.updateById(skuDO); } }
+    public void decrementSkuSales(List<SkuSalesIncrement> items) {
+        for (SkuSalesIncrement item : items) {
+            if (item.skuId() == null || item.quantity() == null || item.quantity() <= 0) {
+                continue;
+            }
+            productSkuMapper.decrementSales(item.skuId(), item.quantity());
+        }
+    }
 
     private void insertSkus(Long spuId, List<ProductSku> skus) { for (ProductSku sku : skus) insertSku(spuId, sku); }
 

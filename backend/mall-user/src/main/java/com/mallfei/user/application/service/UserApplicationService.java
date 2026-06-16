@@ -1,5 +1,6 @@
 package com.mallfei.user.application.service;
 
+import com.mallfei.auth.domain.model.AuthDeviceType;
 import com.mallfei.auth.facade.AuthFacade;
 import com.mallfei.common.auth.AuthenticatedPrincipal;
 import com.mallfei.common.enums.IdentityType;
@@ -179,7 +180,8 @@ public class UserApplicationService {
                 userAccount.nickname(),
                 userAccount.avatarUrl(),
                 "USER",
-                List.of()
+                List.of(),
+                AuthDeviceType.USER_H5
         );
         return new UserLoginResult(token, userAccount.id(), userAccount.mobile(), userAccount.nickname(), userAccount.avatarUrl(), userAccount.mobile() != null && !userAccount.mobile().isBlank());
     }

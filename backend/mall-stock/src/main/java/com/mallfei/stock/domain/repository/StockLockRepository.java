@@ -14,4 +14,12 @@ public interface StockLockRepository {
     void update(StockLockRecord stockLockRecord);
 
     List<StockLockRecord> findByBusiness(String businessType, String businessNo);
+
+    List<StockLockRecord> findExpiredReserved(int minutes);
+
+    List<StockLockRecord> findUnpersistedReservations(int minutes, int limit);
+
+    long sumReservedQuantity(Long skuId);
+
+    long sumUnpersistedReservedQuantity(Long skuId);
 }
