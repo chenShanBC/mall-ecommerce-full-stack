@@ -207,13 +207,16 @@ export function useDashboardData() {
     latestFlowStart.setDate(latestFlowEnd.getDate() - 6);
     const latestFlowRange = { startDate: formatDate(latestFlowStart), endDate: formatDate(latestFlowEnd) };
     const latestFlowParams = { ...latestFlowRange, page: 1, size: 100, sortField: 'createTime', sortBy: 'createTime', sortOrder: 'desc' };
-    const [overviewRes, cumulativeNetIncomeRes, financeTrendRes, latestPaysRes, refundedPaysRes, refundsRes, reconcileRes, pendingTasksRes, completedTasksRes, archiveReportRes, hangingRes, callbacksRes] = await Promise.all([
+    const monthFlowParams = { ...monthParams, page: 1, size: 10000, sortField: 'createTime', sortBy: 'createTime', sortOrder: 'desc' };
+    const [overviewRes, cumulativeNetIncomeRes, financeTrendRes, latestPaysRes, monthPaysRes, refundedPaysRes, latestRefundsRes, monthRefundsRes, reconcileRes, pendingTasksRes, completedTasksRes, archiveReportRes, hangingRes, callbacksRes] = await Promise.all([
       fetchDashboard(monthParams),
       fetchAdminFinanceCumulativeNetIncome(),
       fetchAdminFinanceTrend(),
       fetchAdminPays(latestFlowParams),
+      fetchAdminPays(monthFlowParams),
       fetchAdminPays({ ...monthParams, status: 'REFUNDED', page: 1, size: 1, sortField: 'createTime', sortOrder: 'desc' }),
       fetchAdminGlobalRefunds(latestFlowParams),
+      fetchAdminGlobalRefunds(monthFlowParams),
       fetchAdminReconciliationOverview(),
       fetchAdminOnlineReconcileTasks({ page: 1, size: 200 }),
       fetchAdminOnlineReconcileTasks({ page: 1, size: 1, status: 'COMPLETED' }),
@@ -226,8 +229,10 @@ export function useDashboardData() {
     const financeTrend = normalizeResponse(financeTrendRes, []);
     const reconcile = normalizeResponse(reconcileRes, {});
     const paysPayload = normalizeResponse(latestPaysRes, {});
+    const monthPaysPayload = normalizeResponse(monthPaysRes, {});
     const refundedPaysPayload = normalizeResponse(refundedPaysRes, {});
-    const refundsPayload = normalizeResponse(refundsRes, {});
+    const refundsPayload = normalizeResponse(latestRefundsRes, {});
+    const monthRefundsPayload = normalizeResponse(monthRefundsRes, {});
     const pendingTasksPayload = normalizeResponse(pendingTasksRes, {});
     const completedTasksPayload = normalizeResponse(completedTasksRes, {});
     const archiveReportPayload = normalizeResponse(archiveReportRes, {});
@@ -383,6 +388,8 @@ export function useDashboardData() {
     const refunds = recordsOf(refundsPayload).filter(isDisplayRefund).map(normalizeRefund).map((row) => ({ ...row, flowType: 'REFUND', bizType: 'REFUND' })).map(attachReconcileRecord);
     const diffs = onlineDiffs;
     const callbacks = recordsOf(callbacksPayload);
+    const monthPays = recordsOf(monthPaysPayload).filter(isDisplayPay).map(normalizePay).map((row) => ({ ...row, flowType: 'PAY', bizType: 'PAY' }));
+    const monthRefunds = recordsOf(monthRefundsPayload).filter(isDisplayRefund).map(normalizeRefund).map((row) => ({ ...row, flowType: 'REFUND', bizType: 'REFUND' }));
     const pendingDiffTaskCount = toNumber(
       pendingTasksPayload.pendingDiffTaskCount
       || pendingTasksPayload.pendingTaskCount
@@ -403,17 +410,20 @@ export function useDashboardData() {
       || reconcile.completedTasks
       || reconcile.archivedTaskCount,
     );
-    const paidAmountCent = sumBy(pays, ['payAmountCent', 'payAmount', 'amountCent', 'totalAmountCent']);
-    const refundAmountCent = sumBy(refunds, ['refundAmountCent', 'amountCent']);
+    const fallbackPaidAmountCent = sumBy(monthPays, ['payAmountCent', 'payAmount', 'amountCent', 'totalAmountCent']);
+    const fallbackRefundAmountCent = sumBy(monthRefunds, ['refundAmountCent', 'amountCent']);
+    const paidAmountCent = toNumber(firstOf(cumulativeNetIncome, ['monthPaidAmountCent'], fallbackPaidAmountCent));
+    const refundAmountCent = toNumber(firstOf(cumulativeNetIncome, ['monthRefundAmountCent'], fallbackRefundAmountCent));
+    const netIncomeCent = toNumber(firstOf(cumulativeNetIncome, ['monthNetIncomeCent'], paidAmountCent - refundAmountCent));
     const summary = {
       financeRange: monthParams,
       paidAmountCent,
       refundAmountCent,
-      netIncomeCent: paidAmountCent - refundAmountCent,
+      netIncomeCent,
       cumulativeNetIncomeCent: toNumber(firstOf(cumulativeNetIncome, ['cumulativeNetIncomeCent', 'totalNetIncomeCent', 'netIncomeCent'], 0)),
-      payOrderCount: pays.length || totalOf(paysPayload),
+      payOrderCount: monthPays.length || totalOf(monthPaysPayload),
       refundCount: totalOf(refundedPaysPayload),
-      refundOrderCount: refunds.length || totalOf(refundsPayload),
+      refundOrderCount: monthRefunds.length || totalOf(monthRefundsPayload),
       taskCount: toNumber(reconcile.taskCount || reconcile.totalCount || totalOf(pendingTasksPayload)),
       pendingReconcileCount: pendingDiffCount,
       pendingDiffTaskCount,

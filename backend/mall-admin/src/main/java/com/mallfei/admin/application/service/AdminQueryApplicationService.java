@@ -300,19 +300,19 @@ public class AdminQueryApplicationService {
 
     public Map<String, Long> financeCumulativeNetIncome() {
         requireAdmin();
-        long paidAmountCent = payFacade.findAll().stream()
-                .filter(pay -> List.of("SUCCESS", "REFUND_PENDING", "REFUNDING", "PARTIALLY_REFUNDED", "REFUNDED", "REFUND_FAILED").contains(pay.payStatus()))
-                .mapToLong(pay -> pay.payAmountCent() == null ? 0L : pay.payAmountCent())
-                .sum();
-        long refundAmountCent = queryAmount(
-                "SELECT COALESCE(SUM(refund_amount_cent), 0) AS amount "
-                        + "FROM pay_refund_order "
-                        + "WHERE refund_status = 'REFUND_SUCCESS'"
-        );
+        long paidAmountCent = financePaidAmountCent(null, null);
+        long refundAmountCent = financeRefundAmountCent(null, null);
+        LocalDate today = LocalDate.now();
+        LocalDate monthStart = today.withDayOfMonth(1);
+        long monthPaidAmountCent = financePaidAmountCent(monthStart, today);
+        long monthRefundAmountCent = financeRefundAmountCent(monthStart, today);
         return Map.of(
                 "cumulativePaidAmountCent", paidAmountCent,
                 "cumulativeRefundAmountCent", refundAmountCent,
-                "cumulativeNetIncomeCent", paidAmountCent - refundAmountCent
+                "cumulativeNetIncomeCent", paidAmountCent - refundAmountCent,
+                "monthPaidAmountCent", monthPaidAmountCent,
+                "monthRefundAmountCent", monthRefundAmountCent,
+                "monthNetIncomeCent", monthPaidAmountCent - monthRefundAmountCent
         );
     }
 
@@ -359,6 +359,31 @@ public class AdminQueryApplicationService {
             ));
         }
         return rows;
+    }
+
+    private long financePaidAmountCent(LocalDate startDate, LocalDate endDate) {
+        return orderFacade.findAll().stream()
+                .filter(order -> List.of(Order.STATUS_PAID, Order.STATUS_SHIPPED, Order.STATUS_COMPLETED).contains(order.orderStatus()))
+                .filter(order -> inDateRange(order.paidAt() == null ? null : order.paidAt().toLocalDate(), startDate, endDate))
+                .mapToLong(order -> order.payAmountCent() == null ? 0L : order.payAmountCent())
+                .sum();
+    }
+
+    private long financeRefundAmountCent(LocalDate startDate, LocalDate endDate) {
+        String dateCondition = startDate == null || endDate == null ? "" : " AND DATE(COALESCE(success_at, updated_at, created_at)) BETWEEN ? AND ?";
+        String sql = "SELECT COALESCE(SUM(refund_amount_cent), 0) AS amount "
+                + "FROM pay_refund_order "
+                + "WHERE refund_status = 'REFUND_SUCCESS'"
+                + dateCondition;
+        Long amount = startDate == null || endDate == null
+                ? jdbcTemplate.queryForObject(sql, Long.class)
+                : jdbcTemplate.queryForObject(sql, Long.class, startDate, endDate);
+        return amount == null ? 0L : amount;
+    }
+
+    private boolean inDateRange(LocalDate date, LocalDate startDate, LocalDate endDate) {
+        if (startDate == null || endDate == null) return true;
+        return date != null && !date.isBefore(startDate) && !date.isAfter(endDate);
     }
 
     private long queryAmount(String sql) {
