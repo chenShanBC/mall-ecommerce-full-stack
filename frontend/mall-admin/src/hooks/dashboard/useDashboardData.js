@@ -2,10 +2,15 @@ import { computed, reactive, ref } from 'vue';
 import * as XLSX from 'xlsx';
 import {
   fetchAdminAftersales,
+  fetchAdminFinanceCumulativeNetIncome,
+  fetchAdminFinanceTrend,
   fetchAdminGlobalRefunds,
+  fetchAdminOnlineArchiveReport,
+  fetchAdminOnlineHangingFollows,
+  fetchAdminOnlineDiffItems,
+  fetchAdminOnlineReconcileTasks,
   fetchAdminOrders,
   fetchAdminPayCallbackRecords,
-  fetchAdminPayReconciliationRecords,
   fetchAdminPays,
   fetchAdminProductPage,
   fetchAdminProductSalesThresholdConfig,
@@ -61,28 +66,27 @@ const normalizeAftersale = (item) => ({
 const normalizePay = (item) => ({
   ...item,
   orderNo: firstOf(item, ['orderNo', 'orderSn'], '--'),
-  payNo: firstOf(item, ['payNo', 'paymentNo', 'tradeNo'], '--'),
+  payNo: firstOf(item, ['payNo', 'payOrderNo', 'paymentNo', 'tradeNo'], '--'),
+  payOrderNo: firstOf(item, ['payOrderNo', 'payNo', 'paymentNo', 'tradeNo'], '--'),
   payStatus: firstOf(item, ['payStatus', 'status'], 'UNKNOWN'),
-  payAmountCent: toNumber(firstOf(item, ['payAmountCent', 'amountCent', 'totalAmountCent'], 0)),
-  createTime: firstOf(item, ['createTime', 'createdAt', 'payTime'], '--'),
+  reconcileStatus: firstOf(item, ['reconcileStatus', 'reconciliationStatus'], ''),
+  diffRemark: firstOf(item, ['diffRemark', 'reconcileRemark', 'reconciliationRemark', 'remark', 'processRemark', 'handleRemark', 'suggestedAction', 'diffType', 'reason', 'failReason', 'exceptionReason'], ''),
+  payAmountCent: toNumber(firstOf(item, ['payAmountCent', 'payAmount', 'amountCent', 'totalAmountCent'], 0)),
+  payTime: firstOf(item, ['payTime', 'paidAt'], ''),
+  createTime: firstOf(item, ['createTime', 'createdAt', 'created_at', 'create_time', 'gmtCreate', 'gmt_create'], ''),
 });
 const normalizeRefund = (item) => ({
   ...item,
   refundNo: firstOf(item, ['refundNo', 'refundOrderNo', 'aftersaleNo'], '--'),
   orderNo: firstOf(item, ['orderNo', 'orderSn'], '--'),
   status: firstOf(item, ['status', 'refundStatus'], 'UNKNOWN'),
+  reconcileStatus: firstOf(item, ['reconcileStatus', 'reconciliationStatus'], ''),
+  diffRemark: firstOf(item, ['diffRemark', 'reconcileRemark', 'reconciliationRemark', 'remark', 'processRemark', 'handleRemark', 'suggestedAction', 'diffType', 'reason', 'failReason', 'exceptionReason'], ''),
   refundAmountCent: toNumber(firstOf(item, ['refundAmountCent', 'amountCent', 'refundFeeCent'], 0)),
+  channel: firstOf(item, ['channel', 'payChannel', 'paymentMethod'], ''),
+  refundTime: firstOf(item, ['refundTime'], ''),
+  createTime: firstOf(item, ['createTime', 'createdAt', 'created_at', 'create_time', 'gmtCreate', 'gmt_create'], ''),
 });
-const normalizeStockWarning = (item) => ({
-  ...item,
-  skuId: firstOf(item, ['skuId', 'productSkuId', 'id'], '--'),
-  productName: firstOf(item, ['productName', 'spuName', 'skuName', 'name'], '--'),
-  availableStock: toNumber(firstOf(item, ['availableStock', 'stock', 'stockQuantity'], 0)),
-  lockedStock: toNumber(firstOf(item, ['lockedStock', 'lockStock'], 0)),
-  lowStockThreshold: toNumber(firstOf(item, ['lowStockThreshold', 'warningThreshold', 'threshold'], 0)),
-  warningStatus: firstOf(item, ['warningStatus', 'status'], 'UNKNOWN'),
-});
-
 export const DASHBOARD_ROLES = [
   { code: 'OPERATIONS', label: '运营', title: '运营驾驶舱', theme: 'operations', permission: 'dashboard:operations:view' },
   { code: 'FINANCE', label: '财务', title: '财务对账中心', theme: 'finance', permission: 'dashboard:finance:view' },
@@ -103,6 +107,12 @@ export function formatDate(date) {
   const day = `${date.getDate()}`.padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+const createCurrentMonthRange = () => {
+  const end = new Date();
+  const start = new Date(end.getFullYear(), end.getMonth(), 1);
+  return { type: 'month', startDate: formatDate(start), endDate: formatDate(end), rangeType: 'month' };
+};
 
 const buildRisk = (label, count, desc, level = 'NORMAL') => ({ label, count: toNumber(count), desc, level });
 
@@ -157,8 +167,8 @@ export function useDashboardData() {
   const loadOperations = (options = {}) => safeLoad('OPERATIONS', async () => {
     const [overviewRes, ordersRes, aftersalesRes] = await Promise.all([
       fetchDashboard(params.value),
-      fetchAdminOrders({ ...params.value, page: 1, size: 8, sortBy: 'id', sortOrder: 'desc' }),
-      fetchAdminAftersales({ ...params.value, page: 1, size: 8, sortField: 'createTime', sortOrder: 'desc' }),
+      fetchAdminOrders({ ...params.value, page: 1, size: 50, sortBy: 'id', sortOrder: 'desc' }),
+      fetchAdminAftersales({ ...params.value, page: 1, size: 50, sortField: 'createTime', sortOrder: 'desc' }),
     ]);
     const overview = normalizeResponse(overviewRes, {});
     const orders = normalizeResponse(ordersRes, {});
@@ -187,52 +197,241 @@ export function useDashboardData() {
       buildRisk('待审核售后', summary.pendingAftersaleCount, '售后申请需要运营尽快审核', summary.pendingAftersaleCount > 0 ? 'WARNING' : 'NORMAL'),
       buildRisk('待支付订单', summary.pendingOrderCount, '待支付订单需要关注超时关闭与用户支付转化', summary.pendingOrderCount > 0 ? 'LOW' : 'NORMAL'),
     ];
-    return { overview, stats, summary, operationsTrend, risks, todos: overview.todos?.length ? overview.todos : risks, orderRows, orderTotal: totalOf(orders), aftersaleRows, aftersaleTotal: totalOf(aftersales), orderOverviewRows: orderRows.slice(0, 6), orderDetailRows: orderRows.slice(0, 4).map((item, index) => ({ ...item, rowType: index < 2 ? 'ORDER' : 'AFTERSALE' })), };
+    return { overview, stats, summary, operationsTrend, risks, todos: overview.todos?.length ? overview.todos : risks, orderRows, orderTotal: totalOf(orders), aftersaleRows, aftersaleTotal: totalOf(aftersales), orderOverviewRows: orderRows.slice(0, 50), orderDetailRows: orderRows.slice(0, 4).map((item, index) => ({ ...item, rowType: index < 2 ? 'ORDER' : 'AFTERSALE' })), };
   }, options);
 
   const loadFinance = (options = {}) => safeLoad('FINANCE', async () => {
-    const [overviewRes, paysRes, refundsRes, reconcileRes, diffRes, callbacksRes] = await Promise.all([
-      fetchDashboard(params.value),
-      fetchAdminPays({ ...params.value, page: 1, size: 8, sortField: 'createTime', sortOrder: 'desc' }),
-      fetchAdminGlobalRefunds({ ...params.value, page: 1, size: 8, sortField: 'createTime', sortOrder: 'desc' }),
+    const monthParams = createCurrentMonthRange();
+    const latestFlowEnd = new Date();
+    const latestFlowStart = new Date();
+    latestFlowStart.setDate(latestFlowEnd.getDate() - 6);
+    const latestFlowRange = { startDate: formatDate(latestFlowStart), endDate: formatDate(latestFlowEnd) };
+    const latestFlowParams = { ...latestFlowRange, page: 1, size: 100, sortField: 'createTime', sortBy: 'createTime', sortOrder: 'desc' };
+    const [overviewRes, cumulativeNetIncomeRes, financeTrendRes, latestPaysRes, refundedPaysRes, refundsRes, reconcileRes, pendingTasksRes, completedTasksRes, archiveReportRes, hangingRes, callbacksRes] = await Promise.all([
+      fetchDashboard(monthParams),
+      fetchAdminFinanceCumulativeNetIncome(),
+      fetchAdminFinanceTrend(),
+      fetchAdminPays(latestFlowParams),
+      fetchAdminPays({ ...monthParams, status: 'REFUNDED', page: 1, size: 1, sortField: 'createTime', sortOrder: 'desc' }),
+      fetchAdminGlobalRefunds(latestFlowParams),
       fetchAdminReconciliationOverview(),
-      fetchAdminPayReconciliationRecords({ ...params.value, page: 1, size: 8, sortField: 'createTime', sortOrder: 'desc' }),
-      fetchAdminPayCallbackRecords({ ...params.value, page: 1, size: 8, sortField: 'createTime', sortOrder: 'desc' }),
+      fetchAdminOnlineReconcileTasks({ page: 1, size: 200 }),
+      fetchAdminOnlineReconcileTasks({ page: 1, size: 1, status: 'COMPLETED' }),
+      fetchAdminOnlineArchiveReport({ startDate: monthParams.startDate, endDate: monthParams.endDate }),
+      fetchAdminOnlineHangingFollows({ page: 1, size: 200 }),
+      fetchAdminPayCallbackRecords({ ...monthParams, page: 1, size: 8, sortField: 'createTime', sortOrder: 'desc' }),
     ]);
     const overview = normalizeResponse(overviewRes, {});
+    const cumulativeNetIncome = normalizeResponse(cumulativeNetIncomeRes, {});
+    const financeTrend = normalizeResponse(financeTrendRes, []);
     const reconcile = normalizeResponse(reconcileRes, {});
-    const paysPayload = normalizeResponse(paysRes, {});
+    const paysPayload = normalizeResponse(latestPaysRes, {});
+    const refundedPaysPayload = normalizeResponse(refundedPaysRes, {});
     const refundsPayload = normalizeResponse(refundsRes, {});
-    const diffsPayload = normalizeResponse(diffRes, {});
+    const pendingTasksPayload = normalizeResponse(pendingTasksRes, {});
+    const completedTasksPayload = normalizeResponse(completedTasksRes, {});
+    const archiveReportPayload = normalizeResponse(archiveReportRes, {});
+    const hangingPayload = normalizeResponse(hangingRes, {});
     const callbacksPayload = normalizeResponse(callbacksRes, {});
-    const pays = recordsOf(paysPayload);
-    const refunds = recordsOf(refundsPayload);
-    const diffs = recordsOf(diffsPayload);
+    const isDisplayPay = (item) => !['CLOSED', 'CANCELLED'].includes(String(firstOf(item, ['payStatus', 'status', 'tradeStatus'], '')).toUpperCase());
+    const isDisplayRefund = (item) => !['CANCELLED', 'CLOSED', 'REJECTED'].includes(String(firstOf(item, ['status', 'refundStatus'], '')).toUpperCase());
+    const archiveReportRows = [
+      ...recordsOf(archiveReportPayload.tasks ? { records: archiveReportPayload.tasks } : archiveReportPayload),
+      ...(Array.isArray(archiveReportPayload.tasks) ? archiveReportPayload.tasks : []),
+      ...(Array.isArray(archiveReportPayload.records) ? archiveReportPayload.records : []),
+      ...(Array.isArray(archiveReportPayload.list) ? archiveReportPayload.list : []),
+      ...(Array.isArray(archiveReportPayload.items) ? archiveReportPayload.items : []),
+    ];
+    const completedTaskRows = recordsOf(completedTasksPayload);
+    const archivedTasks = Array.from(new Set([...archiveReportRows, ...completedTaskRows].filter(Boolean)));
+    const archivedTaskByKey = new Map();
+    const archivedTaskByDateChannel = new Map();
+    const normalizeReconcileKey = (key) => String(key || '').trim();
+    const isCompletedReconcileRecord = (record) => {
+      const processStatus = String(firstOf(record, ['processStatus', 'handleStatus', 'handleResult', 'processResult'], '')).toUpperCase();
+      const taskStatus = String(firstOf(record, ['status', 'taskStatus', 'reconcileStatus', 'archiveStatus'], '')).toUpperCase();
+      return ['DONE', 'FINISHED', 'SUCCESS', 'RESOLVED', 'PROCESSED', 'IGNORED'].includes(processStatus)
+        || ['COMPLETED', 'COMPLETE', 'ARCHIVED', 'ARCHIVE', 'ARCHIVE_DONE', 'CLOSED'].includes(taskStatus)
+        || Boolean(firstOf(record, ['archivedAt', 'archiveTime', 'completedAt', 'completeTime', 'finishedAt', 'finishTime', 'processedAt', 'processTime', 'handledAt', 'handleTime'], ''));
+    };
+    const currentYear = String(monthParams.startDate || '').slice(0, 4) || String(new Date().getFullYear());
+    const normalizeReconcileDate = (value) => {
+      const text = normalizeReconcileKey(value);
+      const fullDateMatched = text.match(/\d{4}[-/]\d{1,2}[-/]\d{1,2}/);
+      if (fullDateMatched) {
+        const [year, month, day] = fullDateMatched[0].replace(/\//g, '-').split('-');
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      }
+      const shortDateMatched = text.match(/(^|\D)(\d{1,2})[-/月](\d{1,2})(日)?(\D|$)/);
+      if (shortDateMatched) return `${currentYear}-${String(shortDateMatched[2]).padStart(2, '0')}-${String(shortDateMatched[3]).padStart(2, '0')}`;
+      return '';
+    };
+    const normalizeReconcileChannel = (value) => {
+      const text = normalizeReconcileKey(value).toUpperCase().replace(/[\s_-]/g, '');
+      if (!text || text === '--') return '';
+      if (['WECHAT', 'WECHATPAY', 'WXPAY', 'WX', '微信', '微信支付'].includes(text)) return 'WECHAT_PAY';
+      if (['ALI', 'ALIPAY', 'ALIPAYPAY', '支付宝'].includes(text)) return 'ALIPAY';
+      if (['MOCK', '模拟渠道', '模拟支付', '模拟'].includes(text)) return 'MOCK';
+      return text;
+    };
+    const buildDateChannelKey = (date, channel) => {
+      const normalizedDate = normalizeReconcileDate(date);
+      const normalizedChannel = normalizeReconcileChannel(channel);
+      return normalizedDate && normalizedChannel ? `${normalizedDate}:${normalizedChannel}` : '';
+    };
+    const putRecordKey = (map, key, record) => {
+      const normalizedKey = normalizeReconcileKey(key);
+      if (normalizedKey && normalizedKey !== '--' && !map.has(normalizedKey)) map.set(normalizedKey, record);
+    };
+    const putBizOrderKey = (map, bizType, orderNo, record) => {
+      const normalizedBizType = normalizeReconcileKey(bizType).toUpperCase();
+      const normalizedOrderNo = normalizeReconcileKey(orderNo);
+      if (normalizedBizType && normalizedOrderNo && normalizedOrderNo !== '--') putRecordKey(map, `${normalizedBizType}:${normalizedOrderNo}`, record);
+    };
+    const putDateChannelKey = (map, date, channel, record) => {
+      const key = buildDateChannelKey(date, channel);
+      if (key && !map.has(key)) map.set(key, record);
+    };
+    const pickReconcileDate = (record) => firstOf(record, [
+      'reconcileDate', 'reconciliationDate', 'billDate', 'tradeDate', 'payDate', 'paidDate', 'paymentDate', 'refundDate', 'date', 'day', 'archiveDate', 'archivedDate', 'archiveTime', 'archivedAt', 'createdAt', 'createTime', 'occurTime', 'payTime', 'refundTime',
+    ]);
+    const pickReconcileChannel = (record) => firstOf(record, [
+      'channel', 'payChannel', 'paymentChannel', 'paymentMethod', 'tradeChannel', 'billChannel', 'payMethod', 'method', 'channelCode', 'payChannelCode',
+    ]);
+    const collectTaskRecords = (task) => [
+      task,
+      ...(Array.isArray(task?.items) ? task.items : []),
+      ...(Array.isArray(task?.diffItems) ? task.diffItems : []),
+      ...(Array.isArray(task?.localBills) ? task.localBills : []),
+      ...(Array.isArray(task?.bills) ? task.bills : []),
+      ...(Array.isArray(task?.logs) ? task.logs : []),
+      ...(Array.isArray(task?.records) ? task.records : []),
+      ...(Array.isArray(task?.details) ? task.details : []),
+      ...(Array.isArray(task?.children) ? task.children : []),
+    ];
+    archivedTasks.forEach((task) => {
+      collectTaskRecords(task).forEach((record) => {
+        putRecordKey(archivedTaskByKey, firstOf(record, ['payOrderNo', 'payNo', 'paymentNo', 'tradeNo', 'channelTradeNo']), task);
+        putRecordKey(archivedTaskByKey, firstOf(record, ['refundNo', 'refundOrderNo', 'aftersaleNo', 'channelRefundNo']), task);
+        putRecordKey(archivedTaskByKey, firstOf(record, ['orderNo', 'orderSn', 'bizOrderNo']), task);
+        putBizOrderKey(archivedTaskByKey, firstOf(record, ['bizType', 'businessType', 'flowType', 'billType']), firstOf(record, ['orderNo', 'orderSn', 'bizOrderNo']), task);
+        putDateChannelKey(archivedTaskByDateChannel, pickReconcileDate(record) || pickReconcileDate(task), pickReconcileChannel(record) || pickReconcileChannel(task), task);
+      });
+      putDateChannelKey(archivedTaskByDateChannel, pickReconcileDate(task), pickReconcileChannel(task), task);
+    });
+    const findByFlowKeys = (map, row) => map.get(row.payOrderNo) || map.get(row.payNo) || map.get(row.channelTradeNo) || map.get(row.refundNo) || map.get(row.channelRefundNo) || map.get(`${String(row.flowType || row.bizType || '').toUpperCase()}:${row.orderNo}`);
+    const findArchivedTaskByDateChannel = (row) => archivedTaskByDateChannel.get(buildDateChannelKey(pickReconcileDate(row), pickReconcileChannel(row)));
+    const sameReconcileKey = (left, right) => Boolean(normalizeReconcileKey(left)) && normalizeReconcileKey(left) === normalizeReconcileKey(right);
+    const isSameOnlineDiff = (diff, row) => {
+      const rowFlowType = String(row.flowType || row.bizType || '').toUpperCase();
+      const diffBizType = String(firstOf(diff, ['bizType', 'businessType', 'flowType', 'billType'], '')).toUpperCase();
+      if (rowFlowType === 'PAY') {
+        if (diffBizType && diffBizType !== 'PAY') return false;
+        return [diff.payOrderNo, diff.payNo, diff.paymentNo, diff.tradeNo, diff.channelTradeNo]
+          .some((value) => sameReconcileKey(value, row.payOrderNo) || sameReconcileKey(value, row.payNo));
+      }
+      if (rowFlowType === 'REFUND') {
+        if (diffBizType && diffBizType !== 'REFUND') return false;
+        return [diff.refundNo, diff.refundOrderNo, diff.aftersaleNo, diff.channelRefundNo]
+          .some((value) => sameReconcileKey(value, row.refundNo));
+      }
+      return false;
+    };
+    const completedReconcileRows = archivedTasks.flatMap((task) => collectTaskRecords(task).map((record) => ({ ...record, __task: task })));
+    const pendingTasks = recordsOf(pendingTasksPayload).filter((task) => !isCompletedReconcileRecord(task));
+    const onlineDiffPayloads = await Promise.all(pendingTasks.slice(0, 20).map((task) => fetchAdminOnlineDiffItems(task.id, { page: 1, size: 200 })));
+    const onlineDiffRows = onlineDiffPayloads.flatMap((response) => recordsOf(normalizeResponse(response, {})));
+    const completedOnlineDiffs = onlineDiffRows.filter(isCompletedReconcileRecord);
+    completedReconcileRows.push(...completedOnlineDiffs.map((record) => ({ ...record, __task: record })));
+    const onlineDiffs = onlineDiffRows.filter((diff) => !isCompletedReconcileRecord(diff));
+    const hangingRows = recordsOf(hangingPayload).filter((hanging) => !isCompletedReconcileRecord(hanging));
+    const findCompletedReconcileRecord = (row) => completedReconcileRows.find((record) => isSameOnlineDiff(record, row));
+    const findPendingOnlineDiff = (row) => onlineDiffs.find((diff) => isSameOnlineDiff(diff, row));
+    const isHangingFlow = (row) => hangingRows.some((hanging) => isSameOnlineDiff(hanging, row));
+    const hasPendingReconcileSignal = (row) => Boolean(findPendingOnlineDiff(row) || isHangingFlow(row) || row.processStatus === 'PENDING' || row.processStatus === 'HANGING');
+    const attachReconcileRecord = (row) => {
+      const existingRemark = firstOf(row, ['diffRemark', 'reconcileRemark', 'reconciliationRemark', 'remark', 'processRemark', 'handleRemark', 'suggestedAction', 'diffType', 'reason', 'failReason', 'exceptionReason'], '');
+      const pendingOnlineDiff = findPendingOnlineDiff(row);
+      const completedRecord = findCompletedReconcileRecord(row);
+      const archivedTask = findByFlowKeys(archivedTaskByKey, row) || findArchivedTaskByDateChannel(row) || completedRecord?.__task || completedRecord;
+      if (pendingOnlineDiff) {
+        return {
+          ...row,
+          onlineDiff: pendingOnlineDiff,
+          reconcileStatus: 'DIFF',
+          diffRemark: existingRemark || firstOf(pendingOnlineDiff, ['processRemark', 'handleRemark', 'suggestedAction', 'diffType', 'remark'], '线上对账差异'),
+        };
+      }
+      if (isHangingFlow(row)) {
+        return { ...row, reconcileStatus: 'DIFF', diffRemark: existingRemark || '挂账中，需持续跟进闭环' };
+      }
+      if (hasPendingReconcileSignal(row)) {
+        return { ...row, reconcileStatus: 'DIFF', diffRemark: existingRemark || '待处理差异，需人工核验' };
+      }
+      if (archivedTask || completedRecord) {
+        return {
+          ...row,
+          archivedTask,
+          completedRecord,
+          reconcileStatus: 'MATCHED',
+          diffRemark: existingRemark || firstOf(archivedTask || completedRecord, ['processRemark', 'handleRemark', 'suggestedAction', 'diffType', 'remark', 'taskNo', 'reconcileDate', 'billDate', 'archiveTime', 'completedAt', 'completeTime'], '已完成对账'),
+        };
+      }
+      return { ...row, reconcileStatus: 'PENDING', diffRemark: existingRemark };
+    };
+    const pays = Array.from(new Map(recordsOf(paysPayload).filter(isDisplayPay).map((item) => [firstOf(item, ['payOrderNo', 'payNo', 'id', 'orderNo']), item])).values()).map(normalizePay).map((row) => ({ ...row, flowType: 'PAY', bizType: 'PAY' })).map(attachReconcileRecord);
+    const refunds = recordsOf(refundsPayload).filter(isDisplayRefund).map(normalizeRefund).map((row) => ({ ...row, flowType: 'REFUND', bizType: 'REFUND' })).map(attachReconcileRecord);
+    const diffs = onlineDiffs;
     const callbacks = recordsOf(callbacksPayload);
-    const paidAmountCent = toNumber(overview.paidAmountCent || sumBy(pays, ['payAmountCent', 'amountCent', 'totalAmountCent']));
-    const refundAmountCent = toNumber(overview.refundAmountCent || sumBy(refunds, ['refundAmountCent', 'amountCent']));
+    const pendingDiffTaskCount = toNumber(
+      pendingTasksPayload.pendingDiffTaskCount
+      || pendingTasksPayload.pendingTaskCount
+      || pendingTasksPayload.totalPendingTaskCount
+      || pendingTasks.filter((task) => Number(task.pendingCount || task.pendingDiffCount || 0) > 0).length,
+    );
+    const pendingDiffCount = toNumber(
+      reconcile.pendingDiffCount
+      || reconcile.pendingCount
+      || pendingTasks.reduce((sum, task) => sum + toNumber(task.pendingCount || task.pendingDiffCount), 0)
+      || diffs.length,
+    );
+    const archivedTaskCount = toNumber(
+      completedTasksPayload.completedTaskCount
+      || completedTasksPayload.archivedTaskCount
+      || completedTasksPayload.totalCompletedTaskCount
+      || totalOf(completedTasksPayload)
+      || reconcile.completedTasks
+      || reconcile.archivedTaskCount,
+    );
+    const paidAmountCent = sumBy(pays, ['payAmountCent', 'payAmount', 'amountCent', 'totalAmountCent']);
+    const refundAmountCent = sumBy(refunds, ['refundAmountCent', 'amountCent']);
     const summary = {
+      financeRange: monthParams,
       paidAmountCent,
       refundAmountCent,
-      netIncomeCent: toNumber(overview.netIncomeCent || paidAmountCent - refundAmountCent),
-      payOrderCount: totalOf(paysPayload),
-      refundCount: totalOf(refundsPayload),
-      taskCount: toNumber(reconcile.taskCount || reconcile.totalCount),
-      pendingReconcileCount: toNumber(reconcile.pendingCount || totalOf(diffsPayload)),
-      hangingCount: toNumber(reconcile.hangingCount),
-      archivedCount: toNumber(reconcile.archivedCount || reconcile.doneCount),
-      abnormalReconcileCount: toNumber(reconcile.diffCount || totalOf(diffsPayload)),
+      netIncomeCent: paidAmountCent - refundAmountCent,
+      cumulativeNetIncomeCent: toNumber(firstOf(cumulativeNetIncome, ['cumulativeNetIncomeCent', 'totalNetIncomeCent', 'netIncomeCent'], 0)),
+      payOrderCount: pays.length || totalOf(paysPayload),
+      refundCount: totalOf(refundedPaysPayload),
+      refundOrderCount: refunds.length || totalOf(refundsPayload),
+      taskCount: toNumber(reconcile.taskCount || reconcile.totalCount || totalOf(pendingTasksPayload)),
+      pendingReconcileCount: pendingDiffCount,
+      pendingDiffTaskCount,
+      hangingCount: totalOf(hangingPayload),
+      archivedTaskCount,
+      archivedCount: archivedTaskCount,
+      abnormalReconcileCount: pendingDiffTaskCount,
       doneReconcileCount: toNumber(reconcile.doneCount),
       callbackFailedCount: callbacks.filter((item) => ['FAILED', 'ERROR'].includes(item.status || item.handleStatus)).length,
       successRate: toNumber(reconcile.successRate),
     };
     const risks = [
-      buildRisk('未处理对账差异', summary.pendingReconcileCount, '优先处理支付、退款与渠道账单差异', summary.pendingReconcileCount > 0 ? 'HIGH' : 'NORMAL'),
+      buildRisk('待处理差异任务', summary.pendingDiffTaskCount, '存在待处理差异的对账任务需要进入任务差异明细处理', summary.pendingDiffTaskCount > 0 ? 'HIGH' : 'NORMAL'),
       buildRisk('挂账未闭环', summary.hangingCount, '已挂账差异需要持续跟进到归档', summary.hangingCount > 0 ? 'WARNING' : 'NORMAL'),
       buildRisk('支付回调失败', summary.callbackFailedCount, '回调失败可能造成资金状态不同步', summary.callbackFailedCount > 0 ? 'HIGH' : 'NORMAL'),
-      buildRisk('退款记录', summary.refundCount, '关注退款状态同步和异常退款单', summary.refundCount > 0 ? 'LOW' : 'NORMAL'),
+      buildRisk('已退款支付单', summary.refundCount, '关注支付单已退款状态和异常退款单', summary.refundCount > 0 ? 'LOW' : 'NORMAL'),
     ];
-    return { overview: { ...overview, ...summary }, reconcile, summary, risks, todos: risks, pays, refunds, diffs, callbacks };
+    return { overview: { ...overview, ...summary }, reconcile, summary, financeTrend, risks, todos: risks, pays, refunds, diffs, callbacks, pendingTasks };
   }, options);
 
   const loadWarehouse = (options = {}) => safeLoad('WAREHOUSE', async () => {

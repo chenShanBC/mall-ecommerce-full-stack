@@ -37,6 +37,7 @@ public class PayFacade {
 
     public List<PayOrder> findAll() { return payOrderRepository.findAll(); }
     public PageResult<PayOrder> search(String status, String keyword, long page, long size, String sortBy, String sortOrder) { return payOrderRepository.search(status, keyword, page, size, sortBy, sortOrder); }
+    public PageResult<PayOrder> search(String status, String keyword, java.time.LocalDate startDate, java.time.LocalDate endDate, long page, long size, String sortBy, String sortOrder) { return payOrderRepository.search(status, keyword, startDate, endDate, page, size, sortBy, sortOrder); }
     public long countAll() { return payOrderRepository.countAll(); }
     public long countPending() { return payOrderRepository.countPending(); }
     public long countSuccess() { return payOrderRepository.countSuccess(); }

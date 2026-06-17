@@ -6,6 +6,8 @@ export function updateMyAdminProfile(data) { return request.put('/api/admin/me/p
 export function changeMyAdminPassword(data) { return request.put('/api/admin/me/password', data); }
 export function logoutAdmin() { return request.delete('/api/admin/logout'); }
 export function fetchDashboard(params = {}) { return request.get('/api/admin/dashboard', { params }); }
+export function fetchAdminFinanceCumulativeNetIncome() { return request.get('/api/admin/dashboard/finance-cumulative-net-income'); }
+export function fetchAdminFinanceTrend() { return request.get('/api/admin/dashboard/finance-trend'); }
 export function fetchAdminAccounts(params = {}) { return request.get('/api/admin/accounts', { params }); }
 export function fetchAdminRoles() { return request.get('/api/admin/roles'); }
 export function fetchAdminPermissions() { return request.get('/api/admin/permissions'); }

@@ -76,8 +76,8 @@
           <article class="dashboard-card chart-card">
             <div class="card-head">
               <div>
-                <h3>订单运营趋势：近 7 日订单履约与售后走势</h3>
-                <p>围绕订单、履约与售后变化进行连续观察。</p>
+                <h3>{{ mainChartMeta.title }}</h3>
+                <p>{{ mainChartMeta.desc }}</p>
               </div>
               <el-button size="small" type="primary" plain @click="refreshCurrentRole">刷新数据</el-button>
             </div>
@@ -95,7 +95,7 @@
             <div v-if="activeRole === 'OPERATIONS'" class="ops-table-stack">
               <div class="ops-table-block">
                 <div class="nested-block__title">最近订单</div>
-                <el-table :data="operationOrderRows" class="dashboard-table" height="240" empty-text="暂无近期订单">
+                <el-table :data="pagedOperationOrderRows" class="dashboard-table" height="240" empty-text="暂无近期订单">
                   <el-table-column prop="orderNo" label="订单号" min-width="160" />
                   <el-table-column label="客户" min-width="150">
                     <template #default="{ row }">{{ row.customerName || '--' }}</template>
@@ -116,12 +116,23 @@
                       <el-tag size="small" :type="statusMeta('order', row.fulfillmentStatus).type" effect="light">{{ statusMeta('order', row.fulfillmentStatus).label }}</el-tag>
                     </template>
                   </el-table-column>
-
                 </el-table>
+                <div class="ops-table-pagination">
+                  <span class="ops-table-pagination__summary">共 {{ operationOrderRows.length }} 条</span>
+                  <el-pagination
+                    v-model:current-page="operationOrderPage"
+                    v-model:page-size="operationOrderPageSize"
+                    size="small"
+                    background
+                    layout="sizes, prev, pager, next"
+                    :page-sizes="[5, 10, 20, 50]"
+                    :total="operationOrderRows.length"
+                  />
+                </div>
               </div>
               <div class="ops-table-block">
                 <div class="nested-block__title">最近售后</div>
-                <el-table :data="operationAftersaleRows" class="dashboard-table" height="240" empty-text="暂无近期售后">
+                <el-table :data="pagedOperationAftersaleRows" class="dashboard-table" height="240" empty-text="暂无近期售后">
                   <el-table-column prop="aftersaleNo" label="售后单" min-width="150" />
                   <el-table-column prop="orderNo" label="订单号" min-width="150" />
                   <el-table-column label="原因" min-width="170">
@@ -139,6 +150,98 @@
                     <template #default="{ row }">{{ row.createTime || '--' }}</template>
                   </el-table-column>
                 </el-table>
+                <div class="ops-table-pagination">
+                  <span class="ops-table-pagination__summary">共 {{ operationAftersaleRows.length }} 条</span>
+                  <el-pagination
+                    v-model:current-page="operationAftersalePage"
+                    v-model:page-size="operationAftersalePageSize"
+                    size="small"
+                    background
+                    layout="sizes, prev, pager, next"
+                    :page-sizes="[5, 10, 20, 50]"
+                    :total="operationAftersaleRows.length"
+                  />
+                </div>
+              </div>
+            </div>
+            <div v-else-if="activeRole === 'FINANCE'" class="finance-flow-panel">
+              <div class="finance-flow-filter">
+                <el-segmented v-model="financeFlowType" size="small" :options="financeFlowTypeOptions" />
+                <el-select v-model="financeReconcileStatus" size="small" style="width: 132px">
+                  <el-option label="全部状态" value="ALL" />
+                  <el-option label="待对账" value="PENDING" />
+                  <el-option label="已对账" value="MATCHED" />
+                  <el-option label="对账差异" value="DIFF" />
+                </el-select>
+                <el-input v-model="financeFlowKeyword" size="small" clearable placeholder="搜索订单号 / 退款号 / 流水号" class="finance-flow-search" />
+                <el-button class="finance-flow-export" size="small" type="primary" plain @click="exportFinanceFlowExcel">导出 Excel</el-button>
+              </div>
+              <el-table
+                :data="pagedFinanceFlowRows"
+                class="dashboard-table finance-flow-table"
+                height="300"
+                empty-text="暂无收支流水"
+                :row-class-name="financeFlowRowClass"
+              >
+                <el-table-column label="流水类型" width="116">
+                  <template #default="{ row }"><el-tag size="small" :type="row.flowType === 'PAY' ? 'primary' : 'danger'" effect="light">{{ row.flowTypeLabel }}</el-tag></template>
+                </el-table-column>
+                <el-table-column label="关联单号" min-width="210" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <button class="finance-flow-link" type="button" @click="handleFinanceFlowView(row)">{{ row.relatedNo }}</button>
+                    <small v-if="row.orderNo && row.orderNo !== row.relatedNo" class="finance-flow-sub-no">原订单 {{ row.orderNo }}</small>
+                  </template>
+                </el-table-column>
+                <el-table-column label="发生时间" width="118">
+                  <template #default="{ row }">{{ formatFinanceOccurTime(row.occurTime) }}</template>
+                </el-table-column>
+                <el-table-column label="渠道金额" width="130" align="right">
+                  <template #default="{ row }"><strong :class="['finance-amount', row.flowType === 'REFUND' ? 'finance-amount--refund' : 'finance-amount--income']">{{ formatFinanceFlowAmount(row) }}</strong></template>
+                </el-table-column>
+                <el-table-column label="支付渠道" width="112">
+                  <template #default="{ row }"><el-tag size="small" type="info" effect="plain">{{ financeChannelLabel(row.channel) }}</el-tag></template>
+                </el-table-column>
+                <el-table-column label="对账状态" width="118">
+                  <template #default="{ row }"><el-tag size="small" :type="financeReconcileStatusMeta(row.reconcileStatus).type" effect="light">{{ financeReconcileStatusMeta(row.reconcileStatus).label }}</el-tag></template>
+                </el-table-column>
+                <el-table-column label="差异备注" min-width="180">
+                  <template #default="{ row }">
+                    <el-tooltip
+                      :disabled="!isFinanceRemarkOverflow(row)"
+                      :content="financeDiffRemarkText(row)"
+                      placement="top-start"
+                      :show-after="250"
+                      :hide-after="0"
+                      :offset="8"
+                      effect="dark"
+                      popper-class="finance-flow-remark-tooltip"
+                    >
+                      <span
+                        :ref="(el) => setFinanceRemarkTextRef(row, el)"
+                        class="finance-remark-text"
+                        :class="{ 'finance-diff-remark': row.reconcileStatus === 'DIFF', 'finance-remark-text--ellipsis': isFinanceRemarkOverflow(row) }"
+                      >{{ financeDiffRemarkText(row) }}</span>
+                    </el-tooltip>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="130" fixed="right">
+                  <template #default="{ row }">
+                    <el-button size="small" link type="primary" @click="handleFinanceFlowView(row)">查看</el-button>
+                    <el-button v-if="row.reconcileStatus === 'DIFF'" size="small" link type="warning" @click="goPendingReconciliationTasks">处理</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div class="finance-flow-pagination">
+                <span class="finance-flow-pagination__summary">共 {{ filteredFinanceFlowRows.length }} 条</span>
+                <el-pagination
+                  v-model:current-page="financeFlowPage"
+                  v-model:page-size="financeFlowPageSize"
+                  size="small"
+                  background
+                  layout="sizes, prev, pager, next"
+                  :page-sizes="[5, 10, 20, 50]"
+                  :total="filteredFinanceFlowRows.length"
+                />
               </div>
             </div>
             <component v-else :is="tableMeta.component" :rows="tableMeta.rows" :loading="loading" />
@@ -182,8 +285,9 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import * as XLSX from 'xlsx';
 import AdminLayout from '../components/AdminLayout.vue';
 import BaseEChart from '../components/BaseEChart.vue';
 import { fetchAdminProductPage } from '../api';
@@ -191,6 +295,7 @@ import { DASHBOARD_ROLES, formatDate, useDashboardData } from '../hooks/dashboar
 import { useAdminStore } from '../stores/admin';
 import { getStatusTagMeta } from '../utils/status';
 
+const route = useRoute();
 const router = useRouter();
 const adminStore = useAdminStore();
 const { activeRole, range, loading, errors, state, resetRole, switchRole, updateRange, loadCurrentRole, exportRoleReport, centToYuan } = useDashboardData();
@@ -254,9 +359,23 @@ const handleCustomRangeChange = async (value) => {
   await updateRange({ type: 'custom', startDate: value[0], endDate: value[1] });
 };
 
+const normalizeDashboardRole = (role) => {
+  const value = String(role || '').toUpperCase();
+  return DASHBOARD_ROLES.some((item) => item.code === value) ? value : '';
+};
+
+const syncDashboardRoleRoute = async (role, mode = 'replace') => {
+  const normalizedRole = normalizeDashboardRole(role);
+  if (!normalizedRole) return;
+  const nextQuery = { ...route.query, role: normalizedRole };
+  if (route.query.role === normalizedRole) return;
+  await router[mode]({ path: route.path, query: nextQuery });
+};
+
 const switchDashboardRole = async (role) => {
   if (role === activeRole.value) return;
   await switchRole(role);
+  await syncDashboardRoleRoute(role, 'push');
 };
 
 const refreshCurrentRole = async () => {
@@ -271,23 +390,36 @@ const handleLogout = async () => {
 
 const goOrders = (status, extraQuery = {}) => router.push({ path: '/orders', query: { ...(status ? { status } : {}), ...extraQuery, page: 1 } });
 const goAftersales = (status) => router.push({ path: '/aftersales', query: status ? { status, page: 1 } : { page: 1 } });
-const goPays = (status) => router.push({ path: '/pays', query: status ? { status } : {} });
+const goPays = (status, extraQuery = {}) => router.push({ path: '/pays', query: { ...(status ? { status } : {}), ...extraQuery, page: 1 } });
+const goPayRefunds = (status, extraQuery = {}) => router.push({ path: '/pays', query: { tab: 'refunds', ...(status ? { refundStatus: status } : {}), ...extraQuery, refundPage: 1 } });
+const goPayCallbacks = (extraQuery = {}) => router.push({ path: '/pays', query: { tab: 'pays', openCallbacks: '1', ...extraQuery, page: 1 } });
 const goStocks = (warningStatus) => router.push({ path: '/stocks', query: warningStatus ? { warningStatus } : {} });
-const goReconciliations = (status) => router.push({ path: '/reconciliations', query: status ? { status } : {} });
+const goReconciliations = (status, extraQuery = {}) => router.push({ path: '/reconciliations', query: { ...(status ? { status } : {}), ...extraQuery } });
+const goPendingReconciliationTasks = () => goReconciliations('MATCHED', { tab: 'online', processStatus: 'PENDING' });
+const goHangingReconciliations = () => router.push({ path: '/reconciliations', query: { tab: 'hanging', page: 1 } });
 const goProducts = () => router.push('/products');
 
 const todayRangeQuery = () => {
   const today = formatDate(new Date());
   return { startDate: today };
 };
-const summaryRouteMap = {
+const operationSummaryRouteMap = {
   今日订单数: () => goOrders('', todayRangeQuery()),
   待发货: () => goOrders('PAID'),
   待售后: () => goAftersales('PENDING_REVIEW'),
 };
+const financeSummaryRouteMap = {
+  当月支付金额: () => goPays('', { paidLifecycle: 'true' }),
+  当月退款金额: () => goPayRefunds('REFUND_SUCCESS'),
+  待处理差异任务: () => goPendingReconciliationTasks(),
+};
 const handleSummaryCardClick = (card) => {
-  if (activeRole.value === 'OPERATIONS' && summaryRouteMap[card.label]) {
-    summaryRouteMap[card.label]();
+  if (activeRole.value === 'OPERATIONS' && operationSummaryRouteMap[card.label]) {
+    operationSummaryRouteMap[card.label]();
+    return;
+  }
+  if (activeRole.value === 'FINANCE') {
+    if (financeSummaryRouteMap[card.label]) financeSummaryRouteMap[card.label]();
     return;
   }
   managementMeta.value.action?.();
@@ -297,10 +429,15 @@ const riskRouteMap = {
   支付异常订单: () => goOrders('PAYMENT_EXCEPTION'),
   待审核售后: () => goAftersales('PENDING_REVIEW'),
   待支付订单: () => goOrders('PENDING_PAYMENT'),
+  待处理差异任务: () => goPendingReconciliationTasks(),
+  挂账未闭环: () => goHangingReconciliations(),
+  支付回调失败: () => goPayCallbacks({ callbackStatus: 'PROCESS_FAILED' }),
+  已退款支付单: () => goPays('REFUNDED'),
+  当月已退款支付单: () => goPays('REFUNDED'),
 };
 
 const handleRiskClick = (item) => {
-  if (activeRole.value === 'OPERATIONS' && riskRouteMap[item.label]) {
+  if (riskRouteMap[item.label]) {
     riskRouteMap[item.label]();
     return;
   }
@@ -340,20 +477,20 @@ const managementMeta = computed(() => {
       eyebrow: 'FINANCE MANAGEMENT',
       title: '财务管理',
       desc: '聚焦支付回款、退款、对账差异和资金闭环。',
-      actionText: '进入支付',
-      action: () => goPays(),
-      primaryLabel: '净收入',
-      primaryValue: formatMoney(summary.value.netIncomeCent || 0),
+      actionText: '查看待处理差异',
+      action: () => goPendingReconciliationTasks(),
+      primaryLabel: '累计总净收入',
+      primaryValue: formatMoney(summary.value.cumulativeNetIncomeCent || 0),
       metrics: [
-        { label: '支付金额', value: formatMoney(summary.value.paidAmountCent || 0) },
-        { label: '退款金额', value: formatMoney(summary.value.refundAmountCent || 0) },
-        { label: '对账差异', value: summary.value.abnormalReconcileCount || 0 },
+        { label: '当月支付金额', value: formatMoney(summary.value.paidAmountCent || 0) },
+        { label: '当月退款金额', value: formatMoney(summary.value.refundAmountCent || 0) },
+        { label: '待处理差异任务', value: summary.value.pendingDiffTaskCount || 0 },
         { label: '挂账未闭环', value: summary.value.hangingCount || 0 },
       ],
       tips: [
-        { label: '支付单', value: summary.value.payOrderCount || 0 },
-        { label: '退款单', value: summary.value.refundCount || 0 },
-        { label: '策略建议', value: (summary.value.abnormalReconcileCount || 0) > 0 ? '优先对账' : '资金健康' },
+        { label: '当月支付单', value: summary.value.payOrderCount || 0 },
+        { label: '已退款支付单', value: summary.value.refundCount || 0 },
+        { label: '策略建议', value: (summary.value.pendingDiffTaskCount || 0) > 0 ? '优先对账' : '资金健康' },
       ],
     };
   }
@@ -431,10 +568,10 @@ const summaryCards = computed(() => {
   }
   if (role === 'FINANCE') {
     return [
-      { label: '支付金额', value: formatMoney(summary.value.paidAmountCent || 0), desc: '累计支付金额' },
-      { label: '退款金额', value: formatMoney(summary.value.refundAmountCent || 0), desc: '累计退款金额' },
-      { label: '净收入', value: formatMoney(summary.value.netIncomeCent || 0), desc: '净回款金额' },
-      { label: '对账差异', value: summary.value.abnormalReconcileCount || 0, desc: '待处理差异数' },
+      { label: '当月支付金额', value: formatMoney(summary.value.paidAmountCent || 0), desc: '本月支付完成金额' },
+      { label: '当月退款金额', value: formatMoney(summary.value.refundAmountCent || 0), desc: '本月退款金额' },
+      { label: '当月净收入', value: formatMoney(summary.value.netIncomeCent || 0), desc: '支付金额 - 退款金额' },
+      { label: '待处理差异任务', value: summary.value.pendingDiffTaskCount || 0, desc: '存在待处理差异的对账任务' },
     ];
   }
   if (role === 'WAREHOUSE') {
@@ -453,7 +590,20 @@ const summaryCards = computed(() => {
   ];
 });
 
-const mainChartOption = computed(() => {
+const mainChartMeta = computed(() => {
+  if (activeRole.value === 'FINANCE') {
+    return {
+      title: '近 7 日资金趋势与对账风险',
+      desc: '展示每日支付、退款、净收入及待处理差异数量，辅助定位高风险账期。',
+    };
+  }
+  return {
+    title: '订单运营趋势：近 7 日订单履约与售后走势',
+    desc: '围绕订单、履约与售后变化进行连续观察。',
+  };
+});
+
+const operationsChartOption = computed(() => {
   const trendRows = Array.isArray(currentData.value?.operationsTrend) ? currentData.value.operationsTrend : [];
   const labels = trendRows.map((item) => String(item.date || '').slice(5) || '--');
   const orderCounts = trendRows.map((item) => Number(item.orderCount || 0));
@@ -474,25 +624,48 @@ const mainChartOption = computed(() => {
 });
 
 const financeChartOption = computed(() => {
-  const summaryValue = summary.value;
+  const trendRows = Array.isArray(currentData.value?.financeTrend) ? currentData.value.financeTrend : [];
+  const labels = trendRows.map((item) => String(item.date || '').slice(5) || '--');
+  const paidAmounts = trendRows.map((item) => Number((Number(item.paidAmountCent || 0) / 100).toFixed(2)));
+  const refundAmounts = trendRows.map((item) => Number((Number(item.refundAmountCent || 0) / 100).toFixed(2)));
+  const netIncomeAmounts = trendRows.map((item) => Number((Number(item.netIncomeCent || 0) / 100).toFixed(2)));
+  const pendingDiffCounts = trendRows.map((item) => Number(item.pendingDiffCount || 0));
   return {
-    tooltip: { trigger: 'axis' },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      formatter: (items = []) => {
+        const rows = Array.isArray(items) ? items : [items];
+        const title = rows[0]?.axisValueLabel || rows[0]?.name || '';
+        const lines = rows.map((item) => {
+          const value = item.seriesName === '待处理差异' ? `${Number(item.value || 0)} 单` : `¥${Number(item.value || 0).toFixed(2)}`;
+          return `${item.marker || ''}${item.seriesName}：${value}`;
+        });
+        return [title, ...lines].join('<br/>');
+      },
+    },
     legend: { top: 0, textStyle: { color: '#64748b' } },
-    grid: { left: 10, right: 16, top: 40, bottom: 8, containLabel: true },
-    xAxis: { type: 'category', boundaryGap: false, data: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], axisLabel: { color: '#94a3b8' } },
-    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(148,163,184,.14)' } }, axisLabel: { color: '#94a3b8' } },
+    grid: { left: 10, right: 18, top: 42, bottom: 8, containLabel: true },
+    xAxis: { type: 'category', boundaryGap: true, data: labels, axisLabel: { color: '#94a3b8' } },
+    yAxis: [
+      { type: 'value', name: '金额(元)', splitLine: { lineStyle: { color: 'rgba(148,163,184,.14)' } }, axisLabel: { color: '#94a3b8', formatter: '¥{value}' } },
+      { type: 'value', name: '差异数', minInterval: 1, splitLine: { show: false }, axisLabel: { color: '#94a3b8', formatter: '{value}单' } },
+    ],
     series: [
-      { name: '支付金额', type: 'line', smooth: true, data: Array.from({ length: 7 }, (_, i) => Math.max(0, Math.round((summaryValue.paidAmountCent || 0) / 100 / 7 * (0.8 + i * 0.05)))), lineStyle: { width: 4, color: '#7c3aed' }, itemStyle: { color: '#7c3aed' }, areaStyle: { color: 'rgba(124,58,237,.12)' } },
-      { name: '退款金额', type: 'line', smooth: true, data: Array.from({ length: 7 }, (_, i) => Math.max(0, Math.round((summaryValue.refundAmountCent || 0) / 100 / 7 * (0.7 + i * 0.04)))), lineStyle: { width: 3, color: '#f97316' }, itemStyle: { color: '#f97316' } },
-      { name: '净收入', type: 'line', smooth: true, data: Array.from({ length: 7 }, (_, i) => Math.max(0, Math.round((summaryValue.netIncomeCent || 0) / 100 / 7 * (0.78 + i * 0.05)))), lineStyle: { width: 3, color: '#2563eb' }, itemStyle: { color: '#2563eb' } },
+      { name: '待处理差异', type: 'bar', yAxisIndex: 1, barWidth: 18, data: pendingDiffCounts, itemStyle: { color: 'rgba(239,68,68,.24)', borderRadius: [8, 8, 0, 0] }, emphasis: { itemStyle: { color: 'rgba(239,68,68,.38)' } } },
+      { name: '支付金额', type: 'line', smooth: true, data: paidAmounts, lineStyle: { width: 4, color: '#2563eb' }, itemStyle: { color: '#2563eb' }, areaStyle: { color: 'rgba(37,99,235,.10)' } },
+      { name: '退款金额', type: 'line', smooth: true, data: refundAmounts, lineStyle: { width: 3, color: '#f97316' }, itemStyle: { color: '#f97316' } },
+      { name: '净收入', type: 'line', smooth: true, data: netIncomeAmounts, lineStyle: { width: 3, color: '#22c55e' }, itemStyle: { color: '#22c55e' } },
     ],
   };
 });
 
+const mainChartOption = computed(() => activeRole.value === 'FINANCE' ? financeChartOption.value : operationsChartOption.value);
+
 
 const sideMeta = computed(() => {
   if (activeRole.value === 'OPERATIONS') return { title: '运营管理', desc: '订单闭环与履约监控', tag: '高优先级', tagType: 'warning' };
-  if (activeRole.value === 'FINANCE') return { title: '财务管理', desc: '资金流入与对账闭环', tag: '资金看板', tagType: 'success' };
+  if (activeRole.value === 'FINANCE') return { title: '对账闭环结构', desc: '待处理差异账单、挂账跟进与已归档任务数量分布', tag: '差异结构', tagType: 'success' };
   if (activeRole.value === 'WAREHOUSE') return { title: '仓储管理', desc: '库存健康与异常预警', tag: '库存监控', tagType: 'info' };
   return { title: '商品管理', desc: '商品结构与销售表现', tag: '商品策略', tagType: 'primary' };
 });
@@ -507,9 +680,9 @@ const sideChartOption = computed(() => {
         center: ['50%', '50%'],
         label: { show: true, color: '#475569', formatter: '{b}\n{d}%' },
         data: [
-          { value: summary.value.pendingReconcileCount || 0, name: '待对账', itemStyle: { color: '#2563eb' } },
-          { value: summary.value.hangingCount || 0, name: '挂账', itemStyle: { color: '#7c3aed' } },
-          { value: summary.value.archivedCount || 0, name: '已归档', itemStyle: { color: '#22c55e' } },
+          { value: summary.value.pendingReconcileCount || 0, name: '待处理差异账单', itemStyle: { color: '#2563eb' } },
+          { value: summary.value.hangingCount || 0, name: '挂账未闭环', itemStyle: { color: '#7c3aed' } },
+          { value: summary.value.archivedTaskCount || 0, name: '已归档任务', itemStyle: { color: '#22c55e' } },
         ],
       }],
     };
@@ -586,43 +759,274 @@ const riskMeta = computed(() => {
 const visibleRisks = computed(() => (Array.isArray(risks.value) ? risks.value : []).slice(0, 4));
 const operationOrderRows = computed(() => currentData.value?.orderOverviewRows || []);
 const operationAftersaleRows = computed(() => currentData.value?.aftersaleRows || []);
-
-const DashboardFinanceTable = {
-  props: ['rows'],
-  computed: {
-    payRows() {
-      return this.rows?.pays || [];
-    },
-    refundRows() {
-      return this.rows?.refunds || [];
-    },
-  },
-  template: `
-    <div class="nested-grid">
-      <div class="nested-block">
-        <div class="nested-block__title">支付单</div>
-        <el-table :data="payRows" class="dashboard-table" height="240">
-          <el-table-column prop="payNo" label="支付单号" min-width="160" />
-          <el-table-column prop="orderNo" label="订单号" min-width="150" />
-          <el-table-column prop="payStatus" label="状态" width="110" />
-          <el-table-column prop="payAmountCent" label="金额" width="120">
-            <template #default="{ row }">{{ (Number(row.payAmountCent || 0) / 100).toFixed(2) }}</template>
-          </el-table-column>
-        </el-table>
-      </div>
-      <div class="nested-block">
-        <div class="nested-block__title">退款记录</div>
-        <el-table :data="refundRows" class="dashboard-table" height="240">
-          <el-table-column prop="refundNo" label="退款单" min-width="150" />
-          <el-table-column prop="orderNo" label="订单号" min-width="150" />
-          <el-table-column prop="status" label="状态" width="110" />
-          <el-table-column prop="refundAmountCent" label="金额" width="120">
-            <template #default="{ row }">{{ (Number(row.refundAmountCent || 0) / 100).toFixed(2) }}</template>
-          </el-table-column>
-        </el-table>
-      </div>
-    </div>
-  `,
+const operationOrderPage = ref(1);
+const operationOrderPageSize = ref(5);
+const operationAftersalePage = ref(1);
+const operationAftersalePageSize = ref(5);
+const pagedOperationOrderRows = computed(() => {
+  const start = (operationOrderPage.value - 1) * operationOrderPageSize.value;
+  return operationOrderRows.value.slice(start, start + operationOrderPageSize.value);
+});
+const pagedOperationAftersaleRows = computed(() => {
+  const start = (operationAftersalePage.value - 1) * operationAftersalePageSize.value;
+  return operationAftersaleRows.value.slice(start, start + operationAftersalePageSize.value);
+});
+watch([operationOrderPageSize], () => { operationOrderPage.value = 1; });
+watch([operationAftersalePageSize], () => { operationAftersalePage.value = 1; });
+watch(operationOrderRows, (rows) => {
+  const maxPage = Math.max(1, Math.ceil(rows.length / operationOrderPageSize.value));
+  if (operationOrderPage.value > maxPage) operationOrderPage.value = maxPage;
+});
+watch(operationAftersaleRows, (rows) => {
+  const maxPage = Math.max(1, Math.ceil(rows.length / operationAftersalePageSize.value));
+  if (operationAftersalePage.value > maxPage) operationAftersalePage.value = maxPage;
+});
+const financeFlowType = ref('ALL');
+const financeReconcileStatus = ref('ALL');
+const financeFlowKeyword = ref('');
+const financeFlowPage = ref(1);
+const financeFlowPageSize = ref(5);
+const financeRemarkOverflowMap = ref({});
+const financeFlowTypeOptions = [
+  { label: '全部流水', value: 'ALL' },
+  { label: '仅支付', value: 'PAY' },
+  { label: '仅退款', value: 'REFUND' },
+];
+const financeRemarkMap = {
+  AMOUNT_NOT_MATCH: '金额不一致',
+  AMOUNT_MISMATCH: '金额不一致',
+  STATUS_NOT_MATCH: '状态不一致',
+  STATUS_MISMATCH: '状态不一致',
+  CHANNEL_MISSING: '渠道流水缺失',
+  LOCAL_MISSING: '本地流水缺失',
+  ORDER_NOT_FOUND: '订单不存在',
+  PAY_NOT_FOUND: '支付单不存在',
+  REFUND_NOT_FOUND: '退款单不存在',
+  CALLBACK_MISSING: '回调记录缺失',
+  DUPLICATE_CHANNEL_TRADE: '渠道流水重复',
+  CHANNEL_EXISTS_LOCAL_MISSING: '渠道有流水，本地缺失',
+  LOCAL_EXISTS_CHANNEL_MISSING: '本地有流水，渠道缺失',
+  HANGING: '挂账中',
+  PENDING_HANDLE: '待处理',
+  PENDING_ACTION: '待处理',
+  SUCCESS: '成功',
+  FAILED: '失败',
+  NONE: '无',
+  MANUAL_REVIEW: '人工复核',
+  CLOSE_ORDER_VOID: '关闭订单并作废',
+  SYNC_PAY_STATUS: '同步支付状态',
+  SYNC_REFUND_RESULT: '同步退款结果',
+  REGISTER_AMOUNT_ADJUSTMENT: '登记金额调整',
+  SUBMIT_FINANCE_ADJUSTMENT: '提交财务调账',
+  MARK_TEST_FLOW_VOID: '标记测试流水作废',
+  MARK_DONE: '标记已处理',
+  IGNORE: '忽略',
+  HANG: '挂账',
+  DONE: '已完成',
+  COMPLETED: '已完成',
+  MATCHED: '已勾兑',
+  ARCHIVED: '已归档',
+  ARCHIVE_DONE: '归档完成',
+  PENDING: '待处理',
+  STATUS_AND_AMOUNT_MISMATCH: '状态和金额不一致',
+  REFUND_STATUS_MISMATCH: '退款状态不一致',
+};
+const translateFinanceRemark = (value) => {
+  const text = String(value || '').trim();
+  if (!text) return '--';
+  return text.replace(/[A-Z][A-Z0-9_]+/g, (word) => financeRemarkMap[word] || word);
+};
+const pickFinanceDiffRemark = (row = {}) => (
+  row.diffRemark
+  || row.reconcileRemark
+  || row.reconciliationRemark
+  || row.remark
+  || row.processRemark
+  || row.handleRemark
+  || row.suggestedAction
+  || row.diffType
+  || row.reason
+  || row.failReason
+  || row.exceptionReason
+  || row.raw?.diffRemark
+  || row.raw?.reconcileRemark
+  || row.raw?.reconciliationRemark
+  || row.raw?.remark
+  || row.raw?.processRemark
+  || row.raw?.handleRemark
+  || row.raw?.suggestedAction
+  || row.raw?.diffType
+  || row.raw?.reason
+  || row.raw?.failReason
+  || row.raw?.exceptionReason
+  || row.onlineDiff?.processRemark
+  || row.onlineDiff?.handleRemark
+  || row.onlineDiff?.suggestedAction
+  || row.onlineDiff?.diffType
+  || row.onlineDiff?.remark
+  || row.hangingFollow?.processRemark
+  || row.hangingFollow?.handleRemark
+  || row.hangingFollow?.remark
+  || row.hangingDiff?.processRemark
+  || row.hangingDiff?.handleRemark
+  || row.hangingDiff?.suggestedAction
+  || row.hangingDiff?.diffType
+  || row.hangingDiff?.remark
+  || row.completedRecord?.processRemark
+  || row.completedRecord?.handleRemark
+  || row.completedRecord?.suggestedAction
+  || row.completedRecord?.diffType
+  || row.completedRecord?.remark
+  || row.archivedTask?.processRemark
+  || row.archivedTask?.handleRemark
+  || row.archivedTask?.suggestedAction
+  || row.archivedTask?.diffType
+  || row.archivedTask?.remark
+  || row.archivedTask?.taskNo
+  || ''
+);
+const financeDiffRemarkText = (row = {}) => {
+  const explicitRemark = pickFinanceDiffRemark(row);
+  if (explicitRemark) return translateFinanceRemark(explicitRemark);
+  if (row.reconcileStatus === 'DIFF') return '存在对账差异，待处理';
+  if (row.reconcileStatus === 'MATCHED') return '已完成对账';
+  if (row.reconcileStatus === 'PENDING') return '待对账，等待线上账单核验';
+  return '--';
+};
+const financeRemarkKey = (row = {}) => `${row.flowType || 'FLOW'}:${row.relatedNo || row.orderNo || row.refundNo || row.payNo || ''}`;
+const updateFinanceRemarkOverflow = (row, el) => {
+  const key = financeRemarkKey(row);
+  if (!key) return;
+  const overflow = Boolean(el && el.scrollWidth > el.clientWidth + 1);
+  if (financeRemarkOverflowMap.value[key] !== overflow) {
+    financeRemarkOverflowMap.value = { ...financeRemarkOverflowMap.value, [key]: overflow };
+  }
+};
+const setFinanceRemarkTextRef = (row, el) => {
+  requestAnimationFrame(() => updateFinanceRemarkOverflow(row, el));
+};
+const isFinanceRemarkOverflow = (row) => Boolean(financeRemarkOverflowMap.value[financeRemarkKey(row)]);
+const inferReconcileStatus = (row) => {
+  const source = String(row.reconcileStatus || row.reconciliationStatus || '').toUpperCase();
+  const processStatus = String(row.processStatus || row.onlineDiff?.processStatus || row.hangingFollow?.processStatus || row.hangingDiff?.processStatus || '').toUpperCase();
+  const diffType = String(row.diffType || row.onlineDiff?.diffType || row.hangingDiff?.diffType || '').toUpperCase();
+  if (row.onlineDiff || row.hangingFollow || row.hangingDiff) return 'DIFF';
+  if (diffType && diffType !== 'MATCHED') return 'DIFF';
+  if (['PENDING', 'HANGING'].includes(processStatus)) return 'DIFF';
+  if (['DIFF', 'DIFFERENCE', 'HANGING', 'HANG', 'PENDING_HANDLE', 'PENDING_ACTION'].includes(source)) return 'DIFF';
+  if (row.archivedTask || row.archiveTask || row.archiveReport || row.completedRecord) return 'MATCHED';
+  if (['MATCHED', 'DONE', 'COMPLETED', 'SUCCESS', 'ARCHIVED', 'ARHIVED', 'ARCHIVE', 'ARCHIVE_DONE', 'CLOSED'].includes(source)) return 'MATCHED';
+  return 'PENDING';
+};
+const firstValidText = (...values) => values.find((value) => {
+  const text = String(value ?? '').trim();
+  return text && text !== '--' && text.toLowerCase() !== 'null' && text.toLowerCase() !== 'undefined';
+}) || '';
+const financeFlowRows = computed(() => {
+  const payRows = (tables.value.left || []).map((row) => {
+    const flowRow = {
+      ...row,
+      flowType: 'PAY',
+      flowTypeLabel: '支付订单',
+      orderNo: row.orderNo || '--',
+      refundNo: '',
+      relatedNo: row.payNo || row.orderNo || '--',
+      occurTime: firstValidText(row.payTime, row.paidAt, row.createTime, row.createdAt, row.created_at, row.create_time, row.gmtCreate, row.gmt_create, row.raw?.createdAt, row.raw?.created_at, row.raw?.create_time),
+      amountCent: Number(row.payAmountCent || 0),
+      channel: row.paymentMethod || row.payChannel || row.channel || 'UNKNOWN',
+      diffRemark: pickFinanceDiffRemark(row),
+      channelTradeNo: row.channelTradeNo || row.tradeNo || row.payNo || '',
+      raw: row,
+    };
+    return { ...flowRow, reconcileStatus: inferReconcileStatus(flowRow) };
+  });
+  const refundRows = (tables.value.right || []).map((row) => {
+    const flowRow = {
+      ...row,
+      flowType: 'REFUND',
+      flowTypeLabel: '售后退款',
+      orderNo: row.orderNo || '--',
+      refundNo: row.refundNo || '--',
+      relatedNo: row.refundNo || row.orderNo || '--',
+      occurTime: firstValidText(row.refundTime, row.createTime, row.createdAt, row.created_at, row.create_time, row.gmtCreate, row.gmt_create, row.raw?.createdAt, row.raw?.created_at, row.raw?.create_time),
+      amountCent: Number(row.refundAmountCent || 0),
+      channel: row.paymentMethod || row.payChannel || row.channel || 'UNKNOWN',
+      diffRemark: pickFinanceDiffRemark(row),
+      channelTradeNo: row.channelTradeNo || row.tradeNo || row.refundNo || '',
+      raw: row,
+    };
+    return { ...flowRow, reconcileStatus: inferReconcileStatus(flowRow) };
+  });
+  return [...payRows, ...refundRows].sort((a, b) => String(b.occurTime || '').localeCompare(String(a.occurTime || '')));
+});
+const filteredFinanceFlowRows = computed(() => {
+  const keyword = financeFlowKeyword.value.trim().toLowerCase();
+  return financeFlowRows.value.filter((row) => {
+    const typeMatched = financeFlowType.value === 'ALL' || row.flowType === financeFlowType.value;
+    const statusMatched = financeReconcileStatus.value === 'ALL' || row.reconcileStatus === financeReconcileStatus.value;
+    const keywordMatched = !keyword || [row.orderNo, row.refundNo, row.relatedNo, row.channelTradeNo].some((value) => String(value || '').toLowerCase().includes(keyword));
+    return typeMatched && statusMatched && keywordMatched;
+  });
+});
+const pagedFinanceFlowRows = computed(() => {
+  const start = (financeFlowPage.value - 1) * financeFlowPageSize.value;
+  return filteredFinanceFlowRows.value.slice(start, start + financeFlowPageSize.value);
+});
+watch([financeFlowType, financeReconcileStatus, financeFlowKeyword, financeFlowPageSize], () => {
+  financeFlowPage.value = 1;
+});
+watch([pagedFinanceFlowRows, financeFlowPageSize], () => {
+  financeRemarkOverflowMap.value = {};
+});
+watch(filteredFinanceFlowRows, (rows) => {
+  const maxPage = Math.max(1, Math.ceil(rows.length / financeFlowPageSize.value));
+  if (financeFlowPage.value > maxPage) financeFlowPage.value = maxPage;
+});
+const financeReconcileStatusMeta = (status) => ({
+  PENDING: { label: '待对账', type: 'warning' },
+  MATCHED: { label: '已对账', type: 'success' },
+  DIFF: { label: '对账差异', type: 'danger' },
+}[status] || { label: status || '--', type: 'info' });
+const financeChannelLabel = (channel) => ({
+  ALIPAY: '支付宝',
+  WECHAT: '微信',
+  WECHAT_PAY: '微信',
+  BALANCE: '余额',
+  MOCK: '模拟渠道',
+  UNKNOWN: '未知',
+}[String(channel || 'UNKNOWN').toUpperCase()] || channel || '未知');
+const formatFinanceOccurTime = (time) => {
+  const value = String(time || '');
+  const matched = value.match(/\d{4}-(\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+  if (matched) return `${matched[1]} ${matched[2]}`;
+  return value || '--';
+};
+const formatFinanceFlowAmount = (row) => `${row.flowType === 'REFUND' ? '-' : ''}${formatMoney(row.amountCent)}`;
+const exportFinanceFlowExcel = () => {
+  const rows = filteredFinanceFlowRows.value.map((row) => ({
+    流水类型: row.flowTypeLabel,
+    关联单号: row.relatedNo,
+    原订单号: row.orderNo || '',
+    发生时间: row.occurTime || '',
+    渠道金额: formatFinanceFlowAmount(row),
+    支付渠道: financeChannelLabel(row.channel),
+    对账状态: financeReconcileStatusMeta(row.reconcileStatus).label,
+    差异备注: financeDiffRemarkText(row) === '--' ? '' : financeDiffRemarkText(row),
+    渠道流水号: row.channelTradeNo || '',
+  }));
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 提示: '暂无收支流水' }]);
+  XLSX.utils.book_append_sheet(workbook, worksheet, '近期收支与对账流水');
+  XLSX.writeFile(workbook, `近期收支与对账流水-${formatDate(new Date())}.xlsx`);
+};
+const financeFlowRowClass = ({ row }) => row.reconcileStatus === 'DIFF' ? 'finance-flow-row--diff' : '';
+const handleFinanceFlowView = (row) => {
+  const orderKeyword = row.orderNo && row.orderNo !== '--' ? row.orderNo : row.relatedNo;
+  if (row.flowType === 'REFUND') {
+    goPayRefunds('', { keyword: orderKeyword, orderNo: orderKeyword });
+    return;
+  }
+  goPays('', { keyword: orderKeyword, orderNo: orderKeyword });
 };
 
 const DashboardWarehouseTable = {
@@ -682,9 +1086,8 @@ const tableMeta = computed(() => {
   }
   if (activeRole.value === 'FINANCE') {
     return {
-      title: '财务明细',
-      desc: '支付单与退款记录的近期摘要。',
-      component: DashboardFinanceTable,
+      title: '近期收支与对账流水',
+      desc: '统一展示支付与退款流水，快速识别待对账、差异和可处理单据。',
       rows: {
         pays: tables.value.left,
         refunds: tables.value.right,
@@ -738,7 +1141,12 @@ const loadProductSnapshot = async () => {
 };
 
 onMounted(async () => {
+  const routeRole = normalizeDashboardRole(route.query.role);
+  if (routeRole && routeRole !== activeRole.value) {
+    activeRole.value = routeRole;
+  }
   handleRoleVisibility();
+  await syncDashboardRoleRoute(activeRole.value);
   await Promise.all([loadCurrentRole(), loadProductSnapshot()]);
 });
 
@@ -838,9 +1246,32 @@ onBeforeUnmount(() => resetRole(activeRole.value));
 .risk-item__badge--warning{background:linear-gradient(135deg,rgba(254,243,199,.98),rgba(253,230,138,.84));color:#d97706}
 .risk-item__badge--normal{background:linear-gradient(135deg,rgba(219,234,254,.98),rgba(191,219,254,.82));color:#2563eb}
 .nested-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.finance-flow-panel{display:flex;flex-direction:column;gap:12px}
+.finance-flow-filter{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid rgba(226,232,240,.86);border-radius:18px;background:linear-gradient(180deg,rgba(250,251,255,.96),rgba(243,246,255,.88));box-shadow:inset 0 1px 0 rgba(255,255,255,.78)}
+.finance-flow-filter :deep(.el-segmented){--el-segmented-bg-color:rgba(241,245,249,.92);--el-segmented-item-selected-bg-color:#fff;--el-segmented-item-selected-color:#2563eb;--el-border-radius-base:12px;padding:3px;border:1px solid rgba(226,232,240,.9);box-shadow:none}
+.finance-flow-filter :deep(.el-segmented__item){border-radius:10px;font-size:12px;font-weight:800;color:#64748b;transition:color .18s ease,background .18s ease,box-shadow .18s ease}
+.finance-flow-filter :deep(.el-segmented__item.is-selected){box-shadow:0 6px 14px rgba(15,23,42,.08)}
+.finance-flow-filter :deep(.el-select .el-input__wrapper),.finance-flow-filter :deep(.el-input__wrapper){border-radius:12px;background:rgba(255,255,255,.92);box-shadow:0 0 0 1px rgba(226,232,240,.9)}
+.finance-flow-filter :deep(.el-input__wrapper.is-focus){box-shadow:0 0 0 1px rgba(37,99,235,.45)}
+.finance-flow-search{width:260px;max-width:100%}
+.finance-flow-export{border-radius:12px;font-weight:800}
+.finance-flow-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:34px;padding:2px 4px 0}
+.finance-flow-pagination__summary{font-size:12px;font-weight:800;color:#94a3b8;white-space:nowrap}
+.finance-flow-table :deep(.el-table__header th){background:rgba(248,250,252,.96);color:#64748b;font-weight:900}
+.finance-flow-table :deep(.finance-flow-row--diff td){background:rgba(255,247,237,.86)!important}
+.finance-flow-link{display:block;max-width:100%;padding:0;border:0;background:transparent;color:#2563eb;font-weight:900;cursor:pointer;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.finance-flow-link:hover{text-decoration:underline}
+.finance-flow-sub-no{display:block;margin-top:4px;color:#94a3b8;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.finance-remark-text{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:default}
+.finance-diff-remark{color:#d97706;font-weight:800}
+.finance-amount{font-weight:950;font-variant-numeric:tabular-nums}
+.finance-amount--income{color:#2563eb}
+.finance-amount--refund{color:#f97316}
 .nested-block,.ops-table-block{padding:14px;border-radius:20px;background:linear-gradient(180deg,rgba(250,251,255,.95),rgba(243,246,255,.88))}
 .ops-table-stack{display:flex;flex-direction:column;gap:12px}
 .ops-table-block{border:1px solid rgba(226,232,240,.7);box-shadow:inset 0 1px 0 rgba(255,255,255,.72)}
+.ops-table-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:34px;padding:8px 4px 0}
+.ops-table-pagination__summary{font-size:12px;font-weight:800;color:#94a3b8;white-space:nowrap}
 .nested-block__title{margin-bottom:10px;font-size:14px;font-weight:800;color:#334155}
 .dashboard-table{width:100%}
 .dashboard-page--operations .hero-visual__panel strong{color:#1d4ed8}
@@ -858,5 +1289,11 @@ onBeforeUnmount(() => resetRole(activeRole.value));
   .dashboard-hero{padding:18px}
   .hero-copy h2{font-size:28px}
   .chart-box--lg,.chart-box{height:240px}
+  .finance-flow-search{width:100%}
+  .finance-flow-pagination{align-items:flex-start;flex-direction:column}
 }
+</style>
+
+<style>
+.finance-flow-remark-tooltip{max-width:360px!important;line-height:1.6;word-break:break-word}
 </style>

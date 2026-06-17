@@ -17,6 +17,8 @@ public record AdminPaySummaryView(
         @Schema(description = "支付金额，单位分", example = "9990")
         Long payAmount,
         @Schema(description = "支付渠道", example = "MOCK_PAY")
-        String payChannel
+        String payChannel,
+        @Schema(description = "创建时间", example = "2026-06-17T10:15:30")
+        String createdAt
 ) {
 }

@@ -19,5 +19,7 @@ public interface OrderRefundRepository {
 
     List<OrderRefund> search(String status, String keyword);
 
+    List<OrderRefund> search(String status, String keyword, java.time.LocalDate startDate, java.time.LocalDate endDate);
+
     OrderRefund submitForRefunding(String refundNo);
 }

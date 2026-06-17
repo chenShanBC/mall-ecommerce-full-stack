@@ -24,6 +24,8 @@ public interface PayOrderRepository {
 
     PageResult<PayOrder> search(String status, String keyword, long page, long size, String sortBy, String sortOrder);
 
+    PageResult<PayOrder> search(String status, String keyword, java.time.LocalDate startDate, java.time.LocalDate endDate, long page, long size, String sortBy, String sortOrder);
+
     long countAll();
 
     long countPending();

@@ -19,6 +19,7 @@ public class PayViewAssembler {
                 payOrder.payChannel(),
                 payOrder.transactionNo(),
                 payOrder.idempotentKey(),
+                payOrder.createdAt() == null ? "" : payOrder.createdAt().toString(),
                 payOrder.callbackPayload(),
                 "",
                 ""
@@ -34,6 +35,7 @@ public class PayViewAssembler {
                 payOrder.payChannel(),
                 payOrder.transactionNo(),
                 payOrder.idempotentKey(),
+                payOrder.createdAt() == null ? "" : payOrder.createdAt().toString(),
                 payOrder.callbackPayload(),
                 submitResult == null ? "" : submitResult.redirectForm(),
                 submitResult == null ? "" : submitResult.redirectUrl()

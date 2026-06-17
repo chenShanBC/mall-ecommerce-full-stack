@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
+import java.time.LocalDateTime;
+
 @TableName("pay_order")
 public class PayOrderDO {
 
@@ -19,6 +21,7 @@ public class PayOrderDO {
     private String callbackPayload;
     private String idempotentKey;
     private Integer version;
+    private LocalDateTime createdAt;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -42,4 +45,6 @@ public class PayOrderDO {
     public void setIdempotentKey(String idempotentKey) { this.idempotentKey = idempotentKey; }
     public Integer getVersion() { return version; }
     public void setVersion(Integer version) { this.version = version; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

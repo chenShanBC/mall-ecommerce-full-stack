@@ -18,6 +18,8 @@ public record PayOrderView(
         String transactionNo,
         @Schema(description = "幂等键", example = "PAY:ORD202605010001")
         String idempotentKey,
+        @Schema(description = "创建时间", example = "2026-06-17T10:15:30")
+        String createdAt,
         @Schema(description = "回调负载")
         String callbackPayload,
         @Schema(description = "支付跳转表单 HTML")

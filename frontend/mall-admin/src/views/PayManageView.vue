@@ -301,6 +301,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import AdminLayout from '../components/AdminLayout.vue';
+import AdminOverflowText from '../components/AdminOverflowText.vue';
 import { closeAdminPayOrder, fetchAdminGlobalRefunds, fetchAdminPayCallbackRecords, fetchAdminPayDetail, fetchAdminPayReconciliationRecords, fetchAdminPays, repairAdminPaidOrder, syncAdminPayOrderStatus, syncAdminRefundStatus } from '../api';
 import { useAdminStore } from '../stores/admin';
 import { confirmAction } from '../utils/action';
@@ -389,9 +390,10 @@ const callbackVisible = ref(false);
 const callbackLoading = ref(false);
 const callbackRows = ref([]);
 const currentOrderNo = ref('');
-const query = reactive({ keyword: String(route.query.keyword || ''), status: String(route.query.status || ''), sortBy: String(route.query.sortBy || 'id'), sortOrder: String(route.query.sortOrder || 'desc') });
+const PAID_LIFECYCLE_PAY_STATUSES = ['SUCCESS', 'REFUND_PENDING', 'REFUNDING', 'PARTIALLY_REFUNDED', 'REFUNDED', 'REFUND_FAILED'];
+const query = reactive({ keyword: String(route.query.keyword || ''), status: String(route.query.status || ''), paidLifecycle: route.query.paidLifecycle === 'true', sortBy: String(route.query.sortBy || 'id'), sortOrder: String(route.query.sortOrder || 'desc') });
 const pager = reactive({ page: Number(route.query.page || 1), size: Number(route.query.size || ADMIN_PAGE_SIZE), total: 0 });
-const refundQuery = reactive({ keyword: String(route.query.refundKeyword || ''), status: String(route.query.refundStatus || '') });
+const refundQuery = reactive({ keyword: String(route.query.refundKeyword || route.query.keyword || route.query.orderNo || ''), status: String(route.query.refundStatus || '') });
 const refundPager = reactive({ page: Number(route.query.refundPage || 1), size: Number(route.query.refundSize || ADMIN_PAGE_SIZE), total: 0 });
 const callbackQuery = reactive({ keyword: String(route.query.callbackKeyword || ''), processStatus: String(route.query.callbackStatus || '') });
 const callbackPager = reactive({ page: 1, size: ADMIN_PAGE_SIZE, total: 0 });
@@ -404,6 +406,7 @@ const syncRoute = async () => {
       ...(activeTab.value !== 'pays' ? { tab: activeTab.value } : {}),
       ...(query.keyword ? { keyword: query.keyword } : {}),
       ...(query.status ? { status: query.status } : {}),
+      ...(query.paidLifecycle ? { paidLifecycle: 'true' } : {}),
       ...(query.sortBy ? { sortBy: query.sortBy } : {}),
       ...(query.sortOrder ? { sortOrder: query.sortOrder } : {}),
       ...(pager.page > 1 ? { page: String(pager.page) } : {}),
@@ -437,7 +440,15 @@ const loadPendingActions = async (payRows) => {
 const loadData = async () => {
   loading.value = true;
   try {
-    const { data } = await fetchAdminPays({ ...query, page: pager.page, size: pager.size });
+    if (query.paidLifecycle) {
+      const results = await Promise.all(PAID_LIFECYCLE_PAY_STATUSES.map((status) => fetchAdminPays({ ...query, paidLifecycle: undefined, status, page: 1, size: 500 })));
+      const mergedRows = Array.from(new Map(results.flatMap((result) => result.data.data?.records || []).map((row) => [row.payOrderNo || row.id || row.orderNo, row])).values());
+      rows.value = mergedRows.slice((pager.page - 1) * pager.size, pager.page * pager.size);
+      pager.total = mergedRows.length;
+      await loadPendingActions(rows.value);
+      return;
+    }
+    const { data } = await fetchAdminPays({ ...query, paidLifecycle: undefined, page: pager.page, size: pager.size });
     rows.value = data.data?.records || [];
     pager.total = data.data?.total || 0;
     await loadPendingActions(rows.value);
@@ -466,7 +477,7 @@ const handleTabChange = async () => {
   }
 };
 const handleSearch = async () => { pager.page = 1; await syncRoute(); await loadData(); };
-const handleReset = async () => { query.keyword = ''; query.status = ''; query.sortBy = 'id'; query.sortOrder = 'desc'; pager.page = 1; pager.size = ADMIN_PAGE_SIZE; await syncRoute(); await loadData(); };
+const handleReset = async () => { query.keyword = ''; query.status = ''; query.paidLifecycle = false; query.sortBy = 'id'; query.sortOrder = 'desc'; pager.page = 1; pager.size = ADMIN_PAGE_SIZE; await syncRoute(); await loadData(); };
 const handlePageChange = async (page) => { pager.page = page; await syncRoute(); await loadData(); };
 const handleSizeChange = async (size) => { pager.size = size; pager.page = 1; await syncRoute(); await loadData(); };
 const handleSortChange = async ({ prop, order }) => { query.sortBy = prop || 'id'; query.sortOrder = order === 'descending' ? 'desc' : 'asc'; pager.page = 1; await syncRoute(); await loadData(); };

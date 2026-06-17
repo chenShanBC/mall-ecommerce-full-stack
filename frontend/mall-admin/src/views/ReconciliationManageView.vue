@@ -31,13 +31,13 @@
       </div>
 
       <el-table v-loading="taskLoading" :data="tasks" class="admin-table admin-table--with-gap" empty-text="暂无对账任务" highlight-current-row @current-change="selectTask">
-        <el-table-column prop="taskNo" label="任务号" min-width="190" show-overflow-tooltip />
-        <el-table-column prop="reconcileDate" label="对账日期" width="120" />
+        <el-table-column label="任务号" min-width="190"><template #default="{ row }"><AdminOverflowText :value="row.taskNo" /></template></el-table-column>
+        <el-table-column label="对账日期" width="120"><template #default="{ row }"><AdminOverflowText :value="row.reconcileDate" /></template></el-table-column>
         <el-table-column prop="channel" label="渠道" width="120"><template #default="{ row }"><el-tag>{{ row.channel }}</el-tag></template></el-table-column>
         <el-table-column prop="status" label="任务状态" width="130"><template #default="{ row }"><el-tag :type="taskStatusMeta(row.status).type">{{ taskStatusMeta(row.status).label }}</el-tag></template></el-table-column>
         <el-table-column label="本地账单" width="120"><template #default="{ row }"><el-tag :type="billStatusType(row.localBillStatus)">{{ row.localTotalCount || 0 }} 笔</el-tag></template></el-table-column>
         <el-table-column label="渠道账单" width="120"><template #default="{ row }"><el-tag :type="billStatusType(row.channelBillStatus)">{{ row.channelTotalCount || 0 }} 笔</el-tag></template></el-table-column>
-        <el-table-column label="差异" width="120"><template #default="{ row }"><strong>{{ row.diffCount || 0 }}</strong> / 待 {{ row.pendingCount || 0 }}</template></el-table-column>
+        <el-table-column label="差异" width="120"><template #default="{ row }">{{ row.diffCount || 0 }} / 待 {{ row.pendingCount || 0 }}</template></el-table-column>
         <el-table-column label="金额(元)" min-width="160"><template #default="{ row }">本地 {{ formatCent(row.localTotalAmountCent) }} / 渠道 {{ formatCent(row.channelTotalAmountCent) }}</template></el-table-column>
         <el-table-column label="操作" width="430" fixed="right">
           <template #default="{ row }">
@@ -72,19 +72,20 @@
         <el-tabs v-model="detailTab" @tab-change="loadDetailTab">
           <el-tab-pane label="差异明细" name="diffs">
             <div class="admin-filter-bar diff-filter-bar"><el-select v-model="diffQuery.processStatus" clearable placeholder="处理状态" style="width: 160px"><el-option label="待处理" value="PENDING" /><el-option label="已完成" value="DONE" /><el-option label="挂账" value="HANGING" /><el-option label="已忽略" value="IGNORED" /></el-select><el-button type="primary" @click="loadDiffs">查询</el-button><el-button v-if="canHandleDiff" :disabled="!selectedDiffRows.length" @click="batchMarkDiffsDone">批量标记已处理 {{ selectedDiffRows.length ? `(${selectedDiffRows.length})` : '' }}</el-button><el-button v-if="canHandleDiff" type="warning" plain :disabled="!selectedDiffRows.length" @click="batchHangDiffs">批量挂账</el-button><el-button plain @click="exportDiffRows">导出差异清单</el-button></div>
-            <el-table v-loading="diffLoading" :data="diffRows" class="admin-table diff-table" empty-text="暂无差异明细" row-key="id" @selection-change="handleDiffSelectionChange">
+            <el-table v-loading="diffLoading" :data="diffRows" class="admin-table diff-table reconcile-diff-table reconcile-overflow-table" empty-text="暂无差异明细" row-key="id" highlight-current-row @selection-change="handleDiffSelectionChange">
               <el-table-column type="selection" width="46" :selectable="canSelectDiff" />
-              <el-table-column prop="bizType" label="类型" width="80"><template #default="{ row }"><el-tag>{{ row.bizType === 'REFUND' ? '退款' : '支付' }}</el-tag></template></el-table-column>
-              <el-table-column label="差异类型" min-width="190" show-overflow-tooltip><template #default="{ row }"><el-tooltip :content="diffTypeTip(row.diffType)" placement="top" :disabled="!diffTypeTip(row.diffType)"><el-tag effect="plain" :class="diffTypeClass(row.diffType)" :type="diffTypeTagType(row.diffType)">{{ diffTypeLabel(row.diffType) }}</el-tag></el-tooltip></template></el-table-column>
-              <el-table-column prop="diffLevel" label="等级" width="90"><template #default="{ row }"><el-tag :type="row.diffLevel === 'HIGH' ? 'danger' : row.diffLevel === 'MEDIUM' ? 'warning' : 'success'">{{ diffLevelLabel(row.diffLevel) }}</el-tag></template></el-table-column>
-              <el-table-column prop="orderNo" label="订单号" min-width="160" show-overflow-tooltip />
-              <el-table-column prop="payOrderNo" label="支付单号" min-width="160" show-overflow-tooltip />
-              <el-table-column prop="refundNo" label="退款单号" min-width="150" show-overflow-tooltip />
-              <el-table-column prop="localStatus" label="本地状态" min-width="120"><template #default="{ row }"><el-tag :type="reconcileStatusTagType(row.localStatus)">{{ reconcileStatusLabel(row.localStatus) }}</el-tag></template></el-table-column>
-              <el-table-column prop="channelStatus" label="渠道状态" min-width="130"><template #default="{ row }"><el-tag :type="reconcileStatusTagType(row.channelStatus)">{{ reconcileStatusLabel(row.channelStatus) }}</el-tag></template></el-table-column>
-              <el-table-column label="金额(元)" min-width="150"><template #default="{ row }">{{ formatCent(row.localAmountCent) }} / {{ formatCent(row.channelAmountCent) }}</template></el-table-column>
-              <el-table-column label="建议动作" min-width="150" show-overflow-tooltip><template #default="{ row }">{{ suggestedActionLabel(row.suggestedAction) }}</template></el-table-column>
-              <el-table-column prop="processStatus" label="处理状态" width="110"><template #default="{ row }"><el-tag :type="processStatusType(row.processStatus)">{{ processStatusLabel(row.processStatus) }}</el-tag></template></el-table-column>
+              <el-table-column prop="bizType" label="类型" width="80"><template #default="{ row }"><el-tag effect="plain" :class="row.bizType === 'REFUND' ? 'reconcile-tag--refund' : 'reconcile-tag--pay'">{{ row.bizType === 'REFUND' ? '退款' : '支付' }}</el-tag></template></el-table-column>
+              <el-table-column label="差异类型" min-width="190"><template #default="{ row }"><el-tag effect="plain" :class="diffTypeClass(row.diffType)" :type="diffTypeTagType(row.diffType)">{{ diffTypeLabel(row.diffType) }}</el-tag></template></el-table-column>
+              <el-table-column prop="diffLevel" label="等级" width="90"><template #default="{ row }"><el-tag effect="light" :type="diffLevelType(row.diffLevel)" :class="diffLevelClass(row.diffLevel)">{{ diffLevelLabel(row.diffLevel) }}</el-tag></template></el-table-column>
+              <el-table-column label="订单号" min-width="160"><template #default="{ row }"><AdminOverflowText :value="row.orderNo" /></template></el-table-column>
+              <el-table-column label="支付单号" min-width="160"><template #default="{ row }"><AdminOverflowText :value="row.payOrderNo" /></template></el-table-column>
+              <el-table-column label="退款单号" min-width="150"><template #default="{ row }"><AdminOverflowText :value="row.refundNo" /></template></el-table-column>
+              <el-table-column prop="localStatus" label="本地状态" min-width="120"><template #default="{ row }"><el-tag effect="light" :type="reconcileStatusTagType(row.localStatus)" :class="reconcileStatusClass(row.localStatus)">{{ reconcileStatusLabel(row.localStatus) }}</el-tag></template></el-table-column>
+              <el-table-column prop="channelStatus" label="渠道状态" min-width="130"><template #default="{ row }"><el-tag effect="light" :type="reconcileStatusTagType(row.channelStatus)" :class="reconcileStatusClass(row.channelStatus)">{{ reconcileStatusLabel(row.channelStatus) }}</el-tag></template></el-table-column>
+              <el-table-column label="金额(元)" min-width="150"><template #default="{ row }"><span class="reconcile-money-compare">{{ formatCent(row.localAmountCent) }} / {{ formatCent(row.channelAmountCent) }}</span></template></el-table-column>
+              <el-table-column label="建议动作" min-width="150"><template #default="{ row }"><el-tag effect="plain" :type="actionMeta(row.suggestedAction).type" :class="actionTagClass(row.suggestedAction)">{{ suggestedActionLabel(row.suggestedAction) }}</el-tag></template></el-table-column>
+              <el-table-column label="差异备注" min-width="240"><template #default="{ row }"><AdminOverflowText :value="diffRemarkText(row)" text-class="reconcile-remark-text" /></template></el-table-column>
+              <el-table-column prop="processStatus" label="处理状态" width="110"><template #default="{ row }"><el-tag effect="light" :type="processStatusType(row.processStatus)" :class="processStatusClass(row.processStatus)">{{ processStatusLabel(row.processStatus) }}</el-tag></template></el-table-column>
               <el-table-column label="操作" width="150" fixed="right"><template #default="{ row }"><el-button size="small" type="primary" plain @click="openDiffDetail(row)">查看/登记</el-button></template></el-table-column>
             </el-table>
             <div class="admin-pagination"><el-pagination background layout="sizes, prev, pager, next, total" :current-page="diffPager.page" :page-size="diffPager.size" :page-sizes="ADMIN_PAGE_SIZES" :total="diffPager.total" @current-change="handleDiffPageChange" @size-change="handleDiffSizeChange" /></div>
@@ -92,29 +93,29 @@
 
           <el-tab-pane label="本地账单" name="locals">
             <el-table v-loading="localLoading" :data="localRows" class="admin-table" empty-text="暂无本地账单">
-              <el-table-column prop="bizType" label="类型" width="80" />
-              <el-table-column prop="orderNo" label="订单号" min-width="160" show-overflow-tooltip />
-              <el-table-column prop="payOrderNo" label="支付单号" min-width="160" show-overflow-tooltip />
-              <el-table-column prop="refundNo" label="退款单号" min-width="150" show-overflow-tooltip />
-              <el-table-column prop="localStatus" label="本地状态" min-width="120"><template #default="{ row }"><el-tag :type="reconcileStatusTagType(row.localStatus)">{{ reconcileStatusLabel(row.localStatus) }}</el-tag></template></el-table-column>
-              <el-table-column prop="orderStatus" label="订单状态" min-width="120"><template #default="{ row }"><el-tag :type="reconcileStatusTagType(row.orderStatus)">{{ reconcileStatusLabel(row.orderStatus) }}</el-tag></template></el-table-column>
-              <el-table-column label="金额(元)" width="120"><template #default="{ row }">{{ formatCent(row.amountCent) }}</template></el-table-column>
-              <el-table-column prop="channel" label="渠道" width="120" />
-              <el-table-column prop="tradeTime" label="交易时间" min-width="170" />
+              <el-table-column prop="bizType" label="类型" width="80"><template #default="{ row }"><el-tag effect="plain" :class="row.bizType === 'REFUND' ? 'reconcile-tag--refund' : 'reconcile-tag--pay'">{{ row.bizType === 'REFUND' ? '退款' : '支付' }}</el-tag></template></el-table-column>
+              <el-table-column label="订单号" min-width="160"><template #default="{ row }"><AdminOverflowText :value="row.orderNo" text-class="reconcile-code-text" /></template></el-table-column>
+              <el-table-column label="支付单号" min-width="160"><template #default="{ row }"><AdminOverflowText :value="row.payOrderNo" text-class="reconcile-flow-text" /></template></el-table-column>
+              <el-table-column label="退款单号" min-width="150"><template #default="{ row }"><AdminOverflowText :value="row.refundNo" text-class="reconcile-flow-text" /></template></el-table-column>
+              <el-table-column prop="localStatus" label="本地状态" min-width="120"><template #default="{ row }"><el-tag effect="light" :type="reconcileStatusTagType(row.localStatus)" :class="reconcileStatusClass(row.localStatus)">{{ reconcileStatusLabel(row.localStatus) }}</el-tag></template></el-table-column>
+              <el-table-column prop="orderStatus" label="订单状态" min-width="120"><template #default="{ row }"><el-tag effect="light" :type="reconcileStatusTagType(row.orderStatus)" :class="reconcileStatusClass(row.orderStatus)">{{ reconcileStatusLabel(row.orderStatus) }}</el-tag></template></el-table-column>
+              <el-table-column label="金额(元)" width="120"><template #default="{ row }"><span class="reconcile-money-compare">{{ formatCent(row.amountCent) }}</span></template></el-table-column>
+              <el-table-column label="渠道" width="120"><template #default="{ row }"><AdminOverflowText :value="row.channel" text-class="reconcile-channel-text" /></template></el-table-column>
+              <el-table-column label="交易时间" min-width="170"><template #default="{ row }"><AdminOverflowText :value="row.tradeTime" text-class="reconcile-time-text" /></template></el-table-column>
             </el-table>
             <div class="admin-pagination"><el-pagination background layout="sizes, prev, pager, next, total" :current-page="localPager.page" :page-size="localPager.size" :page-sizes="ADMIN_PAGE_SIZES" :total="localPager.total" @current-change="handleLocalPageChange" @size-change="handleLocalSizeChange" /></div>
           </el-tab-pane>
 
           <el-tab-pane label="渠道账单" name="channels">
             <el-table v-loading="channelLoading" :data="channelRows" class="admin-table" empty-text="暂无渠道账单">
-              <el-table-column prop="bizType" label="类型" width="80" />
-              <el-table-column prop="outTradeNo" label="商户单号" min-width="160" show-overflow-tooltip />
-              <el-table-column prop="channelTradeNo" label="渠道交易号" min-width="180" show-overflow-tooltip />
-              <el-table-column prop="refundNo" label="退款单号" min-width="150" show-overflow-tooltip />
-              <el-table-column prop="channelRefundNo" label="渠道退款号" min-width="160" show-overflow-tooltip />
-              <el-table-column prop="channelStatus" label="渠道状态" min-width="130" />
-              <el-table-column label="金额(元)" width="120"><template #default="{ row }">{{ formatCent(row.amountCent) }}</template></el-table-column>
-              <el-table-column prop="tradeTime" label="交易时间" min-width="170" />
+              <el-table-column prop="bizType" label="类型" width="80"><template #default="{ row }"><el-tag effect="plain" :class="row.bizType === 'REFUND' ? 'reconcile-tag--refund' : 'reconcile-tag--pay'">{{ row.bizType === 'REFUND' ? '退款' : '支付' }}</el-tag></template></el-table-column>
+              <el-table-column label="商户单号" min-width="160"><template #default="{ row }"><AdminOverflowText :value="row.outTradeNo" text-class="reconcile-code-text" /></template></el-table-column>
+              <el-table-column label="渠道交易号" min-width="180"><template #default="{ row }"><AdminOverflowText :value="row.channelTradeNo" text-class="reconcile-flow-text" /></template></el-table-column>
+              <el-table-column label="退款单号" min-width="150"><template #default="{ row }"><AdminOverflowText :value="row.refundNo" text-class="reconcile-flow-text" /></template></el-table-column>
+              <el-table-column label="渠道退款号" min-width="160"><template #default="{ row }"><AdminOverflowText :value="row.channelRefundNo" text-class="reconcile-flow-text" /></template></el-table-column>
+              <el-table-column label="渠道状态" min-width="130"><template #default="{ row }"><el-tag effect="light" :type="reconcileStatusTagType(row.channelStatus)" :class="reconcileStatusClass(row.channelStatus)">{{ reconcileStatusLabel(row.channelStatus) }}</el-tag></template></el-table-column>
+              <el-table-column label="金额(元)" width="120"><template #default="{ row }"><span class="reconcile-money-compare">{{ formatCent(row.amountCent) }}</span></template></el-table-column>
+              <el-table-column label="交易时间" min-width="170"><template #default="{ row }"><AdminOverflowText :value="row.tradeTime" text-class="reconcile-time-text" /></template></el-table-column>
             </el-table>
             <div class="admin-pagination"><el-pagination background layout="sizes, prev, pager, next, total" :current-page="channelPager.page" :page-size="channelPager.size" :page-sizes="ADMIN_PAGE_SIZES" :total="channelPager.total" @current-change="handleChannelPageChange" @size-change="handleChannelSizeChange" /></div>
           </el-tab-pane>
@@ -129,18 +130,18 @@
         <el-card class="admin-page-card">
           <div class="section-title-row"><div><h2>差错挂账 & 跟进管理</h2><p>统一管理未解决的线上对账挂账差异，当前阶段仅支持跟进留痕、财务处理标记和人工完结。</p></div><el-button @click="loadHangingFollows">刷新挂账</el-button></div>
           <el-alert title="当前阶段说明" description="本页“跟进”“标记需财务处理”“人工完结”仅作用于对账差异单自身，用于运营留痕和流程标记；不会生成真实财务调账单，也不会修改订单、支付、退款或资金主数据。" type="info" show-icon :closable="false" class="hanging-stage-alert" />
-          <div class="admin-filter-bar"><el-input v-model="hangingQuery.keyword" clearable placeholder="订单号/流水号/任务号" style="width: 220px" @keyup.enter="loadHangingFollows" /><el-select v-model="hangingQuery.riskLevel" clearable placeholder="风险等级" style="width: 150px"><el-option label="高风险" value="HIGH" /><el-option label="中风险" value="MEDIUM" /><el-option label="低风险" value="LOW" /></el-select><el-button type="primary" @click="loadHangingFollows">查询</el-button><el-button @click="resetHangingFollows">重置</el-button></div>
-          <el-table v-loading="hangingLoading" :data="hangingRows" class="admin-table" empty-text="暂无挂账差异">
-            <el-table-column prop="taskNo" label="任务号" min-width="170" show-overflow-tooltip />
-            <el-table-column prop="reconcileDate" label="账期" width="120" />
-            <el-table-column label="风险" width="100"><template #default="{ row }"><el-tag :type="hangingRiskType(row.riskLevel)">{{ hangingRiskLabel(row.riskLevel) }}</el-tag></template></el-table-column>
-            <el-table-column label="差异类型" min-width="180"><template #default="{ row }"><el-tag effect="plain" :class="diffTypeClass(row.diffType)" :type="diffTypeTagType(row.diffType)">{{ diffTypeLabel(row.diffType) }}</el-tag></template></el-table-column>
-            <el-table-column prop="orderNo" label="订单号" min-width="160" show-overflow-tooltip />
-            <el-table-column prop="payOrderNo" label="支付单号" min-width="160" show-overflow-tooltip />
-            <el-table-column label="差异金额" width="110"><template #default="{ row }">{{ formatCent(row.diffAmountCent) }}</template></el-table-column>
-            <el-table-column label="挂账天数" width="100"><template #default="{ row }">{{ row.hangingDays || 0 }} 天</template></el-table-column>
-            <el-table-column prop="latestFollowContent" label="最新跟进" min-width="220" show-overflow-tooltip />
-            <el-table-column label="操作" width="300" fixed="right"><template #default="{ row }"><el-button size="small" @click="openHangingDetail(row)">详情</el-button><el-button v-if="canFollowHanging" size="small" type="primary" plain @click="openFollowDialog(row)">跟进</el-button><el-button v-if="canFollowHanging" size="small" type="warning" plain @click="transferHangingToFinance(row)">标记需财务处理</el-button><el-button v-if="canFollowHanging" size="small" type="success" plain @click="closeHanging(row)">人工完结</el-button></template></el-table-column>
+          <div class="admin-filter-bar hanging-filter-bar"><el-input v-model="hangingQuery.keyword" clearable placeholder="订单号/流水号/任务号" style="width: 220px" @keyup.enter="loadHangingFollows" /><el-select v-model="hangingQuery.riskLevel" clearable placeholder="风险等级" style="width: 150px"><el-option label="高风险" value="HIGH" /><el-option label="中风险" value="MEDIUM" /><el-option label="低风险" value="LOW" /></el-select><el-button type="primary" @click="loadHangingFollows">查询</el-button><el-button @click="resetHangingFollows">重置</el-button></div>
+          <el-table v-loading="hangingLoading" :data="hangingRows" class="admin-table hanging-follow-table reconcile-overflow-table" empty-text="暂无挂账差异" row-key="id">
+            <el-table-column label="任务号" min-width="130"><template #default="{ row }"><AdminOverflowText :value="row.taskNo" text-class="reconcile-code-text" /></template></el-table-column>
+            <el-table-column label="账期" width="120"><template #default="{ row }"><AdminOverflowText :value="row.reconcileDate" text-class="reconcile-time-text" /></template></el-table-column>
+            <el-table-column label="风险" width="90"><template #default="{ row }"><el-tag effect="light" :type="hangingRiskType(row.riskLevel)" :class="hangingRiskClass(row.riskLevel)">{{ hangingRiskLabel(row.riskLevel) }}</el-tag></template></el-table-column>
+            <el-table-column label="差异类型" min-width="140"><template #default="{ row }"><el-tag effect="plain" :class="diffTypeClass(row.diffType)" :type="diffTypeTagType(row.diffType)">{{ diffTypeLabel(row.diffType) }}</el-tag></template></el-table-column>
+            <el-table-column label="订单号" min-width="140"><template #default="{ row }"><AdminOverflowText :value="row.orderNo" text-class="reconcile-code-text" /></template></el-table-column>
+            <el-table-column label="支付单号" min-width="140"><template #default="{ row }"><AdminOverflowText :value="row.payOrderNo" text-class="reconcile-flow-text" /></template></el-table-column>
+            <el-table-column label="差异金额" width="90"><template #default="{ row }"><span class="reconcile-danger-money">{{ formatCent(row.diffAmountCent) }}</span></template></el-table-column>
+            <el-table-column label="挂账天数" width="80"><template #default="{ row }"><span class="reconcile-day-pill">{{ row.hangingDays || 0 }} 天</span></template></el-table-column>
+            <el-table-column label="最新跟进" min-width="160"><template #default="{ row }"><AdminOverflowText :value="row.latestFollowContent" text-class="reconcile-remark-text" /></template></el-table-column>
+            <el-table-column label="操作" width="360" fixed="right" align="center"><template #default="{ row }"><div class="hanging-action-group"><el-button size="small" @click="openHangingDetail(row)">详情</el-button><el-button v-if="canFollowHanging" size="small" type="primary" plain @click="openFollowDialog(row)">跟进</el-button><el-button v-if="canFollowHanging" size="small" type="warning" plain @click="transferHangingToFinance(row)">标记需财务处理</el-button><el-button v-if="canFollowHanging" size="small" type="success" plain @click="closeHanging(row)">人工完结</el-button></div></template></el-table-column>
           </el-table>
           <div class="admin-pagination"><el-pagination background layout="sizes, prev, pager, next, total" :current-page="hangingPager.page" :page-size="hangingPager.size" :page-sizes="ADMIN_PAGE_SIZES" :total="hangingPager.total" @current-change="handleHangingPageChange" @size-change="handleHangingSizeChange" /></div>
         </el-card>
@@ -154,7 +155,7 @@
             <div class="task-summary-grid archive-summary"><div><span>任务数</span><strong>{{ archiveReport.totalTasks || 0 }}</strong><em>已归档 {{ archiveReport.completedTasks || 0 }}</em></div><div><span>对账成功率</span><strong>{{ archiveSuccessRate }}%</strong><em>匹配 / 本地账单</em></div><div><span>差异数</span><strong>{{ archiveReport.totalDiffCount || 0 }}</strong><em>挂账 {{ archiveReport.totalHangCount || 0 }}</em></div><div><span>资金差额</span><strong>{{ formatCent(archiveReport.netDiffAmountCent) }}</strong><em>渠道 - 本地</em></div></div>
             <el-table :data="archiveReport.diffTypeStats || []" class="admin-table" empty-text="暂无差异统计"><el-table-column label="差异类型"><template #default="{ row }"><el-tag effect="plain" :class="diffTypeClass(row.diffType)" :type="diffTypeTagType(row.diffType)">{{ diffTypeLabel(row.diffType) }}</el-tag></template></el-table-column><el-table-column prop="count" label="数量" width="120" /><el-table-column label="金额汇总" width="140"><template #default="{ row }">{{ formatCent(row.amountCent) }}</template></el-table-column></el-table>
             <el-divider content-position="left">历史归档任务</el-divider>
-            <el-table :data="archiveReport.tasks || []" class="admin-table" empty-text="暂无历史任务" row-key="id" @selection-change="handleArchiveSelectionChange"><el-table-column type="selection" width="46" /><el-table-column prop="taskNo" label="任务号" min-width="180" /><el-table-column prop="reconcileDate" label="账期" width="120" /><el-table-column prop="channel" label="渠道" width="100" /><el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="taskStatusMeta(row.status).type">{{ taskStatusMeta(row.status).label }}</el-tag></template></el-table-column><el-table-column label="本地/渠道金额" min-width="180"><template #default="{ row }">{{ formatCent(row.localTotalAmountCent) }} / {{ formatCent(row.channelTotalAmountCent) }}</template></el-table-column><el-table-column label="差异/挂账" width="120"><template #default="{ row }">{{ row.diffCount || 0 }} / {{ row.hangCount || 0 }}</template></el-table-column><el-table-column label="导出/日志" width="300"><template #default="{ row }"><el-button size="small" plain @click="exportArchiveTaskPackage(row)">导出归档包</el-button><el-button size="small" plain @click="exportArchiveTaskDiffs(row)">差异清单</el-button><el-button size="small" plain @click="openTaskLogs(row)">操作日志</el-button></template></el-table-column></el-table>
+            <el-table :data="archiveReport.tasks || []" class="admin-table" empty-text="暂无历史任务" row-key="id" @selection-change="handleArchiveSelectionChange"><el-table-column type="selection" width="46" /><el-table-column label="任务号" min-width="180"><template #default="{ row }"><AdminOverflowText :value="row.taskNo" text-class="reconcile-code-text" /></template></el-table-column><el-table-column label="账期" width="120"><template #default="{ row }"><AdminOverflowText :value="row.reconcileDate" text-class="reconcile-time-text" /></template></el-table-column><el-table-column label="渠道" width="100"><template #default="{ row }"><el-tag effect="plain" class="reconcile-channel-tag">{{ row.channel }}</el-tag></template></el-table-column><el-table-column label="状态" width="110"><template #default="{ row }"><el-tag effect="light" :type="taskStatusMeta(row.status).type" :class="taskStatusClass(row.status)">{{ taskStatusMeta(row.status).label }}</el-tag></template></el-table-column><el-table-column label="本地/渠道金额" min-width="180"><template #default="{ row }"><span class="reconcile-money-compare">{{ formatCent(row.localTotalAmountCent) }} / {{ formatCent(row.channelTotalAmountCent) }}</span></template></el-table-column><el-table-column label="差异/挂账" width="120"><template #default="{ row }"><span class="reconcile-count-pill">{{ row.diffCount || 0 }} / {{ row.hangCount || 0 }}</span></template></el-table-column><el-table-column label="导出/日志" width="300"><template #default="{ row }"><el-button size="small" plain @click="exportArchiveTaskPackage(row)">导出归档包</el-button><el-button size="small" plain @click="exportArchiveTaskDiffs(row)">差异清单</el-button><el-button size="small" plain @click="openTaskLogs(row)">操作日志</el-button></template></el-table-column></el-table>
           </div>
         </el-card>
       </el-tab-pane>
@@ -222,7 +223,7 @@
           </template>
         </el-table-column>
         <el-table-column label="校验时间" width="190">
-          <template #default="{ row }"><span class="stock-checked-time">{{ formatStockCheckedAt(row.checkedAt) }}</span></template>
+          <template #default="{ row }"><AdminOverflowText :value="formatStockCheckedAt(row.checkedAt)" /></template>
         </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
@@ -248,8 +249,8 @@
     <el-dialog v-model="mockToolboxVisible" title="测试数据工具箱" width="680px">
       <el-alert title="该工具箱仅用于开发/测试造数" description="生成本地账单、Mock渠道账单和异常差异只服务于测试验证；业务差异详情页不再提供修改 Mock 渠道数据或高危模拟闭环入口。" type="warning" show-icon :closable="false" />
       <el-table :data="mockToolboxTasks" class="admin-table mock-toolbox-table" empty-text="暂无可操作的 Mock 对账任务">
-        <el-table-column prop="taskNo" label="任务号" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="reconcileDate" label="账期" width="110" />
+        <el-table-column label="任务号" min-width="180"><template #default="{ row }"><AdminOverflowText :value="row.taskNo" /></template></el-table-column>
+        <el-table-column label="账期" width="110"><template #default="{ row }"><AdminOverflowText :value="row.reconcileDate" /></template></el-table-column>
         <el-table-column label="测试标识" width="100"><template #default><el-tag type="warning" effect="plain">测试流水</el-tag></template></el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
@@ -297,8 +298,8 @@
               <p><span>订单号</span><strong>{{ diffDetail.localBill.orderNo || '-' }}</strong></p>
               <p><span>支付单号</span><strong>{{ diffDetail.localBill.payOrderNo || '-' }}</strong></p>
               <p><span>退款单号</span><strong>{{ diffDetail.localBill.refundNo || '-' }}</strong></p>
-              <p><span>本地状态</span><strong>{{ diffDetail.localBill.localStatus || '-' }}</strong></p>
-              <p><span>订单状态</span><strong>{{ diffDetail.localBill.orderStatus || '-' }}</strong></p>
+              <p><span>本地状态</span><strong>{{ reconcileStatusLabel(diffDetail.localBill.localStatus) }}</strong></p>
+              <p><span>订单状态</span><strong>{{ reconcileStatusLabel(diffDetail.localBill.orderStatus) }}</strong></p>
               <p><span>金额</span><strong>{{ formatCent(diffDetail.localBill.amountCent) }} 元</strong></p>
               <p><span>交易时间</span><strong>{{ diffDetail.localBill.tradeTime || '-' }}</strong></p>
             </template>
@@ -311,7 +312,7 @@
               <p><span>渠道交易号</span><strong>{{ diffDetail.channelBill.channelTradeNo || '-' }}</strong></p>
               <p><span>退款单号</span><strong>{{ diffDetail.channelBill.refundNo || '-' }}</strong></p>
               <p><span>渠道退款号</span><strong>{{ diffDetail.channelBill.channelRefundNo || '-' }}</strong></p>
-              <p><span>渠道状态</span><strong>{{ diffDetail.channelBill.channelStatus || '-' }}</strong></p>
+              <p><span>渠道状态</span><strong>{{ reconcileStatusLabel(diffDetail.channelBill.channelStatus) }}</strong></p>
               <p><span>金额</span><strong>{{ formatCent(diffDetail.channelBill.amountCent) }} 元</strong></p>
               <p><span>交易时间</span><strong>{{ diffDetail.channelBill.tradeTime || '-' }}</strong></p>
             </template>
@@ -330,6 +331,7 @@
             <ul class="channel-check-list"><li v-for="tip in channelCheckTips" :key="tip">{{ tip }}</li></ul>
           </el-alert>
           <el-alert v-if="recommendedReason" :title="`推荐原因：${recommendedReason}`" description="系统仅根据业务类型、账单状态和差异类型给出预判，最终原因仍需运营人工确认。" type="success" show-icon :closable="false" />
+          <el-alert :title="`差异备注：${diffRemarkText(diffDetail.diff)}`" type="info" show-icon :closable="false" class="diff-handle-alert" />
         </div>
         <el-alert v-if="diffDetail.diff.processStatus === 'HANGING'" title="该差异已登记挂账" description="挂账后不能在详情页重复挂账或二次处理，请到“差错挂账跟进”页新增跟进、转财务或完结闭环。" type="warning" show-icon :closable="false" class="diff-handle-alert" />
         <el-form v-if="diffDetail.diff.processStatus === 'PENDING'" :model="diffHandleForm" label-width="110px" class="diff-handle-form">
@@ -381,6 +383,7 @@ import { ElMessage } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import * as XLSX from 'xlsx';
 import AdminLayout from '../components/AdminLayout.vue';
+import AdminOverflowText from '../components/AdminOverflowText.vue';
 import { closeAdminOnlineHangingDiff, completeAdminOnlineReconcileTask, createAdminOnlineReconcileTask, fetchAdminOnlineArchiveReport, fetchAdminOnlineChannelBills, fetchAdminOnlineDiffItem, fetchAdminOnlineDiffItems, fetchAdminOnlineHangingFollows, fetchAdminOnlineLocalBills, fetchAdminOnlineReconcileTasks, fetchAdminOnlineTaskLogs, fetchAdminStockReconciliations, followAdminOnlineHangingDiff, generateAdminOnlineLocalBills, generateAdminOnlineMockChannelBills, handleAdminOnlineDiffItem, matchAdminOnlineReconcileTask, repairAdminStockReconciliation, transferAdminOnlineHangingDiffToFinance, uploadAdminAlipayChannelBills } from '../api';
 import { useAdminStore } from '../stores/admin';
 import { confirmAction } from '../utils/action';
@@ -424,7 +427,12 @@ const toLocalDateKey = (value) => {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
-const createForm = reactive({ reconcileDate: toLocalDateKey(new Date()), channel: 'MOCK', remark: '' });
+const yesterdayKey = () => {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  return toLocalDateKey(date);
+};
+const createForm = reactive({ reconcileDate: yesterdayKey(), channel: 'MOCK', remark: '' });
 const dateKey = (value) => toLocalDateKey(value);
 const hasExistingReconcileTask = (reconcileDate, channel) => {
   const targetDate = dateKey(reconcileDate);
@@ -433,8 +441,8 @@ const hasExistingReconcileTask = (reconcileDate, channel) => {
 };
 const disableReconcileDate = (date) => {
   const targetDate = dateKey(date);
-  const today = dateKey(new Date());
-  return targetDate > today || hasExistingReconcileTask(targetDate, createForm.channel);
+  const yesterday = yesterdayKey();
+  return targetDate >= yesterday || hasExistingReconcileTask(targetDate, createForm.channel);
 };
 const createDateDuplicated = computed(() => hasExistingReconcileTask(createForm.reconcileDate, createForm.channel));
 const archiveSuccessRate = computed(() => {
@@ -490,6 +498,7 @@ const taskStatusMeta = (status) => ({
   MATCHED: { label: '已勾兑', type: 'success' },
   COMPLETED: { label: '已归档', type: 'success' },
 }[status] || { label: status || '-', type: 'info' });
+const taskStatusClass = (status) => ({ CREATED: 'task-status--created', LOCAL_BILL_READY: 'task-status--local-ready', CHANNEL_BILL_READY: 'task-status--channel-ready', MATCHED: 'task-status--matched', COMPLETED: 'task-status--completed' }[status] || '');
 const billStatusType = (status) => status === 'READY' ? 'success' : 'info';
 const isTaskArchived = (row) => row?.status === 'COMPLETED';
 const canCompleteTask = (row) => canArchiveTask.value && !isTaskArchived(row) && Number(row?.pendingCount || 0) === 0;
@@ -535,6 +544,8 @@ const diffTypeClass = (type) => ({
   DUPLICATE_CHANNEL: 'diff-tag--duplicate',
 }[type] || '');
 const diffLevelLabel = (level) => ({ HIGH: '高', MEDIUM: '中', LOW: '低' }[level] || level || '-');
+const diffLevelType = (level) => ({ HIGH: 'danger', MEDIUM: 'warning', LOW: 'info' }[level] || 'info');
+const diffLevelClass = (level) => ({ HIGH: 'diff-level--high', MEDIUM: 'diff-level--medium', LOW: 'diff-level--low' }[level] || '');
 const actionMetaMap = {
   MANUAL_REVIEW: { label: '人工复核', type: 'info', summary: '交由运营人工确认原因' },
   SYNC_PAY_STATUS: { label: '同步支付状态', type: 'primary', summary: '同步支付系统状态并刷新订单' },
@@ -556,50 +567,117 @@ const actionMetaMap = {
   NONE: { label: '无需处理', type: 'info', summary: '无需额外动作' },
 };
 const actionMeta = (action) => actionMetaMap[action] || { label: action || '-', type: 'info', summary: '-' };
+const actionTagClass = (action) => ['reconcile-action-tag', `reconcile-action-tag--${String(action || 'none').toLowerCase().replace(/_/g, '-')}`];
 const suggestedActionLabel = (action) => actionMeta(action).label;
+const diffRemarkText = (row = {}) => row.processRemark || row.diffRemark || row.remark || row.suggestedRemark || diffTypeTip(row.diffType) || (row.diffType ? diffTypeLabel(row.diffType) : '--');
 const processStatusLabel = (status) => ({ PENDING: '待处理', DONE: '已完成', HANGING: '挂账', IGNORED: '已忽略' }[status] || status || '-');
 const processStatusType = (status) => ({ PENDING: 'warning', DONE: 'success', HANGING: 'danger', IGNORED: 'info' }[status] || 'info');
+const processStatusClass = (status) => ({ PENDING: 'process-status--pending', DONE: 'process-status--done', HANGING: 'process-status--hanging', IGNORED: 'process-status--ignored' }[status] || '');
 const hangingRiskLabel = (risk) => ({ HIGH: '高风险', MEDIUM: '中风险', LOW: '低风险' }[risk] || risk || '-');
 const hangingRiskType = (risk) => ({ HIGH: 'danger', MEDIUM: 'warning', LOW: 'info' }[risk] || 'info');
+const hangingRiskClass = (risk) => ({ HIGH: 'hanging-risk--high', MEDIUM: 'hanging-risk--medium', LOW: 'hanging-risk--low' }[risk] || '');
+const normalizeReconcileStatus = (status) => String(status || '').toUpperCase();
 const reconcileStatusLabel = (status) => ({
   SUCCESS: '支付成功',
+  PAY_SUCCESS: '支付成功',
+  PAID_SUCCESS: '支付成功',
+  PAYMENT_SUCCESS: '支付成功',
   PENDING: '待支付',
   WAITING: '待支付',
+  WAIT_PAY: '待支付',
+  UNPAID: '待支付',
   CLOSED: '支付关闭',
+  PAY_CLOSED: '支付关闭',
   FAILED: '支付失败',
+  PAY_FAILED: '支付失败',
   REFUNDED: '已退款',
   PARTIALLY_REFUNDED: '部分退款',
-  REFUND_SUCCESS: '退款成功',
+  PARTIAL_REFUND: '部分退款',
+  REFUND_SUCCESS: '已退款',
   REFUND_FAILED: '退款失败',
   REFUND_PROCESSING: '退款处理中',
-  PAID: '已支付',
+  REFUNDING: '退款处理中',
+  REFUND_CLOSED: '退款关闭',
+  PAID: '已退款',
   SHIPPED: '已发货',
   COMPLETED: '已完成',
+  FINISHED: '已完成',
   CANCELLED: '已取消',
+  CANCELED: '已取消',
   CREATED: '已创建',
+  NEW: '已创建',
   TRADE_SUCCESS: '渠道支付成功',
   TRADE_FINISHED: '渠道交易完成',
   TRADE_CLOSED: '渠道交易关闭',
+  TRADE_FAILED: '渠道交易失败',
   WAIT_BUYER_PAY: '渠道待支付',
-}[status] || status || '-');
+}[normalizeReconcileStatus(status)] || status || '-');
 const reconcileStatusTagType = (status) => ({
   SUCCESS: 'success',
-  REFUND_SUCCESS: 'success',
-  PAID: 'success',
-  COMPLETED: 'success',
+  PAY_SUCCESS: 'success',
+  PAID_SUCCESS: 'success',
+  PAYMENT_SUCCESS: 'success',
+  REFUND_SUCCESS: 'danger',
+  REFUNDED: 'danger',
+  PAID: 'danger',
+  COMPLETED: 'danger',
+  FINISHED: 'danger',
   TRADE_SUCCESS: 'success',
   TRADE_FINISHED: 'success',
   SHIPPED: 'primary',
   PENDING: 'warning',
   WAITING: 'warning',
+  WAIT_PAY: 'warning',
+  UNPAID: 'warning',
   REFUND_PROCESSING: 'warning',
+  REFUNDING: 'warning',
   WAIT_BUYER_PAY: 'warning',
   CLOSED: 'info',
+  PAY_CLOSED: 'info',
+  REFUND_CLOSED: 'info',
   CANCELLED: 'info',
+  CANCELED: 'info',
   TRADE_CLOSED: 'info',
+  CREATED: 'info',
+  NEW: 'info',
   FAILED: 'danger',
+  PAY_FAILED: 'danger',
   REFUND_FAILED: 'danger',
-}[status] || 'info');
+  TRADE_FAILED: 'danger',
+}[normalizeReconcileStatus(status)] || 'info');
+const reconcileStatusClass = (status) => ({
+  SUCCESS: 'reconcile-status--success',
+  PAY_SUCCESS: 'reconcile-status--success',
+  PAID_SUCCESS: 'reconcile-status--success',
+  PAYMENT_SUCCESS: 'reconcile-status--success',
+  REFUND_SUCCESS: 'reconcile-status--danger',
+  REFUNDED: 'reconcile-status--danger',
+  PAID: 'reconcile-status--danger',
+  COMPLETED: 'reconcile-status--success',
+  FINISHED: 'reconcile-status--success',
+  TRADE_SUCCESS: 'reconcile-status--success',
+  TRADE_FINISHED: 'reconcile-status--success',
+  SHIPPED: 'reconcile-status--primary',
+  PENDING: 'reconcile-status--warning',
+  WAITING: 'reconcile-status--warning',
+  WAIT_PAY: 'reconcile-status--warning',
+  UNPAID: 'reconcile-status--warning',
+  REFUND_PROCESSING: 'reconcile-status--warning',
+  REFUNDING: 'reconcile-status--warning',
+  WAIT_BUYER_PAY: 'reconcile-status--warning',
+  CLOSED: 'reconcile-status--info',
+  PAY_CLOSED: 'reconcile-status--info',
+  REFUND_CLOSED: 'reconcile-status--info',
+  CANCELLED: 'reconcile-status--info',
+  CANCELED: 'reconcile-status--info',
+  TRADE_CLOSED: 'reconcile-status--info',
+  CREATED: 'reconcile-status--info',
+  NEW: 'reconcile-status--info',
+  FAILED: 'reconcile-status--danger',
+  PAY_FAILED: 'reconcile-status--danger',
+  REFUND_FAILED: 'reconcile-status--danger',
+  TRADE_FAILED: 'reconcile-status--danger',
+}[normalizeReconcileStatus(status)] || 'reconcile-status--info');
 const stockStatusLabel = (status) => ({ CONSISTENT: '一致', REPAIRED: '已修复', INCONSISTENT: '不一致', ABNORMAL: '异常', IGNORED: '已忽略' }[status] || status || '-');
 const stockStatusType = (status) => ({ CONSISTENT: 'success', REPAIRED: 'primary', INCONSISTENT: 'danger', ABNORMAL: 'danger', IGNORED: 'info' }[status] || 'warning');
 const stockStatusClass = (status) => ({ CONSISTENT: 'stock-tag--consistent', REPAIRED: 'stock-tag--status-repaired', INCONSISTENT: 'stock-tag--inconsistent', ABNORMAL: 'stock-tag--abnormal', IGNORED: 'stock-tag--ignored' }[status] || '');
@@ -623,14 +701,24 @@ const isMockDiff = (detail) => detail?.channelBill?.channel === 'MOCK' || detail
 const loadTasks = async () => {
   taskLoading.value = true;
   try {
+    const selectedId = currentTask.value?.id;
     const { data } = await fetchAdminOnlineReconcileTasks({ ...taskQuery, page: taskPager.page, size: taskPager.size });
     tasks.value = data.data?.records || [];
     taskPager.total = data.data?.total || 0;
-    if (!currentTask.value && tasks.value.length) {
-      const targetTask = route.query.processStatus === 'PENDING'
-        ? tasks.value.find((task) => Number(task.pendingCount || 0) > 0) || tasks.value[0]
-        : tasks.value[0];
-      selectTask(targetTask);
+    if (tasks.value.length) {
+      const targetTask = tasks.value.find((task) => task.id === selectedId)
+        || (route.query.processStatus === 'PENDING'
+          ? tasks.value.find((task) => Number(task.pendingCount || 0) > 0) || tasks.value[0]
+          : tasks.value[0]);
+      await selectTask(targetTask);
+    } else {
+      currentTask.value = null;
+      diffRows.value = [];
+      localRows.value = [];
+      channelRows.value = [];
+      diffPager.total = 0;
+      localPager.total = 0;
+      channelPager.total = 0;
     }
   } catch (error) {
     ElMessage.error(error?.response?.data?.msg || '对账任务加载失败');
@@ -648,7 +736,10 @@ const applyTaskUpdate = (task) => {
 const selectTask = async (row) => {
   if (!row) return;
   currentTask.value = { ...row };
-  await loadDetailTab();
+  diffPager.page = 1;
+  localPager.page = 1;
+  channelPager.page = 1;
+  await loadAllDetailTables();
 };
 const refreshSelectedTask = async () => {
   const selectedId = currentTask.value?.id;
@@ -682,7 +773,7 @@ const generateLocal = async (row) => {
     const { data } = await generateAdminOnlineLocalBills(row.id);
     applyTaskUpdate(data.data);
     ElMessage.success('本地账单已生成');
-    await loadDetailTab();
+    await loadAllDetailTables();
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error?.response?.data?.msg || '生成本地账单失败，请确认是否存在该日期的支付单');
   }
@@ -693,7 +784,7 @@ const generateMock = async (row) => {
     const { data } = await generateAdminOnlineMockChannelBills(row.id, { mode: 'FULL_TEST' });
     applyTaskUpdate(data.data);
     ElMessage.success('Mock渠道账单已生成');
-    await loadDetailTab();
+    await loadAllDetailTables();
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error?.response?.data?.msg || '生成Mock渠道账单失败');
   }
@@ -703,7 +794,7 @@ const uploadAlipayCsv = async (row, file) => {
     const { data } = await uploadAdminAlipayChannelBills(row.id, file);
     applyTaskUpdate(data.data);
     ElMessage.success('支付宝渠道账单已上传');
-    if (currentTask.value?.id === row.id) await loadDetailTab();
+    if (currentTask.value?.id === row.id) await loadAllDetailTables();
   } catch (error) {
     ElMessage.error(error?.response?.data?.msg || '上传支付宝账单失败');
   }
@@ -711,12 +802,15 @@ const uploadAlipayCsv = async (row, file) => {
 };
 const matchTask = async (row) => {
   try {
-    await confirmAction(`确认对任务 ${row.taskNo} 执行自动勾兑吗？`);
+    const message = isMockTask(row)
+      ? `确认对任务 ${row.taskNo} 执行自动勾兑吗？Mock 渠道下进行自动勾兑会在后台生成部分对账异常信息，用于模拟对账出现差异的情况。`
+      : `确认对任务 ${row.taskNo} 执行自动勾兑吗？`;
+    await confirmAction(message);
     const { data } = await matchAdminOnlineReconcileTask(row.id);
     applyTaskUpdate(data.data);
     ElMessage.success('自动勾兑完成');
     detailTab.value = 'diffs';
-    await loadDiffs();
+    await loadAllDetailTables();
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error?.response?.data?.msg || '自动勾兑失败');
   }
@@ -920,7 +1014,11 @@ const handleDiffAction = async (action) => {
     diffHandling.value = false;
   }
 };
+const loadAllDetailTables = async () => {
+  await Promise.all([loadDiffs(), loadLocals(), loadChannels()]);
+};
 const loadDetailTab = async () => {
+  if (!currentTask.value) return;
   if (detailTab.value === 'locals') return loadLocals();
   if (detailTab.value === 'channels') return loadChannels();
   return loadDiffs();
@@ -1327,6 +1425,80 @@ onMounted(async () => {
 .diff-table :deep(.diff-tag--amount) { --el-tag-bg-color: #fefce8; --el-tag-border-color: #fde68a; --el-tag-text-color: #ca8a04; }
 .diff-table :deep(.diff-tag--refund) { --el-tag-bg-color: #faf5ff; --el-tag-border-color: #e9d5ff; --el-tag-text-color: #9333ea; }
 .diff-table :deep(.diff-tag--duplicate) { --el-tag-bg-color: #f3f4f6; --el-tag-border-color: #d1d5db; --el-tag-text-color: #4b5563; }
+.diff-table :deep(.reconcile-action-tag) { border-radius: 6px; }
+.diff-table :deep(.reconcile-action-tag--manual-review) { --el-tag-bg-color: #f8fafc; --el-tag-border-color: #cbd5e1; --el-tag-text-color: #64748b; }
+.reconcile-status--success { --el-tag-bg-color: #ecfdf5; --el-tag-border-color: #bbf7d0; --el-tag-text-color: #16a34a; }
+.reconcile-status--primary { --el-tag-bg-color: #eff6ff; --el-tag-border-color: #bfdbfe; --el-tag-text-color: #2563eb; }
+.reconcile-status--warning { --el-tag-bg-color: #fffbeb; --el-tag-border-color: #fde68a; --el-tag-text-color: #d97706; }
+.reconcile-status--info { --el-tag-bg-color: #eff6ff; --el-tag-border-color: #bfdbfe; --el-tag-text-color: #2563eb; }
+.reconcile-status--danger { --el-tag-bg-color: #fef2f2; --el-tag-border-color: #fecaca; --el-tag-text-color: #dc2626; }
+.reconcile-overflow-table,
+.reconcile-overflow-table :deep(.el-table__header),
+.reconcile-overflow-table :deep(.el-table__body) {
+  table-layout: fixed;
+}
+
+.reconcile-overflow-table :deep(.el-table__cell) {
+  overflow: hidden;
+}
+
+.reconcile-overflow-table :deep(.el-table__cell .cell) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  word-break: keep-all;
+}
+
+.reconcile-overflow-table :deep(.el-tooltip__trigger),
+.reconcile-overflow-table :deep(.admin-overflow-cell),
+.reconcile-overflow-table :deep(.admin-overflow-ellipsis) {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.reconcile-overflow-table :deep(.admin-overflow-ellipsis) {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+.hanging-follow-table :deep(.hanging-action-group) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+  white-space: nowrap;
+}
+.hanging-follow-table :deep(.hanging-action-group .el-button) {
+  margin-left: 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.hanging-filter-bar {
+  margin-top: 10px;
+  margin-bottom: 14px;
+}
+.hanging-stage-alert {
+  margin-bottom: 22px;
+  --el-alert-bg-color: #fff7ed;
+  --el-alert-border-color: #fed7aa;
+  --el-alert-title-text-color: #c2410c;
+  --el-alert-description-text-color: #9a3412;
+}
+.hanging-follow-table :deep(.reconcile-time-text) {
+  display: block;
+  padding-left: 4px;
+  color: #475569;
+  line-height: 1.5;
+}
 .diff-action-bar { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin: 12px 0 6px; }
 .reconcile-log-timeline { padding: 4px 6px 0 0; }
 .reconcile-log-card { padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 12px; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05); }

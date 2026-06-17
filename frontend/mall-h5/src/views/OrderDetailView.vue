@@ -108,10 +108,6 @@
         <div class="summary-line"><span>售后状态</span><span :class="`status-text status-text--${aftersaleStatusClass(latestAftersale.status)}`">{{ formatAftersaleStatus(latestAftersale.status) }}</span></div>
         <div class="summary-line"><span>退款金额</span><span>¥{{ formatPrice(latestAftersale.refundAmountCent) }}</span></div>
         <div class="summary-line"><span>申请原因</span><span>{{ latestAftersale.reason || '-' }}</span></div>
-        <div v-if="latestAftersale.rejectReason" class="aftersale-alert aftersale-alert--danger">
-          <div class="aftersale-alert__title">退款申请已被驳回</div>
-          <div class="aftersale-alert__content">{{ latestAftersale.rejectReason }}</div>
-        </div>
         <div v-if="latestAftersale.failReason" class="aftersale-alert aftersale-alert--danger">
           <div class="aftersale-alert__title">退款处理失败</div>
           <div class="aftersale-alert__content">{{ latestAftersale.failReason }}</div>

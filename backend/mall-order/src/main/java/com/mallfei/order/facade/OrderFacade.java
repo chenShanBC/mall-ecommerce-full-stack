@@ -56,6 +56,7 @@ public class OrderFacade {
     public Order getByOrderNo(String orderNo) { return orderDomainService.loadOrder(orderNo); }
     public List<OrderRefund> refundsByOrderNo(String orderNo) { return orderRefundRepository.findByOrderNo(orderNo); }
     public List<OrderRefund> searchRefunds(String status, String keyword) { return orderRefundRepository.search(status, keyword); }
+    public List<OrderRefund> searchRefunds(String status, String keyword, java.time.LocalDate startDate, java.time.LocalDate endDate) { return orderRefundRepository.search(status, keyword, startDate, endDate); }
     public OrderRefund getRefundByRefundNo(String refundNo) { return orderRefundRepository.findByRefundNo(refundNo).orElseThrow(() -> BusinessException.badRequest("退款单不存在: " + refundNo)); }
     public OrderRefundView approveRefundApplicationByAdmin(String refundNo) { return orderApplicationService.approveRefundApplicationByAdmin(refundNo); }
     public OrderRefundView createRefundApplicationByAdmin(Order order, com.mallfei.order.application.dto.OrderRefundApplyRequest request) { return orderApplicationService.createRefundApplicationByAdmin(order, request); }

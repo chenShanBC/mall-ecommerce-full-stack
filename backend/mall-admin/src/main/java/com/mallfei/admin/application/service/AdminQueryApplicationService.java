@@ -25,6 +25,7 @@ import com.mallfei.stock.application.dto.StockQuery;
 import com.mallfei.stock.facade.StockFacade;
 import com.mallfei.stock.facade.StockOperationLogSnapshot;
 import com.mallfei.stock.facade.StockSnapshot;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -48,6 +49,7 @@ public class AdminQueryApplicationService {
     private final ProductFacade productFacade;
     private final AftersaleFacade aftersaleFacade;
     private final AdminOperationConfigApplicationService operationConfigApplicationService;
+    private final JdbcTemplate jdbcTemplate;
 
     public AdminQueryApplicationService(AuthFacade authFacade,
                                         OrderFacade orderFacade,
@@ -57,7 +59,8 @@ public class AdminQueryApplicationService {
                                         StockFacade stockFacade,
                                         ProductFacade productFacade,
                                         AftersaleFacade aftersaleFacade,
-                                        AdminOperationConfigApplicationService operationConfigApplicationService) {
+                                        AdminOperationConfigApplicationService operationConfigApplicationService,
+                                        JdbcTemplate jdbcTemplate) {
         this.authFacade = authFacade;
         this.orderFacade = orderFacade;
         this.payFacade = payFacade;
@@ -67,6 +70,7 @@ public class AdminQueryApplicationService {
         this.productFacade = productFacade;
         this.aftersaleFacade = aftersaleFacade;
         this.operationConfigApplicationService = operationConfigApplicationService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public PageResult<AdminOrderSummaryView> adminOrders(String status, String keyword, java.time.LocalDate startDate, java.time.LocalDate endDate, long page, long size, String sortBy, String sortOrder) {
@@ -104,9 +108,9 @@ public class AdminQueryApplicationService {
         return new AdminOrderSkuSwitchOptionView(sku.id(), sku.skuName(), sku.skuCode(), sku.specJson(), sku.salePriceCent(), sku.availableStock(), sku.status(), currentSalePrice != null && currentSalePrice.equals(sku.salePriceCent()));
     }
 
-    public PageResult<AdminPaySummaryView> adminPays(String status, String keyword, long page, long size, String sortBy, String sortOrder) {
+    public PageResult<AdminPaySummaryView> adminPays(String status, String keyword, LocalDate startDate, LocalDate endDate, long page, long size, String sortBy, String sortOrder) {
         requireAdmin();
-        PageResult<PayOrder> result = payFacade.search(status, blank(keyword) ? null : keyword.trim(), page, size, sortBy, sortOrder);
+        PageResult<PayOrder> result = payFacade.search(status, blank(keyword) ? null : keyword.trim(), startDate, endDate, page, size, sortBy, sortOrder);
         return new PageResult<>(result.page(), result.size(), result.total(), result.pages(), result.records().stream().map(adminViewAssembler::toPaySummary).toList());
     }
 
@@ -125,16 +129,17 @@ public class AdminQueryApplicationService {
         return PageResult.of(rows, page, size);
     }
 
-    public PageResult<AdminRefundView> adminRefundsByKeyword(String status, String keyword, long page, long size) {
+    public PageResult<AdminRefundView> adminRefundsByKeyword(String status, String keyword, LocalDate startDate, LocalDate endDate, long page, long size) {
         requireAdmin();
-        List<AdminRefundView> rows = orderFacade.searchRefunds(blank(status) ? null : status.trim(), blank(keyword) ? null : keyword.trim()).stream()
+        List<AdminRefundView> rows = orderFacade.searchRefunds(blank(status) ? null : status.trim(), blank(keyword) ? null : keyword.trim(), startDate, endDate).stream()
                 .map(this::toAdminRefundView)
                 .toList();
         return PageResult.of(rows, page, size);
     }
 
     private AdminRefundView toAdminRefundView(com.mallfei.order.domain.model.OrderRefund refund) {
-        return new AdminRefundView(refund.id(), refund.refundNo(), refund.orderNo(), refund.userId(), refund.refundAmountCent(), refund.channelRefundNo(), refund.refundStatus(), refund.refundReason(), refund.failReason(), refund.createdAt(), refund.updatedAt(),
+        String payChannel = payFacade.findByOrderNo(refund.orderNo()).map(PayOrder::payChannel).orElse("");
+        return new AdminRefundView(refund.id(), refund.refundNo(), refund.orderNo(), refund.userId(), refund.refundAmountCent(), payChannel, refund.channelRefundNo(), refund.refundStatus(), refund.refundReason(), refund.failReason(), refund.createdAt(), refund.updatedAt(),
                 orderFacade.refundItemsByRefundNo(refund.refundNo()).stream()
                         .map(item -> new AdminRefundItemView(item.id(), item.orderItemId(), item.skuId(), item.quantity(), item.refundAmountCent()))
                         .toList());
@@ -227,12 +232,13 @@ public class AdminQueryApplicationService {
                 record.createdAt());
     }
 
-    public PageResult<AdminAftersaleSummaryView> adminAftersales(String status, String keyword, long page, long size) {
+    public PageResult<AdminAftersaleSummaryView> adminAftersales(String status, String keyword, Long userId, long page, long size) {
         requireAdmin();
         String safeKeyword = blank(keyword) ? null : keyword.trim();
         String safeStatus = blank(status) ? null : status.trim();
         List<AdminAftersaleSummaryView> rows = aftersaleFacade.findAll().stream()
                 .filter(item -> safeStatus == null || safeStatus.equalsIgnoreCase(item.status()))
+                .filter(item -> userId == null || userId.equals(item.userId()))
                 .filter(item -> safeKeyword == null || contains(item.aftersaleNo(), safeKeyword) || contains(item.orderNo(), safeKeyword) || contains(String.valueOf(item.userId()), safeKeyword))
                 .map(this::toAftersaleSummary)
                 .toList();
@@ -290,6 +296,93 @@ public class AdminQueryApplicationService {
     public AdminDashboardOverviewView dashboardOverview() {
         requireAdmin();
         return buildDashboardOverview();
+    }
+
+    public Map<String, Long> financeCumulativeNetIncome() {
+        requireAdmin();
+        long paidAmountCent = payFacade.findAll().stream()
+                .filter(pay -> List.of("SUCCESS", "REFUND_PENDING", "REFUNDING", "PARTIALLY_REFUNDED", "REFUNDED", "REFUND_FAILED").contains(pay.payStatus()))
+                .mapToLong(pay -> pay.payAmountCent() == null ? 0L : pay.payAmountCent())
+                .sum();
+        long refundAmountCent = queryAmount(
+                "SELECT COALESCE(SUM(refund_amount_cent), 0) AS amount "
+                        + "FROM pay_refund_order "
+                        + "WHERE refund_status = 'REFUND_SUCCESS'"
+        );
+        return Map.of(
+                "cumulativePaidAmountCent", paidAmountCent,
+                "cumulativeRefundAmountCent", refundAmountCent,
+                "cumulativeNetIncomeCent", paidAmountCent - refundAmountCent
+        );
+    }
+
+    public List<AdminDashboardFinanceTrendView> financeTrend() {
+        requireAdmin();
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(6);
+        Map<LocalDate, Long> paidAmountByDate = queryAmountByDate(
+                "SELECT DATE(COALESCE(callback_time, processed_at, created_at)) AS biz_date, COALESCE(SUM(amount_cent), 0) AS amount "
+                        + "FROM pay_callback_record "
+                        + "WHERE callback_type = 'PAY' AND process_status = 'PROCESSED' "
+                        + "AND DATE(COALESCE(callback_time, processed_at, created_at)) BETWEEN ? AND ? "
+                        + "GROUP BY DATE(COALESCE(callback_time, processed_at, created_at))",
+                startDate,
+                endDate
+        );
+        Map<LocalDate, Long> refundAmountByDate = queryAmountByDate(
+                "SELECT DATE(COALESCE(success_at, updated_at, created_at)) AS biz_date, COALESCE(SUM(refund_amount_cent), 0) AS amount "
+                        + "FROM pay_refund_order "
+                        + "WHERE refund_status = 'REFUND_SUCCESS' "
+                        + "AND DATE(COALESCE(success_at, updated_at, created_at)) BETWEEN ? AND ? "
+                        + "GROUP BY DATE(COALESCE(success_at, updated_at, created_at))",
+                startDate,
+                endDate
+        );
+        Map<LocalDate, Long> pendingDiffByDate = queryAmountByDate(
+                "SELECT reconcile_date AS biz_date, COALESCE(SUM(pending_count), 0) AS amount "
+                        + "FROM pay_reconcile_task "
+                        + "WHERE reconcile_date BETWEEN ? AND ? AND COALESCE(pending_count, 0) > 0 "
+                        + "GROUP BY reconcile_date",
+                startDate,
+                endDate
+        );
+        List<AdminDashboardFinanceTrendView> rows = new ArrayList<>();
+        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+            long paidAmountCent = paidAmountByDate.getOrDefault(date, 0L);
+            long refundAmountCent = refundAmountByDate.getOrDefault(date, 0L);
+            rows.add(new AdminDashboardFinanceTrendView(
+                    date.toString(),
+                    paidAmountCent,
+                    refundAmountCent,
+                    paidAmountCent - refundAmountCent,
+                    pendingDiffByDate.getOrDefault(date, 0L)
+            ));
+        }
+        return rows;
+    }
+
+    private long queryAmount(String sql) {
+        Long amount = jdbcTemplate.queryForObject(sql, Long.class);
+        return amount == null ? 0L : amount;
+    }
+
+    private Map<LocalDate, Long> queryAmountByDate(String sql, LocalDate startDate, LocalDate endDate) {
+        return jdbcTemplate.query(sql, (rs) -> {
+            Map<LocalDate, Long> result = new java.util.HashMap<>();
+            while (rs.next()) {
+                Object rawDate = rs.getObject("biz_date");
+                LocalDate date;
+                if (rawDate instanceof java.sql.Date sqlDate) {
+                    date = sqlDate.toLocalDate();
+                } else if (rawDate instanceof LocalDate localDate) {
+                    date = localDate;
+                } else {
+                    date = LocalDate.parse(String.valueOf(rawDate).substring(0, 10));
+                }
+                result.put(date, rs.getLong("amount"));
+            }
+            return result;
+        }, startDate, endDate);
     }
 
     private AdminDashboardOverviewView buildDashboardOverview() {

@@ -63,9 +63,20 @@ public class MybatisOrderRefundRepository implements OrderRefundRepository {
 
     @Override
     public List<OrderRefund> search(String status, String keyword) {
+        return search(status, keyword, null, null);
+    }
+
+    @Override
+    public List<OrderRefund> search(String status, String keyword, java.time.LocalDate startDate, java.time.LocalDate endDate) {
         LambdaQueryWrapper<OrderRefundDO> query = new LambdaQueryWrapper<>();
         if (status != null && !status.isBlank()) {
             query.eq(OrderRefundDO::getRefundStatus, status.trim());
+        }
+        if (startDate != null) {
+            query.ge(OrderRefundDO::getCreatedAt, startDate.atStartOfDay());
+        }
+        if (endDate != null) {
+            query.lt(OrderRefundDO::getCreatedAt, endDate.plusDays(1).atStartOfDay());
         }
         if (keyword != null && !keyword.isBlank()) {
             String value = keyword.trim();

@@ -85,8 +85,8 @@ public class AdminOnlineReconciliationApplicationService {
     @Transactional
     public TaskView createTask(AdminReconcileTaskCreateRequest request) {
         requireAdmin();
-        if (request.reconcileDate().isAfter(LocalDate.now())) {
-            throw BusinessException.badRequest("不能创建未来日期的对账任务，请选择今天或历史账期");
+        if (!request.reconcileDate().isBefore(LocalDate.now())) {
+            throw BusinessException.badRequest("只能创建今天以前的对账任务，请选择历史账期");
         }
         String channel = normalizeTaskChannel(request.channel());
         Long existingCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM pay_reconcile_task WHERE reconcile_date = ? AND channel = ?", Long.class, request.reconcileDate(), channel);
@@ -111,12 +111,12 @@ public class AdminOnlineReconciliationApplicationService {
         LocalDateTime endTime = task.reconcileDate().plusDays(1).atStartOfDay();
         jdbcTemplate.update("INSERT INTO pay_reconcile_local_bill_item(task_id,biz_type,order_no,pay_order_no,refund_no,user_id,local_status,order_status,amount_cent,channel,transaction_no,trade_time,raw_snapshot,created_at) "
                         + "SELECT ?, 'PAY', p.order_no, p.pay_order_no, NULL, p.user_id, p.pay_status, o.order_status, p.pay_amount_cent, COALESCE(p.pay_channel, ?), p.transaction_no, COALESCE(p.created_at, NOW()), CONCAT('{\"payOrderNo\":\"', p.pay_order_no, '\",\"status\":\"', p.pay_status, '\"}'), NOW() "
-                        + "FROM pay_order p LEFT JOIN oms_order o ON p.order_no = o.order_no WHERE (? = 'MOCK' OR (? = 'ALIPAY' AND p.pay_channel IN ('ALIPAY', 'ALIPAY_WAP', 'ALIPAY_PC')) OR p.pay_channel = ?) AND p.created_at >= ? AND p.created_at < ?",
+                        + "FROM pay_order p LEFT JOIN oms_order o ON p.order_no = o.order_no WHERE p.pay_status IN ('SUCCESS','REFUNDED','PARTIALLY_REFUNDED') AND (? = 'MOCK' OR (? = 'ALIPAY' AND p.pay_channel IN ('ALIPAY', 'ALIPAY_WAP', 'ALIPAY_PC')) OR p.pay_channel = ?) AND p.created_at >= ? AND p.created_at < ?",
                 taskId, task.channel(), task.channel(), task.channel(), task.channel(), startTime, endTime);
         jdbcTemplate.update("INSERT INTO pay_reconcile_local_bill_item(task_id,biz_type,order_no,pay_order_no,refund_no,user_id,local_status,order_status,amount_cent,channel,transaction_no,trade_time,raw_snapshot,created_at) "
                         + "SELECT ?, 'REFUND', r.order_no, r.pay_order_no, r.refund_no, r.user_id, r.refund_status, o.order_status, r.refund_amount_cent, COALESCE(r.pay_channel, ?), r.transaction_no, COALESCE(r.success_at, r.created_at, NOW()), CONCAT('{\"refundNo\":\"', r.refund_no, '\",\"status\":\"', r.refund_status, '\"}'), NOW() "
-                        + "FROM pay_refund_order r LEFT JOIN oms_order o ON r.order_no = o.order_no WHERE (? = 'MOCK' OR (? = 'ALIPAY' AND r.pay_channel IN ('ALIPAY', 'ALIPAY_WAP', 'ALIPAY_PC')) OR r.pay_channel = ?) AND COALESCE(r.success_at, r.created_at) >= ? AND COALESCE(r.success_at, r.created_at) < ?",
-                taskId, task.channel(), task.channel(), task.channel(), task.channel(), startTime, endTime);
+                        + "FROM pay_refund_order r LEFT JOIN oms_order o ON r.order_no = o.order_no WHERE r.refund_status IN ('REFUND_SUCCESS','REFUND_PROCESSING','REFUND_FAILED') AND (? = 'MOCK' OR (? = 'ALIPAY' AND r.pay_channel IN ('ALIPAY', 'ALIPAY_WAP', 'ALIPAY_PC')) OR r.pay_channel = ?) AND (r.created_at >= ? AND r.created_at < ? OR r.success_at >= ? AND r.success_at < ?)",
+                taskId, task.channel(), task.channel(), task.channel(), task.channel(), startTime, endTime, startTime, endTime);
         refreshLocalStats(taskId);
         TaskView refreshed = loadTask(taskId);
         if (refreshed.localTotalCount() == null || refreshed.localTotalCount() == 0) {
@@ -409,7 +409,8 @@ public class AdminOnlineReconciliationApplicationService {
             case "IGNORE" -> "IGNORED";
             default -> "DONE";
         };
-        jdbcTemplate.update("UPDATE pay_reconcile_diff_item SET process_status = ?, process_remark = ?, processed_by = ?, processed_at = NOW(), updated_at = NOW() WHERE id = ?", nextStatus, buildProcessRemark(action, remark), currentOperatorName(), diffId);
+        String processRemark = buildProcessRemark(action, remark);
+        jdbcTemplate.update("UPDATE pay_reconcile_diff_item SET process_status = ?, process_remark = ?, suggested_action = CASE WHEN suggested_action IS NULL OR suggested_action = '' THEN ? ELSE suggested_action END, processed_by = ?, processed_at = NOW(), updated_at = NOW() WHERE id = ?", nextStatus, processRemark, action, currentOperatorName(), diffId);
         recordOnlineReconcileLog(diff.taskId(), diffId, action, operationContent(action, diff), remark);
         refreshDiffStats(diff.taskId());
         adminAccountManagementApplicationService.recordOperation("RECONCILIATION", "ONLINE_RECONCILE_DIFF_HANDLE", "处理线上对账差异：diffId=" + diffId + "，动作=" + action, "SUCCESS");
@@ -432,9 +433,10 @@ public class AdminOnlineReconciliationApplicationService {
     }
 
     private void insertDiff(Long taskId, LocalBillItemView local, ChannelBillItemView channel, String diffType, String diffLevel, String suggestedAction) {
-        jdbcTemplate.update("INSERT INTO pay_reconcile_diff_item(task_id,biz_type,diff_type,diff_level,order_no,pay_order_no,refund_no,local_item_id,channel_item_id,local_status,channel_status,local_amount_cent,channel_amount_cent,diff_amount_cent,suggested_action,process_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW())",
+        String bizType = local != null ? local.bizType() : channel.bizType();
+        jdbcTemplate.update("INSERT INTO pay_reconcile_diff_item(task_id,biz_type,diff_type,diff_level,order_no,pay_order_no,refund_no,local_item_id,channel_item_id,local_status,channel_status,local_amount_cent,channel_amount_cent,diff_amount_cent,suggested_action,process_status,process_remark,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW())",
                 taskId,
-                local != null ? local.bizType() : channel.bizType(),
+                bizType,
                 diffType,
                 diffLevel,
                 local != null ? local.orderNo() : channel.orderNo(),
@@ -448,7 +450,8 @@ public class AdminOnlineReconciliationApplicationService {
                 channel == null ? null : channel.amountCent(),
                 diffAmount(local == null ? null : local.amountCent(), channel == null ? null : channel.amountCent()),
                 suggestedAction,
-                "MATCHED".equals(diffType) ? "DONE" : "PENDING");
+                "MATCHED".equals(diffType) ? "DONE" : "PENDING",
+                systemDiffRemark(diffType, bizType));
     }
 
     private String resolveDiffType(LocalBillItemView local, ChannelBillItemView channel) {
@@ -539,6 +542,23 @@ public class AdminOnlineReconciliationApplicationService {
         if ("LOCAL_EXISTS_CHANNEL_MISSING".equals(diffType)) return "CLOSE_ORDER_VOID";
         if ("REFUND".equals(bizType)) return "SYNC_REFUND_RESULT";
         return "SYNC_PAY_STATUS";
+    }
+
+    private String systemDiffRemark(String diffType, String bizType) {
+        return switch (diffType) {
+            case "MATCHED" -> "本地账单与渠道账单一致";
+            case "LOCAL_EXISTS_CHANNEL_MISSING" -> "本地存在" + bizTypeText(bizType) + "流水，渠道账单缺失，请核查渠道账单导入范围或渠道流水状态";
+            case "CHANNEL_EXISTS_LOCAL_MISSING" -> "渠道存在" + bizTypeText(bizType) + "流水，本地账单缺失，请核查本地支付/退款单是否创建或账期是否跨日";
+            case "AMOUNT_MISMATCH" -> "本地与渠道金额不一致，请核对优惠、手续费、退款金额或重复流水";
+            case "STATUS_AND_AMOUNT_MISMATCH" -> "本地与渠道状态、金额均不一致，请优先人工核验渠道原始流水";
+            case "REFUND_STATUS_MISMATCH" -> "退款状态不一致，请核查退款回调、渠道退款状态和本地退款单状态";
+            case "STATUS_MISMATCH" -> "支付状态不一致，请核查支付回调、订单支付状态和渠道交易状态";
+            default -> "存在对账差异，请人工核验本地账单与渠道账单";
+        };
+    }
+
+    private String bizTypeText(String bizType) {
+        return "REFUND".equals(bizType) ? "退款" : "支付";
     }
 
     private String diffLevel(String diffType) {

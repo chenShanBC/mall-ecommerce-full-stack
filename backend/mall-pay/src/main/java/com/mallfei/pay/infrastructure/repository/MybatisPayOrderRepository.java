@@ -76,8 +76,15 @@ public class MybatisPayOrderRepository implements PayOrderRepository {
 
     @Override
     public PageResult<PayOrder> search(String status, String keyword, long page, long size, String sortBy, String sortOrder) {
+        return search(status, keyword, null, null, page, size, sortBy, sortOrder);
+    }
+
+    @Override
+    public PageResult<PayOrder> search(String status, String keyword, java.time.LocalDate startDate, java.time.LocalDate endDate, long page, long size, String sortBy, String sortOrder) {
         LambdaQueryWrapper<PayOrderDO> wrapper = new LambdaQueryWrapper<>();
         if (status != null && !status.isBlank()) wrapper.eq(PayOrderDO::getPayStatus, status);
+        if (startDate != null) wrapper.ge(PayOrderDO::getCreatedAt, startDate.atStartOfDay());
+        if (endDate != null) wrapper.lt(PayOrderDO::getCreatedAt, endDate.plusDays(1).atStartOfDay());
         if (keyword != null && !keyword.isBlank()) wrapper.and(w -> w.like(PayOrderDO::getOrderNo, keyword.trim()).or().like(PayOrderDO::getPayOrderNo, keyword.trim()));
         applyPaySort(wrapper, sortBy, sortOrder);
         Page<PayOrderDO> result = payOrderMapper.selectPage(new Page<>(Math.max(page, 1), Math.max(size, 1)), wrapper);
@@ -130,10 +137,11 @@ public class MybatisPayOrderRepository implements PayOrderRepository {
         payOrderDO.setCallbackPayload(payOrder.callbackPayload());
         payOrderDO.setIdempotentKey(payOrder.idempotentKey());
         payOrderDO.setVersion(payOrder.version());
+        payOrderDO.setCreatedAt(payOrder.createdAt());
         return payOrderDO;
     }
 
     private PayOrder toDomain(PayOrderDO payOrderDO) {
-        return new PayOrder(payOrderDO.getId(), payOrderDO.getPayOrderNo(), payOrderDO.getOrderNo(), payOrderDO.getUserId(), payOrderDO.getPayAmountCent(), payOrderDO.getPayStatus(), payOrderDO.getPayChannel(), payOrderDO.getTransactionNo(), payOrderDO.getIdempotentKey(), payOrderDO.getVersion(), payOrderDO.getCallbackPayload());
+        return new PayOrder(payOrderDO.getId(), payOrderDO.getPayOrderNo(), payOrderDO.getOrderNo(), payOrderDO.getUserId(), payOrderDO.getPayAmountCent(), payOrderDO.getPayStatus(), payOrderDO.getPayChannel(), payOrderDO.getTransactionNo(), payOrderDO.getIdempotentKey(), payOrderDO.getVersion(), payOrderDO.getCallbackPayload(), payOrderDO.getCreatedAt());
     }
 }

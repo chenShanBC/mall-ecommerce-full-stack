@@ -16,7 +16,8 @@ public record PayOrder(
         String transactionNo,
         String idempotentKey,
         Integer version,
-        String callbackPayload
+        String callbackPayload,
+        LocalDateTime createdAt
 ) {
     public static final String STATUS_PENDING = "PENDING";
     public static final String STATUS_PAYING = "PAYING";
@@ -35,7 +36,7 @@ public record PayOrder(
 
     public static PayOrder createPending(String payOrderNo, String orderNo, Long userId, Long payAmountCent, String payChannel) {
         String resolvedChannel = payChannel == null || payChannel.isBlank() ? CHANNEL_MOCK : payChannel;
-        return new PayOrder(null, payOrderNo, orderNo, userId, payAmountCent, STATUS_PENDING, resolvedChannel, "", "PAY:" + resolvedChannel + ":" + orderNo, 0, "");
+        return new PayOrder(null, payOrderNo, orderNo, userId, payAmountCent, STATUS_PENDING, resolvedChannel, "", "PAY:" + resolvedChannel + ":" + orderNo, 0, "", LocalDateTime.now());
     }
 
     public boolean pending() {
@@ -79,7 +80,7 @@ public record PayOrder(
     }
 
     public PayOrder withSubmission(String submitPayload) {
-        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, payStatus, payChannel, transactionNo, idempotentKey, nextVersion(), submitPayload == null ? "" : submitPayload);
+        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, payStatus, payChannel, transactionNo, idempotentKey, nextVersion(), submitPayload == null ? "" : submitPayload, createdAt);
     }
 
     public PayOrder markSuccess(String transactionNo, LocalDateTime successTime) {
@@ -90,7 +91,7 @@ public record PayOrder(
             throw BusinessException.badRequest("当前支付单状态不允许回调成功");
         }
         String payload = "{\"orderNo\":\"" + orderNo + "\",\"channel\":\"" + payChannel + "\",\"successTime\":\"" + successTime + "\"}";
-        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_SUCCESS, payChannel, transactionNo, idempotentKey, nextVersion(), payload);
+        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_SUCCESS, payChannel, transactionNo, idempotentKey, nextVersion(), payload, createdAt);
     }
 
     public PayOrder markRefundPending(LocalDateTime now, String reason) {
@@ -98,7 +99,7 @@ public record PayOrder(
             throw BusinessException.badRequest("当前支付单状态不允许发起退款");
         }
         String payload = "{\"refundPendingAt\":\"" + now + "\",\"reason\":\"" + reason + "\"}";
-        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_REFUND_PENDING, payChannel, transactionNo, idempotentKey, nextVersion(), payload);
+        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_REFUND_PENDING, payChannel, transactionNo, idempotentKey, nextVersion(), payload, createdAt);
     }
 
     public PayOrder markRefunding(LocalDateTime now, String reason) {
@@ -109,7 +110,7 @@ public record PayOrder(
             throw BusinessException.badRequest("当前支付单状态不允许进入退款处理中");
         }
         String payload = "{\"refundingAt\":\"" + now + "\",\"reason\":\"" + reason + "\"}";
-        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_REFUNDING, payChannel, transactionNo, idempotentKey, nextVersion(), payload);
+        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_REFUNDING, payChannel, transactionNo, idempotentKey, nextVersion(), payload, createdAt);
     }
 
     public PayOrder markRefundSuccess(LocalDateTime now, String reason) {
@@ -126,7 +127,7 @@ public record PayOrder(
         boolean fullRefund = refundAmountCent == null || payAmountCent == null || refundAmountCent >= payAmountCent;
         String nextStatus = fullRefund ? STATUS_REFUNDED : STATUS_PARTIALLY_REFUNDED;
         String payload = "{\"refundSuccessAt\":\"" + now + "\",\"reason\":\"" + reason + "\",\"refundAmountCent\":" + refundAmountCent + "}";
-        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, nextStatus, payChannel, transactionNo, idempotentKey, nextVersion(), payload);
+        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, nextStatus, payChannel, transactionNo, idempotentKey, nextVersion(), payload, createdAt);
     }
 
     public PayOrder markRefundFailed(LocalDateTime now, String reason) {
@@ -134,7 +135,7 @@ public record PayOrder(
             throw BusinessException.badRequest("当前支付单状态不允许标记退款失败");
         }
         String payload = "{\"refundFailedAt\":\"" + now + "\",\"reason\":\"" + reason + "\"}";
-        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_REFUND_FAILED, payChannel, transactionNo, idempotentKey, nextVersion(), payload);
+        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_REFUND_FAILED, payChannel, transactionNo, idempotentKey, nextVersion(), payload, createdAt);
     }
 
     public PayOrder close(String reason) {
@@ -144,14 +145,14 @@ public record PayOrder(
         if (closed()) {
             return this;
         }
-        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_CLOSED, payChannel, transactionNo, idempotentKey, nextVersion(), "{\"closedBy\":\"" + reason + "\"}");
+        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_CLOSED, payChannel, transactionNo, idempotentKey, nextVersion(), "{\"closedBy\":\"" + reason + "\"}", createdAt);
     }
 
     public PayOrder closeByOrderStatus(String reasonStatus) {
         if (!pending()) {
             return this;
         }
-        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_CLOSED, payChannel, transactionNo, idempotentKey, nextVersion(), "{\"closedByOrderStatus\":\"" + reasonStatus + "\"}");
+        return new PayOrder(id, payOrderNo, orderNo, userId, payAmountCent, STATUS_CLOSED, payChannel, transactionNo, idempotentKey, nextVersion(), "{\"closedByOrderStatus\":\"" + reasonStatus + "\"}", createdAt);
     }
 
     public boolean amountConsistentWith(Long amountCent) {

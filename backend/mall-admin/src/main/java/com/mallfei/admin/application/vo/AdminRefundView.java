@@ -9,6 +9,7 @@ public record AdminRefundView(
         String orderNo,
         Long userId,
         Long refundAmountCent,
+        String payChannel,
         String channelRefundNo,
         String refundStatus,
         String refundReason,

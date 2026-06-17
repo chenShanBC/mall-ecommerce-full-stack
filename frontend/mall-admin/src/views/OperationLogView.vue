@@ -16,19 +16,21 @@
       </div>
       <div class="admin-table-scroll">
         <el-table v-loading="loading" :data="logs" class="admin-table admin-table--with-gap admin-table--safe admin-table--wide operation-log-table" empty-text="暂无操作日志数据" @sort-change="handleSortChange">
-          <el-table-column prop="id" label="ID" width="80" sortable="custom" :sort-orders="['descending', 'ascending']" :sort-order="query.sortBy === 'id' && query.sortOrder === 'desc' ? 'descending' : null" />
-          <el-table-column prop="operatorUsername" label="操作人" width="120" sortable="custom" />
-          <el-table-column prop="operationModule" label="模块" width="110" sortable="custom" />
-          <el-table-column prop="operationType" label="类型" width="220" sortable="custom" :show-overflow-tooltip="{ effect: 'light', placement: 'bottom-start', showAfter: 300, offset: 8, popperClass: 'admin-table-tooltip' }" />
+          <el-table-column prop="id" label="ID" width="80" sortable="custom" show-overflow-tooltip :sort-orders="['descending', 'ascending']" :sort-order="query.sortBy === 'id' && query.sortOrder === 'desc' ? 'descending' : null" />
+          <el-table-column prop="operatorUsername" label="操作人" width="120" sortable="custom" show-overflow-tooltip />
+          <el-table-column label="模块" width="110" sortable="custom">
+            <template #default="{ row }">
+              <AdminOverflowText :value="row.operationModule" :text-class="operationLogTextClass(row)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="类型" width="220" sortable="custom" :sort-by="'operationType'">
+            <template #default="{ row }">
+              <AdminOverflowText :value="row.operationType" :text-class="operationLogTextClass(row)" />
+            </template>
+          </el-table-column>
           <el-table-column prop="operationContent" label="内容" min-width="520" cell-class-name="operation-content-column">
             <template #default="{ row }">
-              <el-tooltip v-if="row.operationContent" effect="light" placement="bottom-start" :show-after="250" :hide-after="200" :offset="8" :enterable="true" popper-class="admin-table-tooltip operation-log-content-tooltip">
-                <template #content>
-                  <span class="admin-table-tooltip__text operation-log-content-tooltip__text" :class="operationContentClass(row)">{{ row.operationContent }}</span>
-                </template>
-                <span class="operation-log-content-cell admin-cell-clamp" :class="operationContentClass(row)">{{ row.operationContent }}</span>
-              </el-tooltip>
-              <span v-else class="operation-log-empty admin-cell-empty">-</span>
+              <AdminOverflowText :value="row.operationContent" :text-class="operationLogTextClass(row)" popper-class="admin-overflow-tooltip operation-log-content-tooltip" />
             </template>
           </el-table-column>
           <el-table-column prop="operationResult" label="结果" width="110" sortable="custom">
@@ -47,6 +49,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import AdminLayout from '../components/AdminLayout.vue';
+import AdminOverflowText from '../components/AdminOverflowText.vue';
 import { fetchAdminOperationLogs } from '../api';
 import { useAdminStore } from '../stores/admin';
 import { exportRowsToCsv } from '../utils/export';
@@ -103,7 +106,7 @@ const loadData = async () => {
 const isAbnormalLog = (row) => row.operationResult === 'FAILED' || /权限|违规|拒绝|失败/.test(row.operationContent || '');
 const isEnableLog = (row) => /启用|ENABLE/.test(`${row.operationType || ''} ${row.operationContent || ''}`);
 const isDisableLog = (row) => /禁用|DISABLE/.test(`${row.operationType || ''} ${row.operationContent || ''}`);
-const operationContentClass = (row) => ({
+const operationLogTextClass = (row) => ({
   'danger-text': isAbnormalLog(row),
   'enable-text': !isAbnormalLog(row) && isEnableLog(row),
   'disable-text': !isAbnormalLog(row) && isDisableLog(row),
@@ -148,53 +151,6 @@ onMounted(loadData);
   min-width: 0;
   overflow: hidden !important;
   white-space: normal;
-}
-
-.operation-log-content-cell {
-  display: -webkit-box;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  max-height: 40px;
-  overflow: hidden !important;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: #606266;
-  font-size: 13px;
-  line-height: 20px;
-  white-space: normal;
-  word-break: break-all;
-  cursor: default;
-}
-
-.operation-log-content-tooltip__text {
-  max-width: 520px;
-  color: #334155;
-  font-size: 13px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-.operation-log-content-cell.danger-text,
-.operation-log-content-tooltip__text.danger-text {
-  color: #f56c6c;
-  font-weight: 600;
-}
-
-.operation-log-content-cell.enable-text,
-.operation-log-content-tooltip__text.enable-text {
-  color: #67c23a;
-  font-weight: 600;
-}
-
-.operation-log-content-cell.disable-text,
-.operation-log-content-tooltip__text.disable-text {
-  color: #e6a23c;
-  font-weight: 600;
-}
-
-.operation-log-empty {
-  color: #94a3b8;
 }
 
 .danger-text { color: #f56c6c; font-weight: 600; }

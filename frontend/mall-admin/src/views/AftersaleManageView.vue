@@ -2,40 +2,28 @@
   <AdminLayout title="售后管理" @refresh="loadData" @logout="handleLogout">
     <el-card class="admin-page-card">
       <div class="admin-filter-bar">
-        <el-input v-model="query.keyword" placeholder="售后单号 / 订单号" clearable style="width: 280px" @keyup.enter="loadData" />
+        <el-input v-model="query.keyword" placeholder="售后单号 / 订单号" clearable style="width: 240px" @keyup.enter="loadData" />
+        <el-input v-model="query.userId" placeholder="用户ID" clearable style="width: 160px" @keyup.enter="loadData" />
         <el-select v-model="query.status" clearable placeholder="全部售后状态" style="width: 180px">
           <el-option v-for="option in aftersaleStatusOptions" :key="option.value" :label="option.label" :value="option.value" />
         </el-select>
         <el-button type="primary" @click="loadData">查询</el-button>
+        <el-button @click="resetQuery">重置</el-button>
       </div>
 
-      <el-table v-loading="loading" :data="rows" class="admin-table admin-table--with-gap" empty-text="暂无售后数据">
-        <el-table-column prop="aftersaleNo" label="售后单号" min-width="190" />
-        <el-table-column prop="orderNo" label="订单号" min-width="180" />
-        <el-table-column prop="userId" label="用户ID" width="100" />
-        <el-table-column prop="aftersaleType" label="类型" width="130">
-          <template #default="{ row }">{{ aftersaleTypeLabel(row.aftersaleType) }}</template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="140">
-          <template #default="{ row }">
-            <el-tag :type="aftersaleStatusMeta(row.status).type">{{ aftersaleStatusMeta(row.status).label }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="refundAmount" label="退款金额(分)" width="140">
-          <template #default="{ row }">{{ row.refundAmount ?? row.refundAmountCent ?? '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="reason" label="申请原因" min-width="180" :show-overflow-tooltip="{ effect: 'light', placement: 'bottom-start', showAfter: 300, offset: 8, popperClass: 'admin-table-tooltip' }">
-          <template #default="{ row }">{{ row.reason || '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="rejectReason" label="驳回原因" min-width="180" :show-overflow-tooltip="{ effect: 'light', placement: 'bottom-start', showAfter: 300, offset: 8, popperClass: 'admin-table-tooltip' }">
-          <template #default="{ row }">{{ row.rejectReason || '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="failReason" label="失败原因" min-width="180" :show-overflow-tooltip="{ effect: 'light', placement: 'bottom-start', showAfter: 300, offset: 8, popperClass: 'admin-table-tooltip' }">
-          <template #default="{ row }">{{ row.failReason || '-' }}</template>
-        </el-table-column>
+      <el-table v-loading="loading" :data="rows" class="admin-table admin-table--with-gap aftersale-manage-table reconcile-overflow-table" empty-text="暂无售后数据">
+        <el-table-column label="售后单号" min-width="190"><template #default="{ row }"><AdminOverflowText :value="row.aftersaleNo" /></template></el-table-column>
+        <el-table-column label="订单号" min-width="180"><template #default="{ row }"><AdminOverflowText :value="row.orderNo" /></template></el-table-column>
+        <el-table-column label="用户ID" width="100"><template #default="{ row }">{{ row.userId }}</template></el-table-column>
+        <el-table-column prop="aftersaleType" label="类型" width="130"><template #default="{ row }"><el-tag effect="plain" :type="aftersaleTypeTagType(row.aftersaleType)">{{ aftersaleTypeLabel(row.aftersaleType) }}</el-tag></template></el-table-column>
+        <el-table-column prop="status" label="状态" width="140"><template #default="{ row }"><el-tag :type="aftersaleStatusMeta(row.status).type">{{ aftersaleStatusMeta(row.status).label }}</el-tag></template></el-table-column>
+        <el-table-column prop="refundAmount" label="退款金额(分)" width="140"><template #default="{ row }">{{ row.refundAmount ?? row.refundAmountCent ?? '-' }}</template></el-table-column>
+        <el-table-column label="申请原因" min-width="180"><template #default="{ row }"><AdminOverflowText :value="row.reason" /></template></el-table-column>
+        <el-table-column label="驳回原因" min-width="180"><template #default="{ row }"><AdminOverflowText :value="row.rejectReason" text-class="admin-after-sale-reject-reason" /></template></el-table-column>
+        <el-table-column label="失败原因" min-width="180"><template #default="{ row }"><AdminOverflowText :value="row.failReason" text-class="admin-after-sale-reason" /></template></el-table-column>
         <el-table-column label="操作" width="280">
           <template #default="{ row }">
-            <el-button size="small" @click="openDetail(row.aftersaleNo)">详情</el-button>
+            <el-button class="admin-after-sale-detail-btn" size="small" @click="openDetail(row.aftersaleNo)">详情</el-button>
             <el-button v-if="isPendingReview(row)" size="small" type="success" @click="openReviewDialog(row, 'APPROVE')">通过</el-button>
             <el-button v-if="isPendingReview(row)" size="small" type="danger" @click="openReviewDialog(row, 'REJECT')">驳回</el-button>
           </template>
@@ -77,6 +65,7 @@ import { onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import AdminLayout from '../components/AdminLayout.vue';
+import AdminOverflowText from '../components/AdminOverflowText.vue';
 import { fetchAdminAftersaleDetail, fetchAdminAftersales, reviewAdminAftersale } from '../api';
 import { useAdminStore } from '../stores/admin';
 import { confirmAction } from '../utils/action';
@@ -85,7 +74,7 @@ import { getStatusTagMeta } from '../utils/status';
 const router = useRouter();
 const route = useRoute();
 const adminStore = useAdminStore();
-const query = reactive({ keyword: '', status: '' });
+const query = reactive({ keyword: '', userId: '', status: '' });
 const aftersaleStatusOptions = [
   { label: '待审核', value: 'PENDING_REVIEW' },
   { label: '审核通过', value: 'APPROVED' },
@@ -101,16 +90,32 @@ const normalizeStatus = (status) => String(status || '').toUpperCase();
 const aftersaleTypeLabel = (type) => {
   const maps = {
     REFUND_ONLY: '仅退款',
+    ONLY_REFUND: '仅退款',
     RETURN_REFUND: '退货退款',
+    REFUND_RETURN: '退货退款',
+    RETURN_AND_REFUND: '退货退款',
     EXCHANGE: '换货',
     REFUND: '退款',
   };
-  return maps[normalizeStatus(type)] || type || '-';
+  return maps[normalizeStatus(type)] || '未知类型';
 };
+const aftersaleTypeTagType = (type) => ({ REFUND_ONLY: 'warning', ONLY_REFUND: 'warning', RETURN_REFUND: 'success', REFUND_RETURN: 'success', RETURN_AND_REFUND: 'success', EXCHANGE: 'info', REFUND: 'primary' }[normalizeStatus(type)] || 'info');
 const isPendingReview = (row) => normalizeStatus(row?.status) === 'PENDING_REVIEW';
 const aftersaleStatusMeta = (status) => getStatusTagMeta('aftersale', status);
+const aftersaleStatusClass = (status) => ({
+  PENDING_REVIEW: 'aftersale-status--warning',
+  APPROVED: 'aftersale-status--success',
+  REJECTED: 'aftersale-status--danger',
+  REFUNDING: 'aftersale-status--warning',
+  REFUND_PROCESSING: 'aftersale-status--warning',
+  REFUND_SUCCESS: 'aftersale-status--success',
+  REFUND_FAILED: 'aftersale-status--danger',
+  REFUND_CLOSED: 'aftersale-status--info',
+  CANCELLED: 'aftersale-status--info',
+}[normalizeStatus(status)] || 'aftersale-status--info');
 const applyRouteQuery = () => {
   query.keyword = String(route.query.keyword || '');
+  query.userId = String(route.query.userId || '');
   query.status = route.query.status ? String(route.query.status) : '';
 };
 const rows = ref([]);
@@ -124,7 +129,10 @@ const reviewForm = reactive({ aftersaleNo: '', action: 'APPROVE', reason: '' });
 const loadData = async () => {
   loading.value = true;
   try {
-    const params = { keyword: query.keyword.trim() };
+    const params = {
+      keyword: query.keyword.trim(),
+      userId: query.userId.trim() ? Number(query.userId.trim()) : undefined,
+    };
     if (query.status) params.status = query.status;
     const { data } = await fetchAdminAftersales(params);
     rows.value = data.data?.records || [];
@@ -133,6 +141,13 @@ const loadData = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+const resetQuery = () => {
+  query.keyword = '';
+  query.userId = '';
+  query.status = '';
+  loadData();
 };
 
 const openDetail = async (aftersaleNo) => {
@@ -184,3 +199,63 @@ watch(() => route.query.keyword, () => {
   loadData();
 });
 </script>
+
+<style scoped>
+.aftersale-manage-table,
+.aftersale-manage-table :deep(.el-table__header),
+.aftersale-manage-table :deep(.el-table__body) {
+  table-layout: fixed;
+}
+
+.aftersale-manage-table :deep(.el-table__cell) {
+  overflow: hidden;
+}
+
+.aftersale-manage-table :deep(.el-table__cell .cell) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  word-break: keep-all;
+}
+
+.aftersale-manage-table :deep(.admin-overflow-cell),
+.aftersale-manage-table :deep(.admin-overflow-ellipsis) {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.aftersale-manage-table :deep(.admin-overflow-ellipsis) {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+.aftersale-manage-table :deep(.admin-after-sale-reason) {
+  color: #334155;
+  line-height: 1.5;
+}
+
+.aftersale-manage-table :deep(.admin-after-sale-reject-reason) {
+  color: #ef4444;
+  line-height: 1.5;
+}
+
+.aftersale-manage-table :deep(.admin-after-sale-detail-btn) {
+  color: #60a5fa;
+  border-color: #bfdbfe;
+  background-color: #eff6ff;
+}
+
+.aftersale-manage-table :deep(.admin-after-sale-detail-btn:hover),
+.aftersale-manage-table :deep(.admin-after-sale-detail-btn:focus) {
+  color: #3b82f6;
+  border-color: #93c5fd;
+  background-color: #dbeafe;
+}
+</style>
