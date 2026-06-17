@@ -238,7 +238,9 @@ export function useDashboardData() {
     const archiveReportPayload = normalizeResponse(archiveReportRes, {});
     const hangingPayload = normalizeResponse(hangingRes, {});
     const callbacksPayload = normalizeResponse(callbacksRes, {});
+    const successPayStatuses = ['SUCCESS', 'REFUND_PENDING', 'REFUNDING', 'PARTIALLY_REFUNDED', 'REFUND_FAILED'];
     const isDisplayPay = (item) => !['CLOSED', 'CANCELLED'].includes(String(firstOf(item, ['payStatus', 'status', 'tradeStatus'], '')).toUpperCase());
+    const isFinanceSuccessPay = (item) => successPayStatuses.includes(String(firstOf(item, ['payStatus', 'status', 'tradeStatus'], '')).toUpperCase());
     const isDisplayRefund = (item) => !['CANCELLED', 'CLOSED', 'REJECTED'].includes(String(firstOf(item, ['status', 'refundStatus'], '')).toUpperCase());
     const archiveReportRows = [
       ...recordsOf(archiveReportPayload.tasks ? { records: archiveReportPayload.tasks } : archiveReportPayload),
@@ -388,7 +390,7 @@ export function useDashboardData() {
     const refunds = recordsOf(refundsPayload).filter(isDisplayRefund).map(normalizeRefund).map((row) => ({ ...row, flowType: 'REFUND', bizType: 'REFUND' })).map(attachReconcileRecord);
     const diffs = onlineDiffs;
     const callbacks = recordsOf(callbacksPayload);
-    const monthPays = recordsOf(monthPaysPayload).filter(isDisplayPay).map(normalizePay).map((row) => ({ ...row, flowType: 'PAY', bizType: 'PAY' }));
+    const monthPays = recordsOf(monthPaysPayload).filter(isFinanceSuccessPay).map(normalizePay).map((row) => ({ ...row, flowType: 'PAY', bizType: 'PAY' }));
     const monthRefunds = recordsOf(monthRefundsPayload).filter(isDisplayRefund).map(normalizeRefund).map((row) => ({ ...row, flowType: 'REFUND', bizType: 'REFUND' }));
     const pendingDiffTaskCount = toNumber(
       pendingTasksPayload.pendingDiffTaskCount
@@ -441,7 +443,7 @@ export function useDashboardData() {
       buildRisk('支付回调失败', summary.callbackFailedCount, '回调失败可能造成资金状态不同步', summary.callbackFailedCount > 0 ? 'HIGH' : 'NORMAL'),
       buildRisk('已退款支付单', summary.refundCount, '关注支付单已退款状态和异常退款单', summary.refundCount > 0 ? 'LOW' : 'NORMAL'),
     ];
-    return { overview: { ...overview, ...summary }, reconcile, summary, financeTrend, risks, todos: risks, pays, refunds, diffs, callbacks, pendingTasks };
+    return { overview: { ...overview, ...summary }, reconcile, summary, financeTrend, risks, todos: risks, pays, refunds, monthPays, monthRefunds, diffs, callbacks, pendingTasks };
   }, options);
 
   const loadWarehouse = (options = {}) => safeLoad('WAREHOUSE', async () => {

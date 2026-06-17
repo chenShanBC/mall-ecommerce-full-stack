@@ -281,6 +281,54 @@
         </aside>
       </section>
     </div>
+
+    <el-dialog
+      v-model="financePayExplainVisible"
+      title="当月支付金额计算说明"
+      width="560px"
+      class="finance-explain-dialog"
+    >
+      <div class="finance-explain">
+        <div class="finance-explain__total">
+          <span>当月支付金额</span>
+          <strong>{{ formatMoney(summary.paidAmountCent || 0) }}</strong>
+          <p>按本月支付单创建时间统计，排除已关闭、未支付、支付失败和全额退款成功支付单。</p>
+        </div>
+        <div class="finance-explain__formula">
+          <span>计算公式</span>
+          <b>{{ financePayFormulaText }}</b>
+        </div>
+        <div class="finance-explain__section-title">纳入统计的支付单状态</div>
+        <div class="finance-explain__status-list">
+          <button
+            v-for="item in financePayExplainRows"
+            :key="item.status"
+            class="finance-explain__status-row finance-explain__status-row--button"
+            type="button"
+            @click="handleFinancePayStatusClick(item.status)"
+          >
+            <div>
+              <strong>{{ item.label }}</strong>
+              <small>{{ item.status }} · {{ item.count }} 单 · 点击查看结果集</small>
+            </div>
+            <b>{{ formatMoney(item.amountCent) }}</b>
+          </button>
+        </div>
+        <div class="finance-explain__section-title">不纳入支付金额的状态</div>
+        <div class="finance-explain__excluded">
+          <el-tag v-for="item in financePayExcludedStatusRows" :key="item.status" size="small" type="info" effect="plain">
+            {{ item.label }}（{{ item.status }}）
+          </el-tag>
+        </div>
+        <el-alert
+          class="finance-explain__tip"
+          type="info"
+          :closable="false"
+          show-icon
+          title="当月净收入 = 当月支付金额 - 当月退款成功金额；退款成功金额单独按退款单 REFUND_SUCCESS 统计。"
+        />
+      </div>
+    </el-dialog>
   </AdminLayout>
 </template>
 
@@ -310,6 +358,7 @@ const productSnapshot = ref({ products: [], total: 0 });
 const summary = computed(() => currentData.value?.summary || {});
 const overview = computed(() => currentData.value?.overview || {});
 const risks = computed(() => currentData.value?.risks || currentData.value?.todos || []);
+const financePayExplainVisible = ref(false);
 const tables = computed(() => {
   const data = currentData.value || {};
   const role = activeRole.value;
@@ -409,9 +458,12 @@ const operationSummaryRouteMap = {
   待售后: () => goAftersales('PENDING_REVIEW'),
 };
 const financeSummaryRouteMap = {
-  当月支付金额: () => goPays('', { paidLifecycle: 'true' }),
   当月退款金额: () => goPayRefunds('REFUND_SUCCESS'),
   待处理差异任务: () => goPendingReconciliationTasks(),
+};
+const handleFinancePayStatusClick = (status) => {
+  financePayExplainVisible.value = false;
+  goPays(status, { paidLifecycle: 'true' });
 };
 const handleSummaryCardClick = (card) => {
   if (activeRole.value === 'OPERATIONS' && operationSummaryRouteMap[card.label]) {
@@ -419,6 +471,10 @@ const handleSummaryCardClick = (card) => {
     return;
   }
   if (activeRole.value === 'FINANCE') {
+    if (card.label === '当月支付金额') {
+      financePayExplainVisible.value = true;
+      return;
+    }
     if (financeSummaryRouteMap[card.label]) financeSummaryRouteMap[card.label]();
     return;
   }
@@ -568,7 +624,7 @@ const summaryCards = computed(() => {
   }
   if (role === 'FINANCE') {
     return [
-      { label: '当月支付金额', value: formatMoney(summary.value.paidAmountCent || 0), desc: '本月支付完成金额' },
+      { label: '当月支付金额', value: formatMoney(summary.value.paidAmountCent || 0), desc: '点击查看计算明细' },
       { label: '当月退款金额', value: formatMoney(summary.value.refundAmountCent || 0), desc: '本月退款金额' },
       { label: '当月净收入', value: formatMoney(summary.value.netIncomeCent || 0), desc: '支付金额 - 退款金额' },
       { label: '待处理差异任务', value: summary.value.pendingDiffTaskCount || 0, desc: '存在待处理差异的对账任务' },
@@ -922,6 +978,36 @@ const firstValidText = (...values) => values.find((value) => {
   const text = String(value ?? '').trim();
   return text && text !== '--' && text.toLowerCase() !== 'null' && text.toLowerCase() !== 'undefined';
 }) || '';
+const financePayRows = computed(() => (currentData.value?.monthPays || []).map((row) => ({ ...row })));
+const financeRefundRows = computed(() => (currentData.value?.monthRefunds || []).map((row) => ({ ...row })));
+const financePayExplainRows = computed(() => {
+  const grouped = financePayRows.value.reduce((acc, row) => {
+    const status = String(row.payStatus || 'UNKNOWN').toUpperCase();
+    if (!acc[status]) acc[status] = { status, label: status, count: 0, amountCent: 0 };
+    acc[status].count += 1;
+    acc[status].amountCent += Number(row.payAmountCent || 0);
+    return acc;
+  }, {});
+  const statusLabelMap = {
+    SUCCESS: '支付成功',
+    REFUND_PENDING: '退款待处理',
+    REFUNDING: '退款中',
+    PARTIALLY_REFUNDED: '部分退款',
+    REFUND_FAILED: '退款失败',
+  };
+  return Object.values(grouped).map((item) => ({ ...item, label: statusLabelMap[item.status] || item.status }));
+});
+const financePayExcludedStatusRows = computed(() => [
+  { status: 'REFUNDED', label: '退款成功' },
+  { status: 'CLOSED', label: '已关闭' },
+  { status: 'PENDING', label: '待支付' },
+  { status: 'PAYING', label: '支付中' },
+  { status: 'FAILED', label: '支付失败' },
+]);
+const financePayFormulaText = computed(() => {
+  const included = financePayExplainRows.value.map((item) => `${item.label} ${formatMoney(item.amountCent)}`).join(' + ');
+  return included ? `${included} = ${formatMoney(summary.value.paidAmountCent || 0)}` : `0.00 = ${formatMoney(summary.value.paidAmountCent || 0)}`;
+});
 const financeFlowRows = computed(() => {
   const payRows = (tables.value.left || []).map((row) => {
     const flowRow = {
@@ -1296,4 +1382,20 @@ onBeforeUnmount(() => resetRole(activeRole.value));
 
 <style>
 .finance-flow-remark-tooltip{max-width:360px!important;line-height:1.6;word-break:break-word}
+.finance-explain{display:flex;flex-direction:column;gap:14px}
+.finance-explain__total{padding:14px 16px;border-radius:16px;background:linear-gradient(135deg,rgba(124,58,237,.1),rgba(99,102,241,.08));border:1px solid rgba(124,58,237,.14)}
+.finance-explain__total span,.finance-explain__formula span,.finance-explain__section-title{display:block;margin-bottom:6px;font-size:12px;font-weight:900;color:#64748b}
+.finance-explain__total strong{display:block;font-size:28px;font-weight:950;color:#6d28d9}
+.finance-explain__total p{margin:8px 0 0;color:#64748b;line-height:1.6}
+.finance-explain__formula{padding:12px 14px;border-radius:14px;background:#f8fafc;border:1px solid rgba(226,232,240,.95)}
+.finance-explain__formula b{display:block;font-size:13px;line-height:1.7;color:#0f172a;word-break:break-word}
+.finance-explain__status-list{display:flex;flex-direction:column;gap:8px}
+.finance-explain__status-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;width:100%;padding:10px 12px;border-radius:12px;background:#fff;border:1px solid rgba(226,232,240,.92);text-align:left}
+.finance-explain__status-row--button{cursor:pointer;transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease,background .16s ease}
+.finance-explain__status-row--button:hover{transform:translateY(-1px);border-color:rgba(124,58,237,.34);background:linear-gradient(135deg,#fff,rgba(245,243,255,.72));box-shadow:0 10px 22px rgba(124,58,237,.1)}
+.finance-explain__status-row strong{display:block;font-size:13px;color:#0f172a}
+.finance-explain__status-row small{display:block;margin-top:3px;color:#8b5cf6;font-weight:800}
+.finance-explain__status-row b{font-size:14px;font-weight:950;color:#6d28d9;white-space:nowrap}
+.finance-explain__excluded{display:flex;flex-wrap:wrap;gap:8px}
+.finance-explain__tip{margin-top:4px}
 </style>

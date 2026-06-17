@@ -321,11 +321,11 @@ public class AdminQueryApplicationService {
         LocalDate endDate = LocalDate.now();
         LocalDate startDate = endDate.minusDays(6);
         Map<LocalDate, Long> paidAmountByDate = queryAmountByDate(
-                "SELECT DATE(COALESCE(callback_time, processed_at, created_at)) AS biz_date, COALESCE(SUM(amount_cent), 0) AS amount "
-                        + "FROM pay_callback_record "
-                        + "WHERE callback_type = 'PAY' AND process_status = 'PROCESSED' "
-                        + "AND DATE(COALESCE(callback_time, processed_at, created_at)) BETWEEN ? AND ? "
-                        + "GROUP BY DATE(COALESCE(callback_time, processed_at, created_at))",
+                "SELECT DATE(created_at) AS biz_date, COALESCE(SUM(pay_amount_cent), 0) AS amount "
+                        + "FROM pay_order "
+                        + "WHERE pay_status IN ('SUCCESS', 'REFUND_PENDING', 'REFUNDING', 'PARTIALLY_REFUNDED', 'REFUND_FAILED') "
+                        + "AND DATE(created_at) BETWEEN ? AND ? "
+                        + "GROUP BY DATE(created_at)",
                 startDate,
                 endDate
         );
@@ -362,11 +362,15 @@ public class AdminQueryApplicationService {
     }
 
     private long financePaidAmountCent(LocalDate startDate, LocalDate endDate) {
-        return orderFacade.findAll().stream()
-                .filter(order -> List.of(Order.STATUS_PAID, Order.STATUS_SHIPPED, Order.STATUS_COMPLETED).contains(order.orderStatus()))
-                .filter(order -> inDateRange(order.paidAt() == null ? null : order.paidAt().toLocalDate(), startDate, endDate))
-                .mapToLong(order -> order.payAmountCent() == null ? 0L : order.payAmountCent())
-                .sum();
+        String dateCondition = startDate == null || endDate == null ? "" : " AND DATE(created_at) BETWEEN ? AND ?";
+        String sql = "SELECT COALESCE(SUM(pay_amount_cent), 0) AS amount "
+                + "FROM pay_order "
+                + "WHERE pay_status IN ('SUCCESS', 'REFUND_PENDING', 'REFUNDING', 'PARTIALLY_REFUNDED', 'REFUND_FAILED')"
+                + dateCondition;
+        Long amount = startDate == null || endDate == null
+                ? jdbcTemplate.queryForObject(sql, Long.class)
+                : jdbcTemplate.queryForObject(sql, Long.class, startDate, endDate);
+        return amount == null ? 0L : amount;
     }
 
     private long financeRefundAmountCent(LocalDate startDate, LocalDate endDate) {
@@ -379,11 +383,6 @@ public class AdminQueryApplicationService {
                 ? jdbcTemplate.queryForObject(sql, Long.class)
                 : jdbcTemplate.queryForObject(sql, Long.class, startDate, endDate);
         return amount == null ? 0L : amount;
-    }
-
-    private boolean inDateRange(LocalDate date, LocalDate startDate, LocalDate endDate) {
-        if (startDate == null || endDate == null) return true;
-        return date != null && !date.isBefore(startDate) && !date.isAfter(endDate);
     }
 
     private long queryAmount(String sql) {
