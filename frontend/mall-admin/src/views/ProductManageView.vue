@@ -135,8 +135,8 @@
           </el-table-column>
           <el-table-column prop="skuCode" label="SKU编码" width="150" show-overflow-tooltip />
           <el-table-column prop="skuName" label="SKU名称" width="170" show-overflow-tooltip />
-          <el-table-column label="售价(元)" width="150"><template #default="{ row }"><el-input-number v-model="row.salePriceYuan" :min="0.01" :precision="2" :step="1" :disabled="!canEditSku" /></template></el-table-column>
-          <el-table-column label="原价(元)" width="150"><template #default="{ row }"><el-input-number v-model="row.originPriceYuan" :min="0.01" :precision="2" :step="1" :disabled="!canEditSku" /></template></el-table-column>
+          <el-table-column label="售价(元)" width="150"><template #default="{ row }"><el-input v-model="row.salePriceYuan" class="sku-price-input" inputmode="decimal" placeholder="0.00" :disabled="!canEditSku" /></template></el-table-column>
+          <el-table-column label="原价(元)" width="150"><template #default="{ row }"><el-input v-model="row.originPriceYuan" class="sku-price-input" inputmode="decimal" placeholder="0.00" :disabled="!canEditSku" /></template></el-table-column>
           <el-table-column label="初始库存" width="140"><template #default="{ row }"><el-input-number v-model="row.initialStock" :min="0" :step="1" :disabled="stockLocked(row) || !canEditSku" /></template></el-table-column>
           <el-table-column v-if="editorMode === 'edit'" label="SKU状态" width="150"><template #default="{ row }"><el-radio-group v-model="row.status" :disabled="!canEditSku" size="small"><el-radio-button value="ONLINE">启用</el-radio-button><el-radio-button value="OFFLINE">禁用</el-radio-button></el-radio-group></template></el-table-column>
         </el-table>
@@ -198,6 +198,7 @@ const currentProductId = ref(null);
 const productDetail = ref(null);
 const richTextEditor = shallowRef(null);
 const specGroups = ref([]);
+const originalEditSkus = ref([]);
 const toolbarConfig = { excludeKeys: ['fullScreen'] };
 const editorConfig = { placeholder: '请输入商品详情，支持图文混排和基础格式排版', MENU_CONF: {} };
 const productStatusMeta = (status) => getStatusTagMeta('productStatus', status);
@@ -267,9 +268,25 @@ const salesThresholdVisible = ref(false);
 const salesThresholdForm = reactive({ hotSalesThreshold: salesThresholdBase.hotSalesThreshold, lowSalesThreshold: salesThresholdBase.lowSalesThreshold });
 const productForm = reactive({ name: '', categoryId: null, mainImageUrl: '', imagePreviewUrl: '', description: '', status: 'OFFLINE', skus: [] });
 const imageUploading = ref(false);
+const MAX_SKU_PRICE_YUAN = 100000;
 
 const centToYuan = (cent) => ((Number(cent || 0) / 100).toFixed(2));
-const yuanToCent = (yuan) => Math.round(Number(yuan || 0) * 100);
+const yuanToCent = (yuan) => Math.trunc(Number(yuan || 0) * 100);
+const countDecimalPlaces = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text.includes('.')) return 0;
+  return text.split('.')[1]?.length || 0;
+};
+const hasMoreThanTwoDecimals = (value) => countDecimalPlaces(value) > 2;
+const validateSkuPrice = (value, label) => {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return `${label}必须是有效数字`;
+  if (numberValue < 0) return `${label}不能为负数`;
+  if (numberValue === 0) return `${label}必须大于0`;
+  if (numberValue > MAX_SKU_PRICE_YUAN) return `${label}不能超过10万元`;
+  if (hasMoreThanTwoDecimals(value)) return `${label}最多保留两位小数`;
+  return '';
+};
 const salesText = (row) => row.salesCount ?? row.sales_count ?? row.totalSales ?? row.salesVolume ?? 0;
 const monthlySalesText = (row) => row.monthlySalesCount ?? row.monthly_sales_count ?? salesText(row);
 const salesBand = (row) => String(row.salesBand || resolveSalesBand(monthlySalesText(row))).toUpperCase();
@@ -286,8 +303,14 @@ const safeParseSpec = (specJson) => { try { return JSON.parse(specJson || '{}') 
 const specEntries = (sku) => Object.entries(safeParseSpec(sku.specJson)).map(([key, value]) => ({ key, value }));
 const normalizeProductStatus = (status) => String(status || 'OFFLINE').trim().toUpperCase() === 'ONLINE' ? 'ONLINE' : 'OFFLINE';
 const normalizeSkuStatus = (status) => String(status || 'ONLINE').trim().toUpperCase() === 'OFFLINE' ? 'OFFLINE' : 'ONLINE';
-const stockLocked = (sku) => editorMode.value === 'edit' && productForm.status === 'ONLINE' && sku.id;
-const resolveImageUrl = (url, kind = 'product') => normalizeUploadPath(url, kind);
+const stockLocked = (sku) => editorMode.value === 'edit' && Boolean(sku.id);
+const normalizeUploadPath = (url) => {
+  const value = String(url || '').trim();
+  if (!value) return '';
+  if (/^(https?:)?\/\//i.test(value) || value.startsWith('data:') || value.startsWith('blob:')) return value;
+  return value.startsWith('/') ? value : `/${value}`;
+};
+const resolveImageUrl = (url) => normalizeUploadPath(url);
 const resetForm = () => { productForm.name = ''; productForm.categoryId = null; productForm.mainImageUrl = ''; productForm.imagePreviewUrl = ''; productForm.description = ''; productForm.status = 'OFFLINE'; productForm.skus = []; specGroups.value = [{ name: '默认', values: ['默认'], pending: '' }]; generateSkus(); };
 const syncRoute = async () => { await router.replace({ path: '/products', query: { ...(filters.keyword ? { keyword: filters.keyword } : {}), ...(filters.categoryId ? { categoryId: String(filters.categoryId) } : {}), ...(filters.status ? { status: filters.status } : {}), ...(filters.salesBand ? { salesBand: filters.salesBand } : {}), ...(Number(filters.hotSalesThreshold) ? { hotSalesThreshold: String(filters.hotSalesThreshold) } : {}), ...(Number(filters.lowSalesThreshold) >= 0 ? { lowSalesThreshold: String(filters.lowSalesThreshold) } : {}), ...(query.sortBy ? { sortBy: query.sortBy } : {}), ...(query.sortOrder ? { sortOrder: query.sortOrder } : {}), ...(pager.page > 1 ? { page: String(pager.page) } : {}), ...(pager.size !== ADMIN_PAGE_SIZE ? { size: String(pager.size) } : {}) } }); };
 const loadProducts = async () => { loading.value = true; try { const { data } = await fetchAdminProductPage({ keyword: filters.keyword || undefined, categoryId: filters.categoryId || undefined, status: filters.status || undefined, salesBand: filters.salesBand || undefined, hotSalesThreshold: filters.hotSalesThreshold, lowSalesThreshold: filters.lowSalesThreshold, sortBy: query.sortBy || undefined, sortOrder: query.sortOrder || undefined, page: pager.page, size: pager.size }); const pageData = data?.data || {}; products.value = pageData.records || []; pager.total = pageData.total || 0; if (data && data.success === false) ElMessage.warning(data.message || data.msg || '商品列表加载失败'); Object.assign(adminPageCache.products, { list: products.value, pager: { page: pager.page, size: pager.size, total: pager.total }, filters: { keyword: filters.keyword, categoryId: filters.categoryId, status: filters.status, salesBand: filters.salesBand, hotSalesThreshold: filters.hotSalesThreshold, lowSalesThreshold: filters.lowSalesThreshold }, query: { sortBy: query.sortBy, sortOrder: query.sortOrder }, loaded: true, updatedAt: Date.now() }); } catch (error) { products.value = []; pager.total = 0; ElMessage.error(error?.response?.data?.msg || error?.response?.data?.message || '商品列表加载失败'); } finally { loading.value = false; } };
@@ -301,10 +324,10 @@ const submitSalesThresholdDefault = async () => { if (!canManageSalesThreshold.v
 const handlePageChange = async (page) => { pager.page = page; await syncRoute(); await loadProducts(); };
 const handleSizeChange = async (size) => { pager.size = size; pager.page = 1; await syncRoute(); await loadProducts(); };
 const handleSortChange = async ({ prop, order }) => { query.sortBy = prop || 'id'; query.sortOrder = order === 'descending' ? 'desc' : 'asc'; if (!order) query.sortOrder = 'desc'; pager.page = 1; await syncRoute(); await loadProducts(); };
-const openProductDetail = async (productId) => { const { data } = await fetchAdminProductDetail(productId); productDetail.value = { ...data.data, mainImageUrl: normalizeUploadPath(data.data?.mainImageUrl, 'product') }; detailVisible.value = true; };
+const openProductDetail = async (productId) => { try { const { data } = await fetchAdminProductDetail(productId); productDetail.value = { ...data.data, mainImageUrl: normalizeUploadPath(data.data?.mainImageUrl) }; detailVisible.value = true; } catch (error) { ElMessage.error(error?.response?.data?.msg || error?.response?.data?.message || '商品详情加载失败'); } };
 const openCreate = () => { editorMode.value = 'create'; editingProductId.value = null; resetForm(); editorVisible.value = true; };
 const parseSpecGroupsFromSkus = (skus) => { const map = new Map(); skus.forEach((sku) => { Object.entries(safeParseSpec(sku.specJson)).forEach(([key, value]) => { if (!map.has(key)) map.set(key, new Set()); map.get(key).add(value); }); }); return [...map.entries()].map(([name, values]) => ({ name, values: [...values], pending: '' })); };
-const openEdit = async (productId) => { const { data } = await fetchAdminProductDetail(productId); const detail = data.data; const imageUrl = normalizeUploadPath(detail.mainImageUrl || '', 'product'); editorMode.value = 'edit'; editingProductId.value = productId; productForm.name = detail.name; productForm.categoryId = detail.categoryId; productForm.mainImageUrl = imageUrl; productForm.imagePreviewUrl = imageUrl; productForm.description = detail.description || ''; productForm.status = normalizeProductStatus(detail.status); productForm.skus = (detail.skus || []).filter(item => item.skuCode).map(item => ({ id: item.id, skuCode: item.skuCode, skuName: item.skuName, specJson: item.specJson || '{}', salePriceYuan: Number(centToYuan(item.salePriceCent)), originPriceYuan: Number(centToYuan(item.originPriceCent)), initialStock: item.totalStock || 0, status: normalizeSkuStatus(item.status), originalStatus: normalizeSkuStatus(item.status) })); specGroups.value = parseSpecGroupsFromSkus(productForm.skus); if (!specGroups.value.length) specGroups.value = [{ name: '默认', values: ['默认'], pending: '' }]; editorVisible.value = true; await nextTick(); };
+const openEdit = async (productId) => { const { data } = await fetchAdminProductDetail(productId); const detail = data.data; const imageUrl = normalizeUploadPath(detail.mainImageUrl || '', 'product'); editorMode.value = 'edit'; editingProductId.value = productId; productForm.name = detail.name; productForm.categoryId = detail.categoryId; productForm.mainImageUrl = imageUrl; productForm.imagePreviewUrl = imageUrl; productForm.description = detail.description || ''; productForm.status = normalizeProductStatus(detail.status); productForm.skus = (detail.skus || []).filter(item => item.skuCode).map(item => ({ id: item.id, skuCode: item.skuCode, skuName: item.skuName, specJson: item.specJson || '{}', salePriceYuan: Number(centToYuan(item.salePriceCent)), originPriceYuan: Number(centToYuan(item.originPriceCent)), initialStock: item.totalStock || 0, status: normalizeSkuStatus(item.status), originalStatus: normalizeSkuStatus(item.status) })); originalEditSkus.value = productForm.skus.map(item => ({ ...item })); specGroups.value = parseSpecGroupsFromSkus(productForm.skus); if (!specGroups.value.length) specGroups.value = [{ name: '默认', values: ['默认'], pending: '' }]; editorVisible.value = true; await nextTick(); };
 const openStatusDialog = (row) => { currentProductId.value = row.id; const nextStatus = row.status === 'ONLINE' ? 'OFFLINE' : 'ONLINE'; Object.assign(statusForm, { status: nextStatus, reason: nextStatus === 'ONLINE' ? '后台手动上架' : '后台手动下架' }); statusVisible.value = true; };
 
 const addSpecGroup = () => specGroups.value.push({ name: '', values: [], pending: '' });
@@ -313,7 +336,43 @@ const addSpecValue = (index) => { const group = specGroups.value[index]; const v
 const removeSpecValue = (groupIndex, valueIndex) => { specGroups.value[groupIndex].values.splice(valueIndex, 1); generateSkus(); };
 const buildCombinations = (groups) => groups.reduce((acc, group) => acc.flatMap(item => group.values.map(value => ({ ...item, [group.name.trim()]: value }))), [{}]);
 const generateSkuCode = (spec, index) => `SKU-${(productForm.name || 'PRODUCT').replace(/\s+/g, '').slice(0, 12).toUpperCase()}-${index + 1}`;
-const generateSkus = () => { const validGroups = specGroups.value.filter(group => group.name?.trim() && group.values.length); if (!validGroups.length) { productForm.skus = []; return; } const oldMap = new Map(productForm.skus.map(sku => [sku.specJson, sku])); productForm.skus = buildCombinations(validGroups).map((spec, index) => { const specJson = JSON.stringify(spec); const old = oldMap.get(specJson); return old ? { ...old, status: normalizeSkuStatus(old.status) } : { id: null, skuCode: generateSkuCode(spec, index), skuName: `${productForm.name || '商品'}-${Object.values(spec).join('-')}`, specJson, salePriceYuan: 0.01, originPriceYuan: 0.01, initialStock: 0, status: 'ONLINE' }; }); };
+const normalizeSpecJson = (spec) => JSON.stringify(Object.keys(spec || {}).sort().reduce((result, key) => ({ ...result, [key]: spec[key] }), {}));
+const isSpecSubsetMatch = (baseSpec, targetSpec) => Object.entries(baseSpec || {}).every(([key, value]) => targetSpec?.[key] === value);
+const cloneSkuValuesForNewSpec = (sku, spec, index) => ({
+  id: null,
+  skuCode: generateSkuCode(spec, index),
+  skuName: `${productForm.name || '商品'}-${Object.values(spec).join('-')}`,
+  specJson: normalizeSpecJson(spec),
+  salePriceYuan: Number(sku?.salePriceYuan || 0.01),
+  originPriceYuan: Number(sku?.originPriceYuan || sku?.salePriceYuan || 0.01),
+  initialStock: Number(sku?.initialStock || 0),
+  status: normalizeSkuStatus(sku?.status),
+});
+const findTemplateSku = (spec, sourceSkus) => sourceSkus.find((sku) => {
+  const skuSpec = safeParseSpec(sku.specJson);
+  return Object.keys(skuSpec).length > 0 && Object.keys(skuSpec).length < Object.keys(spec).length && isSpecSubsetMatch(skuSpec, spec);
+});
+const generateSkus = () => {
+  const validGroups = specGroups.value.filter(group => group.name?.trim() && group.values.length);
+  if (!validGroups.length) {
+    productForm.skus = [];
+    return;
+  }
+  const reusableSkus = editorMode.value === 'edit' ? [...originalEditSkus.value, ...productForm.skus] : productForm.skus;
+  const exactMap = new Map(reusableSkus.map(sku => [normalizeSpecJson(safeParseSpec(sku.specJson)), sku]));
+  const usedExistingIds = new Set();
+  productForm.skus = buildCombinations(validGroups).map((spec, index) => {
+    const specJson = normalizeSpecJson(spec);
+    const exact = exactMap.get(specJson);
+    if (exact && (!exact.id || !usedExistingIds.has(exact.id))) {
+      if (exact.id) usedExistingIds.add(exact.id);
+      return { ...exact, specJson, status: normalizeSkuStatus(exact.status) };
+    }
+    const template = findTemplateSku(spec, reusableSkus);
+    if (template) return cloneSkuValuesForNewSpec(template, spec, index);
+    return { id: null, skuCode: generateSkuCode(spec, index), skuName: `${productForm.name || '商品'}-${Object.values(spec).join('-')}`, specJson, salePriceYuan: 0.01, originPriceYuan: 0.01, initialStock: 0, status: 'ONLINE' };
+  });
+};
 
 const validateImageFile = (file) => {
   if (!file) return '请选择要上传的图片';
@@ -353,8 +412,47 @@ const handleImageDrop = (event) => { if (!canEditBasic.value) return; const [fil
 const removeImage = () => { productForm.imagePreviewUrl = ''; productForm.mainImageUrl = ''; };
 const handleEditorCreated = (editor) => { richTextEditor.value = editor; if (!canEditBasic.value) editor.disable(); };
 
-const validateProductForm = () => { if (!productForm.name.trim()) return t('productManage.nameRequired'); if (!productForm.categoryId) return t('productManage.categoryRequired'); if (!productForm.mainImageUrl || productForm.mainImageUrl.startsWith('data:')) return '请先上传商品主图'; if (!productForm.skus.length) return t('productManage.skuRequired'); if (productForm.status === 'ONLINE' && !productForm.skus.some(sku => sku.status === 'ONLINE' && sku.initialStock > 0)) return '上架前至少需要一个启用且库存充足的SKU'; for (const sku of productForm.skus) { if (sku.salePriceYuan <= 0) return t('productManage.salePriceInvalid'); if (sku.originPriceYuan <= 0) return t('productManage.originPriceInvalid'); if (sku.originPriceYuan < sku.salePriceYuan) return t('productManage.originPriceLessThanSale'); if (sku.initialStock < 0) return t('productManage.initialStockInvalid'); } return ''; };
-const submitProduct = async () => { const error = validateProductForm(); if (error) return ElMessage.warning(error); const payload = { name: productForm.name.trim(), categoryId: productForm.categoryId, mainImageUrl: productForm.mainImageUrl, description: sanitizeHtml(productForm.description), skus: productForm.skus.map(item => ({ id: item.id, skuCode: item.skuCode, skuName: item.skuName, specJson: item.specJson, salePriceCent: yuanToCent(item.salePriceYuan), originPriceCent: yuanToCent(item.originPriceYuan), initialStock: item.initialStock, status: normalizeSkuStatus(item.status) })) }; if (editorMode.value === 'create') { payload.skus = payload.skus.map(({ status, id, ...rest }) => rest); await createAdminProduct(payload); ElMessage.success(t('productManage.createSuccess')); } else { payload.status = normalizeProductStatus(productForm.status); await updateAdminProduct(editingProductId.value, payload); ElMessage.success(t('productManage.updateSuccess')); } editorVisible.value = false; await loadProducts(); };
+const validateProductForm = () => { if (!productForm.name.trim()) return t('productManage.nameRequired'); if (!productForm.categoryId) return t('productManage.categoryRequired'); if (!productForm.mainImageUrl || productForm.mainImageUrl.startsWith('data:')) return '请先上传商品主图'; if (!productForm.skus.length) return t('productManage.skuRequired'); if (productForm.status === 'ONLINE' && !productForm.skus.some(sku => sku.status === 'ONLINE' && sku.initialStock > 0)) return '上架前至少需要一个启用且库存充足的SKU'; for (const sku of productForm.skus) { const skuLabel = sku.skuName || sku.skuCode || 'SKU'; const salePriceError = validateSkuPrice(sku.salePriceYuan, `${skuLabel}售价`); if (salePriceError) return salePriceError; const originPriceError = validateSkuPrice(sku.originPriceYuan, `${skuLabel}原价`); if (originPriceError) return originPriceError; if (Number(sku.originPriceYuan) < Number(sku.salePriceYuan)) return t('productManage.originPriceLessThanSale'); if (sku.initialStock < 0) return t('productManage.initialStockInvalid'); } return ''; };
+const submitProduct = async () => {
+  const error = validateProductForm();
+  if (error) return ElMessage.warning(error);
+  const payload = {
+    name: productForm.name.trim(),
+    categoryId: productForm.categoryId,
+    mainImageUrl: productForm.mainImageUrl,
+    description: sanitizeHtml(productForm.description),
+    skus: productForm.skus.map(item => ({
+      id: item.id,
+      skuCode: item.skuCode,
+      skuName: item.skuName,
+      specJson: item.specJson,
+      salePriceCent: yuanToCent(item.salePriceYuan),
+      originPriceCent: yuanToCent(item.originPriceYuan),
+      initialStock: item.initialStock,
+      status: normalizeSkuStatus(item.status),
+    })),
+  };
+  try {
+    if (editorMode.value === 'create') {
+      payload.skus = payload.skus.map(({ status, id, ...rest }) => rest);
+      await createAdminProduct(payload);
+      ElMessage.success(t('productManage.createSuccess'));
+    } else {
+      payload.status = normalizeProductStatus(productForm.status);
+      await updateAdminProduct(editingProductId.value, payload);
+      ElMessage.success(t('productManage.updateSuccess'));
+    }
+    editorVisible.value = false;
+    await loadProducts();
+  } catch (submitError) {
+    const message = submitError?.response?.data?.msg || submitError?.response?.data?.message || submitError?.message || '商品保存失败';
+    if (editorMode.value === 'edit' && normalizeProductStatus(productForm.status) === 'ONLINE') {
+      ElMessage.warning(message.includes('上架') || message.includes('SKU') || message.includes('库存') ? message : '已上架商品不支持直接修改规格或初始库存，请先下架商品，库存变更请到库存管理模块操作');
+      return;
+    }
+    ElMessage.error(message);
+  }
+};
 const submitStatus = async () => { try { const targetStatus = normalizeProductStatus(statusForm.status); await confirmAction(t('productManage.confirmStatusUpdate', { status: productStatusMeta(targetStatus).label })); await updateAdminProductStatus(currentProductId.value, { status: targetStatus, reason: statusForm.reason?.trim() || (targetStatus === 'ONLINE' ? '后台手动上架' : '后台手动下架') }); ElMessage.success(t('productManage.statusUpdateSuccess')); statusVisible.value = false; adminPageCache.products.loaded = false; await loadProducts(); } catch (error) { if (error !== 'cancel') ElMessage.error(error?.response?.data?.msg || error?.response?.data?.message || t('productManage.statusUpdateFailed')); } };
 const handleLogout = async () => { await adminStore.logout(); router.push('/login'); };
 const initializeProductsPage = async (force = false) => { await loadSalesThresholdDefault(); applyRouteQuery(); if (!force && adminPageCache.products.loaded && products.value.length && !Object.keys(route.query).length) return; await Promise.all([loadProducts(), loadCategories()]); };

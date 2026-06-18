@@ -16,6 +16,8 @@ import {
   fetchAdminProductSalesThresholdConfig,
   fetchAdminReconciliationOverview,
   fetchAdminStockReconciliations,
+  fetchAdminTodayActiveStocks,
+  fetchAdminWarehouseTrend,
   fetchDashboard,
   fetchStockLogs,
   fetchWarningStocks,
@@ -114,6 +116,12 @@ const createCurrentMonthRange = () => {
   return { type: 'month', startDate: formatDate(start), endDate: formatDate(end), rangeType: 'month' };
 };
 
+const dateFromTimestamp = (timestamp) => {
+  const value = Number(timestamp);
+  const date = Number.isFinite(value) && value > 0 ? new Date(value) : new Date();
+  return formatDate(date);
+};
+
 const buildRisk = (label, count, desc, level = 'NORMAL') => ({ label, count: toNumber(count), desc, level });
 
 export function useDashboardData() {
@@ -125,8 +133,9 @@ export function useDashboardData() {
   const state = reactive({ OPERATIONS: {}, FINANCE: {}, WAREHOUSE: {}, PRODUCTS: {} });
   const cache = new Map();
 
+  const todayStockDate = computed(() => formatDate(new Date()));
   const params = computed(() => ({ startDate: range.value.startDate, endDate: range.value.endDate, rangeType: range.value.type }));
-  const cacheKeyOf = (role) => `${role}:${range.value.type}:${range.value.startDate}:${range.value.endDate}`;
+  const cacheKeyOf = (role) => `${role}:${range.value.type}:${range.value.startDate}:${range.value.endDate}:${role === 'WAREHOUSE' ? todayStockDate.value : ''}`;
   const getCache = (role) => cache.get(cacheKeyOf(role));
   const setCache = (role, payload) => cache.set(cacheKeyOf(role), payload);
 
@@ -354,7 +363,8 @@ export function useDashboardData() {
     const hangingRows = recordsOf(hangingPayload).filter((hanging) => !isCompletedReconcileRecord(hanging));
     const findCompletedReconcileRecord = (row) => completedReconcileRows.find((record) => isSameOnlineDiff(record, row));
     const findPendingOnlineDiff = (row) => onlineDiffs.find((diff) => isSameOnlineDiff(diff, row));
-    const isHangingFlow = (row) => hangingRows.some((hanging) => isSameOnlineDiff(hanging, row));
+    const findHangingRecord = (row) => hangingRows.find((hanging) => isSameOnlineDiff(hanging, row));
+    const isHangingFlow = (row) => Boolean(findHangingRecord(row));
     const hasPendingReconcileSignal = (row) => Boolean(findPendingOnlineDiff(row) || isHangingFlow(row) || row.processStatus === 'PENDING' || row.processStatus === 'HANGING');
     const attachReconcileRecord = (row) => {
       const existingRemark = firstOf(row, ['diffRemark', 'reconcileRemark', 'reconciliationRemark', 'remark', 'processRemark', 'handleRemark', 'suggestedAction', 'diffType', 'reason', 'failReason', 'exceptionReason'], '');
@@ -369,8 +379,14 @@ export function useDashboardData() {
           diffRemark: existingRemark || firstOf(pendingOnlineDiff, ['processRemark', 'handleRemark', 'suggestedAction', 'diffType', 'remark'], '线上对账差异'),
         };
       }
-      if (isHangingFlow(row)) {
-        return { ...row, reconcileStatus: 'DIFF', diffRemark: existingRemark || '挂账中，需持续跟进闭环' };
+      const hangingRecord = findHangingRecord(row);
+      if (hangingRecord) {
+        return {
+          ...row,
+          hangingFollow: hangingRecord,
+          reconcileStatus: 'DIFF',
+          diffRemark: existingRemark || firstOf(hangingRecord, ['processRemark', 'handleRemark', 'suggestedAction', 'diffType', 'remark', 'reason', 'failReason'], '挂账中，需持续跟进闭环'),
+        };
       }
       if (hasPendingReconcileSignal(row)) {
         return { ...row, reconcileStatus: 'DIFF', diffRemark: existingRemark || '待处理差异，需人工核验' };
@@ -447,41 +463,48 @@ export function useDashboardData() {
   }, options);
 
   const loadWarehouse = (options = {}) => safeLoad('WAREHOUSE', async () => {
-    const [overviewRes, warningsRes, logsRes, reconciliationsRes] = await Promise.all([
+    const activeStockDate = dateFromTimestamp(options.timestamp ?? Date.now());
+    const [overviewRes, stocksRes, warningsRes, logsRes, reconciliationsRes, warehouseTrendRes] = await Promise.all([
       fetchDashboard(params.value),
+      fetchAdminTodayActiveStocks({ stockDate: activeStockDate, currentTimestamp: options.timestamp ?? Date.now(), page: 1, size: 100, sortBy: 'latestStockTime', sortOrder: 'desc' }),
       fetchWarningStocks({ ...params.value, page: 1, size: 8, sortField: 'availableStock', sortOrder: 'asc' }),
       fetchStockLogs({ ...params.value, page: 1, size: 8, sortField: 'createTime', sortOrder: 'desc' }),
-      fetchAdminStockReconciliations({ ...params.value, page: 1, size: 8, sortField: 'createTime', sortOrder: 'desc' }),
+      fetchAdminStockReconciliations({ ...params.value, status: 'INCONSISTENT', page: 1, size: 8, sortField: 'createTime', sortOrder: 'desc' }),
+      fetchAdminWarehouseTrend().catch(() => ({ data: { data: [] } })),
     ]);
     const overview = normalizeResponse(overviewRes, {});
+    const stocksPayload = normalizeResponse(stocksRes, {});
     const warningsPayload = normalizeResponse(warningsRes, {});
     const logsPayload = normalizeResponse(logsRes, {});
     const reconciliationsPayload = normalizeResponse(reconciliationsRes, {});
+    const warehouseTrend = normalizeResponse(warehouseTrendRes, []);
+    const stocks = recordsOf(stocksPayload);
     const warnings = recordsOf(warningsPayload);
     const logs = recordsOf(logsPayload);
     const reconciliations = recordsOf(reconciliationsPayload);
     const stockStats = overview.stockWarningStats || {};
     const outOfStockCount = warnings.filter((item) => toNumber(item.availableStock) <= 0).length;
     const lockedStockTotal = warnings.reduce((sum, item) => sum + toNumber(item.lockedStock), 0);
+    const stockDiffCount = totalOf(reconciliationsPayload);
     const summary = {
-      totalSkuCount: toNumber(stockStats.totalCount || totalOf(warningsPayload)),
-      lowStockCount: toNumber(stockStats.lowCount || warnings.filter((item) => toNumber(item.availableStock) <= toNumber(item.lowStockThreshold)).length),
-      highStockCount: toNumber(stockStats.highCount),
-      normalCount: toNumber(stockStats.normalCount),
+      totalSkuCount: toNumber(stockStats.totalCount || totalOf(stocksPayload) || totalOf(warningsPayload)),
+      lowStockCount: toNumber(stockStats.lowCount || stocks.filter((item) => item.warningStatus === 'LOW' || toNumber(item.availableStock) <= toNumber(item.lowStockThreshold)).length || warnings.filter((item) => toNumber(item.availableStock) <= toNumber(item.lowStockThreshold)).length),
+      highStockCount: toNumber(stockStats.highCount || stocks.filter((item) => item.warningStatus === 'HIGH').length),
+      normalCount: toNumber(stockStats.normalCount || stocks.filter((item) => item.warningStatus === 'NORMAL').length),
       warningCount: totalOf(warningsPayload),
       outOfStockCount,
       pendingWarningCount: warnings.filter((item) => !['DONE', 'HANDLED'].includes(item.warningStatus || item.status)).length,
       stockLogCount: totalOf(logsPayload),
-      stockDiffCount: totalOf(reconciliationsPayload),
+      stockDiffCount,
       lockedStockTotal,
     };
     const risks = [
-      buildRisk('缺货 SKU', summary.outOfStockCount, '可售库存为 0 的 SKU 需要优先补货', summary.outOfStockCount > 0 ? 'HIGH' : 'NORMAL'),
+      buildRisk('库存预警', summary.warningCount, '查看全部高低库存预警 SKU 并处理库存风险', summary.warningCount > 0 ? 'WARNING' : 'NORMAL'),
       buildRisk('低库存 SKU', summary.lowStockCount, '低于预警阈值的 SKU 需要补货', summary.lowStockCount > 0 ? 'WARNING' : 'NORMAL'),
-      buildRisk('库存对账差异', summary.stockDiffCount, '系统库存与实际库存存在差异', summary.stockDiffCount > 0 ? 'HIGH' : 'NORMAL'),
-      buildRisk('锁定库存总量', summary.lockedStockTotal, '关注长时间锁定未释放库存', summary.lockedStockTotal > 0 ? 'LOW' : 'NORMAL'),
+      buildRisk('滞销/高库存 SKU', summary.highStockCount, '库存积压 SKU 建议促销、清仓或调整采购', summary.highStockCount > 0 ? 'WARNING' : 'NORMAL'),
+      buildRisk('库存对账不一致', summary.stockDiffCount, 'Redis 与数据库库存数据存在不一致', summary.stockDiffCount > 0 ? 'HIGH' : 'NORMAL'),
     ];
-    return { overview, summary, risks, todos: risks, warnings, warningTotal: totalOf(warningsPayload), logs, reconciliations };
+    return { overview, summary, risks, todos: risks, stocks, stockTotal: totalOf(stocksPayload), warnings, warningTotal: totalOf(warningsPayload), logs, reconciliations, warehouseTrend };
   }, options);
 
   const loadProducts = (options = {}) => safeLoad('PRODUCTS', async () => {

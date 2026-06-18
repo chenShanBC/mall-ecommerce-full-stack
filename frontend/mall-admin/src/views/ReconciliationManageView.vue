@@ -179,7 +179,7 @@
           <el-option label="不一致" value="INCONSISTENT" />
           <el-option label="已修复" value="REPAIRED" />
         </el-select>
-        <el-button type="primary" @click="loadStockReconciliations">查询</el-button>
+        <el-button type="primary" @click="searchStockReconciliations">查询</el-button>
         <el-button @click="resetStockReconciliations">重置</el-button>
       </div>
       <el-table v-loading="stockLoading" :data="stockRows" class="admin-table stock-reconcile-table" empty-text="暂无库存对账记录" row-key="id" :default-sort="{ prop: 'id', order: 'descending' }" @sort-change="handleStockSortChange" @selection-change="handleStockSelectionChange">
@@ -466,8 +466,9 @@ const diffDetail = ref(null);
 const diffHandling = ref(false);
 const selectedDiffRows = ref([]);
 const diffHandleForm = reactive({ reason: '', judgement: '', diffAmount: '', remark: '' });
-const stockQuery = reactive({ skuId: '', status: '', sortBy: 'id', sortOrder: 'desc' });
-const stockPager = reactive({ page: 1, size: ADMIN_PAGE_SIZE, total: 0 });
+const normalizeStockStatusQuery = (status) => ['CONSISTENT', 'INCONSISTENT', 'REPAIRED'].includes(String(status || '').toUpperCase()) ? String(status).toUpperCase() : '';
+const stockQuery = reactive({ skuId: String(route.query.stockSkuId ?? ''), status: normalizeStockStatusQuery(route.query.stockStatus), sortBy: String(route.query.stockSortBy || 'id'), sortOrder: String(route.query.stockSortOrder || 'desc') });
+const stockPager = reactive({ page: Number(route.query.stockPage || 1), size: Number(route.query.stockSize || ADMIN_PAGE_SIZE), total: 0 });
 const stockRows = ref([]);
 const stockLoading = ref(false);
 const selectedStockRows = ref([]);
@@ -1072,6 +1073,7 @@ const handleMainTabChange = async (tabName) => {
     mainTab.value = nextTab;
   }
   if (nextTab === 'stock') {
+    applyStockReconciliationRoute();
     await loadStockReconciliations();
   } else if (nextTab === 'hanging') {
     await loadHangingFollows();
@@ -1310,6 +1312,28 @@ const openTaskLogs = async (row) => {
     ElMessage.error(error?.response?.data?.msg || '任务操作日志加载失败');
   }
 };
+const syncStockReconciliationRoute = async () => {
+  await router.replace({
+    path: '/reconciliations',
+    query: {
+      tab: 'stock',
+      ...(stockQuery.status ? { stockStatus: stockQuery.status } : {}),
+      ...(stockQuery.skuId ? { stockSkuId: String(stockQuery.skuId) } : {}),
+      ...(stockQuery.sortBy ? { stockSortBy: stockQuery.sortBy } : {}),
+      ...(stockQuery.sortOrder ? { stockSortOrder: stockQuery.sortOrder } : {}),
+      ...(stockPager.page > 1 ? { stockPage: String(stockPager.page) } : {}),
+      ...(stockPager.size !== ADMIN_PAGE_SIZE ? { stockSize: String(stockPager.size) } : {}),
+    },
+  });
+};
+const applyStockReconciliationRoute = () => {
+  stockQuery.skuId = String(route.query.stockSkuId ?? '');
+  stockQuery.status = normalizeStockStatusQuery(route.query.stockStatus);
+  stockQuery.sortBy = String(route.query.stockSortBy || 'id');
+  stockQuery.sortOrder = String(route.query.stockSortOrder || 'desc');
+  stockPager.page = Number(route.query.stockPage || 1);
+  stockPager.size = Number(route.query.stockSize || ADMIN_PAGE_SIZE);
+};
 const loadStockReconciliations = async () => {
   stockLoading.value = true;
   try {
@@ -1330,13 +1354,20 @@ const loadStockReconciliations = async () => {
     stockLoading.value = false;
   }
 };
-const resetStockReconciliations = () => {
+const searchStockReconciliations = async () => {
+  stockPager.page = 1;
+  selectedStockRows.value = [];
+  await syncStockReconciliationRoute();
+  loadStockReconciliations();
+};
+const resetStockReconciliations = async () => {
   stockQuery.skuId = '';
   stockQuery.status = '';
   stockQuery.sortBy = 'id';
   stockQuery.sortOrder = 'desc';
   stockPager.page = 1;
   selectedStockRows.value = [];
+  await syncStockReconciliationRoute();
   loadStockReconciliations();
 };
 const canManageStockReconcile = (row) => {
@@ -1373,15 +1404,16 @@ const batchRepairStock = async () => {
     if (error !== 'cancel') ElMessage.error(error?.response?.data?.msg || '批量修复库存对账失败');
   }
 };
-const handleStockSortChange = ({ prop, order }) => {
+const handleStockSortChange = async ({ prop, order }) => {
   stockQuery.sortBy = prop || 'id';
   stockQuery.sortOrder = order === 'ascending' ? 'asc' : 'desc';
   stockPager.page = 1;
   selectedStockRows.value = [];
+  await syncStockReconciliationRoute();
   loadStockReconciliations();
 };
-const handleStockPageChange = (page) => { stockPager.page = page; loadStockReconciliations(); };
-const handleStockSizeChange = (size) => { stockPager.size = size; stockPager.page = 1; loadStockReconciliations(); };
+const handleStockPageChange = async (page) => { stockPager.page = page; await syncStockReconciliationRoute(); loadStockReconciliations(); };
+const handleStockSizeChange = async (size) => { stockPager.size = size; stockPager.page = 1; await syncStockReconciliationRoute(); loadStockReconciliations(); };
 const handleLogout = async () => { await adminStore.logout(); router.push('/login'); };
 
 onMounted(async () => {

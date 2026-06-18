@@ -72,10 +72,10 @@ public class ProductDomainService {
     public ProductSpu updateProduct(Long productId, AdminUpdateProductRequest request) {
         ProductSpu existing = loadProduct(productId);
         validateInitialStock(request.skus().stream().map(AdminUpdateProductRequest.SkuInput::initialStock).toList());
-        if (existing.online()) {
+        if ("ONLINE".equalsIgnoreCase(request.status())) {
             boolean hasNewSku = request.skus().stream().anyMatch(sku -> sku.id() == null);
             if (hasNewSku) {
-                throw BusinessException.badRequest("商品已上架，新增SKU及初始库存请先下架或通过库存模块处理");
+                throw BusinessException.badRequest("商品上架状态不允许新增SKU及初始库存，请先保存为下架状态或通过库存模块处理");
             }
         }
         return productRepository.update(existing.applyUpdate(

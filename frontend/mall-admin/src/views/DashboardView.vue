@@ -244,6 +244,82 @@
                 />
               </div>
             </div>
+            <div v-else-if="activeRole === 'WAREHOUSE'" class="warehouse-inventory-panel">
+              <div class="warehouse-inventory-toolbar">
+                <el-input v-model="warehouseInventoryKeyword" size="small" clearable placeholder="请输入 SKU ID / 名称" class="warehouse-inventory-search" />
+                <el-select v-model="warehouseInventoryStatus" size="small" class="warehouse-inventory-select">
+                  <el-option label="全部状态" value="ALL" />
+                  <el-option label="正常" value="NORMAL" />
+                  <el-option label="低库存" value="LOW" />
+                  <el-option label="高库存" value="HIGH" />
+                </el-select>
+                <el-select v-model="warehouseInventoryDiff" size="small" class="warehouse-inventory-select">
+                  <el-option label="全部差异" value="ALL" />
+                  <el-option label="有差异" value="DIFF" />
+                  <el-option label="无差异" value="NONE" />
+                </el-select>
+                <el-checkbox v-model="warehouseRiskOnly" size="small">仅看风险 SKU</el-checkbox>
+                <div class="warehouse-inventory-toolbar__spacer"></div>
+                <el-button size="small" @click="resetWarehouseInventoryFilters">重置</el-button>
+                <el-button size="small" type="primary" plain @click="exportWarehouseInventoryExcel">导出明细</el-button>
+              </div>
+              <el-table
+                :data="pagedWarehouseInventoryRows"
+                class="dashboard-table warehouse-inventory-table"
+                height="300"
+                empty-text="暂无符合条件的库存明细"
+                :row-class-name="warehouseInventoryRowClass"
+              >
+                <el-table-column prop="skuId" label="SKU ID" width="110" fixed="left" />
+                <el-table-column prop="skuName" label="SKU 名称" min-width="190" show-overflow-tooltip />
+                <el-table-column prop="categoryName" label="商品分类" width="120" show-overflow-tooltip />
+                <el-table-column prop="totalStock" label="总库存" width="86" align="right" />
+                <el-table-column prop="lockedStock" label="锁定库存" width="90" align="right" />
+                <el-table-column label="可用库存" width="96" align="right">
+                  <template #default="{ row }"><strong class="warehouse-stock-available">{{ row.availableStock }}</strong></template>
+                </el-table-column>
+                <el-table-column label="库存状态" width="112">
+                  <template #default="{ row }"><el-tag size="small" :type="warehouseInventoryStatusMeta(row).type" effect="light">{{ warehouseInventoryStatusMeta(row).label }}</el-tag></template>
+                </el-table-column>
+                <el-table-column prop="warningThreshold" label="预警阈值" width="90" align="right" />
+                <el-table-column label="补货缺口" width="90" align="right">
+                  <template #default="{ row }"><span :class="{ 'warehouse-gap--warning': row.replenishGap > 0 }">{{ row.replenishGap > 0 ? row.replenishGap : '-' }}</span></template>
+                </el-table-column>
+                <el-table-column prop="lastStockTime" label="最近出入库" min-width="155" />
+                <el-table-column label="库存差异" width="100">
+                  <template #default="{ row }"><el-tag size="small" :type="row.hasDiff ? 'danger' : 'success'" effect="light">{{ row.hasDiff ? '有差异' : '无差异' }}</el-tag></template>
+                </el-table-column>
+                <el-table-column label="操作" width="70" fixed="right" align="center">
+                  <template #default="{ row }">
+                    <el-button size="small" link type="primary" @click="goWarehouseSkuLogs(row)">日志</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div class="warehouse-inventory-pagination">
+                <span class="warehouse-inventory-summary">共 {{ filteredWarehouseInventoryRows.length }} 条，风险 {{ warehouseRiskCount }} 条</span>
+                <div class="warehouse-page-size-control">
+                  <span>每页</span>
+                  <el-input-number
+                    v-model="warehouseInventoryPageSize"
+                    size="small"
+                    :min="1"
+                    :max="200"
+                    :step="1"
+                    controls-position="right"
+                    @change="handleWarehouseInventoryPageSizeInput"
+                  />
+                  <span>条</span>
+                </div>
+                <el-pagination
+                  v-model:current-page="warehouseInventoryPage"
+                  size="small"
+                  background
+                  layout="prev, pager, next"
+                  :page-size="warehouseInventoryPageSize"
+                  :total="filteredWarehouseInventoryRows.length"
+                />
+              </div>
+            </div>
             <component v-else :is="tableMeta.component" :rows="tableMeta.rows" :loading="loading" />
           </article>
         </div>
@@ -368,6 +444,91 @@ const tables = computed(() => {
   return { left: data.products || [], right: [] };
 });
 
+const warehouseInventoryKeyword = ref('');
+const warehouseInventoryStatus = ref('ALL');
+const warehouseInventoryDiff = ref('ALL');
+const warehouseRiskOnly = ref(false);
+const warehouseInventoryPage = ref(1);
+const warehouseInventoryPageSize = ref(5);
+const pickFirst = (row, keys, fallback = '') => keys.map((key) => row?.[key]).find((value) => value !== undefined && value !== null && value !== '') ?? fallback;
+const normalizeWarehouseInventoryRow = (row, source = 'STOCK') => {
+  const availableStock = Number(pickFirst(row, ['availableStock', 'afterAvailableStock', 'dbAvailableStock', 'stock'], 0));
+  const lockedStock = Number(pickFirst(row, ['lockedStock', 'dbLockedStock'], 0));
+  const totalStock = Number(pickFirst(row, ['totalStock', 'dbTotalStock'], availableStock + lockedStock));
+  const warningThreshold = Number(pickFirst(row, ['lowStockThreshold', 'warningThreshold', 'threshold'], 0));
+  const diffQuantity = Number(pickFirst(row, ['diffQuantity', 'differenceQuantity', 'stockDiffQuantity'], 0));
+  const rawStatus = String(pickFirst(row, ['warningStatus', 'stockStatus', 'status'], '')).toUpperCase();
+  const hasDiff = source === 'RECONCILIATION' || Math.abs(diffQuantity) > 0 || ['INCONSISTENT', 'DIFF'].includes(rawStatus);
+  const stockStatus = rawStatus.includes('HIGH') || rawStatus.includes('OVER') ? 'HIGH' : (rawStatus.includes('LOW') || rawStatus.includes('WARNING') || (warningThreshold > 0 && availableStock <= warningThreshold) ? 'LOW' : 'NORMAL');
+  return {
+    ...row,
+    source,
+    skuId: pickFirst(row, ['skuId', 'skuCode', 'skuNo', 'id'], '--'),
+    skuName: pickFirst(row, ['skuName', 'productName', 'name'], '--'),
+    categoryName: pickFirst(row, ['productTypeName', 'productType', 'goodsTypeName', 'goodsType', 'categoryName', 'category', 'categoryTitle'], '--'),
+    totalStock,
+    lockedStock,
+    availableStock,
+    warningThreshold,
+    replenishGap: stockStatus === 'LOW' ? Math.max(warningThreshold - availableStock, 0) : 0,
+    lastStockTime: pickFirst(row, ['latestStockTime', 'lastStockTime', 'createTime', 'createdAt', 'updateTime', 'updatedAt', 'reconcileTime'], '--'),
+    diffQuantity,
+    hasDiff,
+    stockStatus,
+  };
+};
+const warehouseInventoryRows = computed(() => {
+  const data = currentData.value || {};
+  return (data.stocks || []).map((row) => normalizeWarehouseInventoryRow(row, 'STOCK'));
+});
+const filteredWarehouseInventoryRows = computed(() => warehouseInventoryRows.value.filter((row) => {
+  const keyword = warehouseInventoryKeyword.value.trim().toLowerCase();
+  const matchesKeyword = !keyword || String(row.skuId).toLowerCase().includes(keyword) || String(row.skuName).toLowerCase().includes(keyword);
+  const matchesStatus = warehouseInventoryStatus.value === 'ALL' || row.stockStatus === warehouseInventoryStatus.value;
+  const matchesDiff = warehouseInventoryDiff.value === 'ALL' || (warehouseInventoryDiff.value === 'DIFF' ? row.hasDiff : !row.hasDiff);
+  const matchesRisk = !warehouseRiskOnly.value || row.stockStatus !== 'NORMAL' || row.hasDiff;
+  return matchesKeyword && matchesStatus && matchesDiff && matchesRisk;
+}));
+const pagedWarehouseInventoryRows = computed(() => {
+  const size = Math.max(1, Number(warehouseInventoryPageSize.value) || 5);
+  const page = Math.max(1, Number(warehouseInventoryPage.value) || 1);
+  const start = (page - 1) * size;
+  return filteredWarehouseInventoryRows.value.slice(start, start + size);
+});
+const warehouseRiskCount = computed(() => warehouseInventoryRows.value.filter((row) => row.stockStatus !== 'NORMAL' || row.hasDiff).length);
+const warehouseInventoryStatusMeta = (row) => ({
+  LOW: { label: '低库存', type: 'warning' },
+  HIGH: { label: '高库存', type: 'warning' },
+  NORMAL: { label: '正常', type: 'success' },
+}[row.stockStatus] || { label: '未知', type: 'info' });
+const warehouseInventoryRowClass = ({ row }) => row.hasDiff ? 'warehouse-inventory-row--diff' : row.stockStatus === 'LOW' ? 'warehouse-inventory-row--low' : row.stockStatus === 'HIGH' ? 'warehouse-inventory-row--high' : '';
+const resetWarehouseInventoryPage = () => { warehouseInventoryPage.value = 1; };
+const handleWarehouseInventoryPageSizeInput = () => {
+  warehouseInventoryPageSize.value = Math.max(1, Number(warehouseInventoryPageSize.value) || 5);
+  resetWarehouseInventoryPage();
+};
+const resetWarehouseInventoryFilters = () => { warehouseInventoryKeyword.value = ''; warehouseInventoryStatus.value = 'ALL'; warehouseInventoryDiff.value = 'ALL'; warehouseRiskOnly.value = false; resetWarehouseInventoryPage(); };
+const exportWarehouseInventoryExcel = () => {
+  const rows = filteredWarehouseInventoryRows.value.map((row) => ({ 'SKU ID': row.skuId, 'SKU 名称': row.skuName, 商品分类: row.categoryName, 总库存: row.totalStock, 锁定库存: row.lockedStock, 可用库存: row.availableStock, 库存状态: warehouseInventoryStatusMeta(row).label, 预警阈值: row.warningThreshold, 补货缺口: row.replenishGap || '', 最近出入库: row.lastStockTime, 库存差异: row.hasDiff ? '有差异' : '无差异' }));
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 提示: '暂无库存明细' }]);
+  XLSX.utils.book_append_sheet(workbook, worksheet, '库存明细');
+  XLSX.writeFile(workbook, `库存明细-${formatDate(new Date())}.xlsx`);
+};
+const recentThreeDayStockLogRangeQuery = () => {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - 2);
+  return { startTime: `${formatDate(start)}T00:00:00`, endTime: `${formatDate(end)}T23:59:59` };
+};
+const goWarehouseSkuLogs = (row) => router.push({ path: '/stock-logs', query: { skuId: row.skuId, ...recentThreeDayStockLogRangeQuery(), page: 1 } });
+watch([warehouseInventoryKeyword, warehouseInventoryStatus, warehouseInventoryDiff, warehouseRiskOnly], resetWarehouseInventoryPage);
+watch([filteredWarehouseInventoryRows, warehouseInventoryPageSize], () => {
+  const size = Math.max(1, Number(warehouseInventoryPageSize.value) || 5);
+  const maxPage = Math.max(1, Math.ceil(filteredWarehouseInventoryRows.value.length / size));
+  if (warehouseInventoryPage.value > maxPage) warehouseInventoryPage.value = maxPage;
+});
+
 const heroDescription = computed(() => {
   const descriptions = {
     OPERATIONS: '围绕订单履约、支付状态与售后处理构建的运营总览，帮助你快速识别需要优先处理的业务风险。',
@@ -442,8 +603,9 @@ const goAftersales = (status) => router.push({ path: '/aftersales', query: statu
 const goPays = (status, extraQuery = {}) => router.push({ path: '/pays', query: { ...(status ? { status } : {}), ...extraQuery, page: 1 } });
 const goPayRefunds = (status, extraQuery = {}) => router.push({ path: '/pays', query: { tab: 'refunds', ...(status ? { refundStatus: status } : {}), ...extraQuery, refundPage: 1 } });
 const goPayCallbacks = (extraQuery = {}) => router.push({ path: '/pays', query: { tab: 'pays', openCallbacks: '1', ...extraQuery, page: 1 } });
-const goStocks = (warningStatus) => router.push({ path: '/stocks', query: warningStatus ? { warningStatus } : {} });
+const goStocks = (warningStatus) => router.push({ path: '/stocks', query: warningStatus ? { warningStatus, page: 1 } : { skuId: '', stockStatus: '', warningStatus: '', page: 1 } });
 const goReconciliations = (status, extraQuery = {}) => router.push({ path: '/reconciliations', query: { ...(status ? { status } : {}), ...extraQuery } });
+const goStockReconciliations = (status = 'INCONSISTENT') => router.push({ path: '/reconciliations', query: { tab: 'stock', stockStatus: status, stockPage: 1 } });
 const goPendingReconciliationTasks = () => goReconciliations('MATCHED', { tab: 'online', processStatus: 'PENDING' });
 const goHangingReconciliations = () => router.push({ path: '/reconciliations', query: { tab: 'hanging', page: 1 } });
 const goProducts = () => router.push('/products');
@@ -478,9 +640,34 @@ const handleSummaryCardClick = (card) => {
     if (financeSummaryRouteMap[card.label]) financeSummaryRouteMap[card.label]();
     return;
   }
+  if (activeRole.value === 'WAREHOUSE') {
+    if (card.label === 'SKU总数') {
+      goStocks();
+      return;
+    }
+    if (card.label === '低库存') {
+      goStocks('LOW');
+      return;
+    }
+    if (card.label === '滞销/高库存') {
+      goStocks('HIGH');
+      return;
+    }
+    if (card.label === '库存不一致') {
+      goStockReconciliations('INCONSISTENT');
+      return;
+    }
+  }
   managementMeta.value.action?.();
 };
 const riskRouteMap = {
+  库存预警: () => goStocks('WARNING'),
+  低库存SKU: () => goStocks('LOW'),
+  '低库存 SKU': () => goStocks('LOW'),
+  '滞销/高库存SKU': () => goStocks('HIGH'),
+  '滞销/高库存 SKU': () => goStocks('HIGH'),
+  库存对账不一致: () => goStockReconciliations('INCONSISTENT'),
+  '库存对账不一致': () => goStockReconciliations('INCONSISTENT'),
   待发货订单: () => goOrders('PAID'),
   支付异常订单: () => goOrders('PAYMENT_EXCEPTION'),
   待审核售后: () => goAftersales('PENDING_REVIEW'),
@@ -554,15 +741,15 @@ const managementMeta = computed(() => {
     return {
       eyebrow: 'WAREHOUSE MANAGEMENT',
       title: '仓储管理',
-      desc: '聚焦库存健康、缺货补货、锁定库存和预警处理。',
+      desc: '聚焦库存健康、预警补货、滞销高库存和对账差异处理。',
       actionText: '进入库存',
-      action: () => goStocks('LOW'),
+      action: () => goStocks(),
       primaryLabel: 'SKU总数',
       primaryValue: summary.value.totalSkuCount || 0,
       metrics: [
         { label: '低库存', value: summary.value.lowStockCount || 0 },
         { label: '缺货', value: summary.value.outOfStockCount || 0 },
-        { label: '锁定库存', value: summary.value.lockedStockTotal || 0 },
+        { label: '滞销/高库存', value: summary.value.highStockCount || 0 },
         { label: '库存差异', value: summary.value.stockDiffCount || 0 },
       ],
       tips: [
@@ -634,8 +821,8 @@ const summaryCards = computed(() => {
     return [
       { label: 'SKU总数', value: summary.value.totalSkuCount || 0, desc: '库存 SKU 数量' },
       { label: '低库存', value: summary.value.lowStockCount || 0, desc: '需补货 SKU' },
-      { label: '缺货', value: summary.value.outOfStockCount || 0, desc: '库存为 0' },
-      { label: '锁定库存', value: summary.value.lockedStockTotal || 0, desc: '当前锁定总量' },
+      { label: '滞销/高库存', value: summary.value.highStockCount || 0, desc: '库存积压 SKU' },
+      { label: '库存不一致', value: summary.value.stockDiffCount || 0, desc: 'Redis/数据库差异' },
     ];
   }
   return [
@@ -651,6 +838,12 @@ const mainChartMeta = computed(() => {
     return {
       title: '近 7 日资金趋势与对账风险',
       desc: '展示每日支付、退款、净收入及待处理差异数量，辅助定位高风险账期。',
+    };
+  }
+  if (activeRole.value === 'WAREHOUSE') {
+    return {
+      title: '仓储履约 & 策略调整趋势',
+      desc: '近 7 日发货件数、发货订单数与高低库存阈值策略调整次数。',
     };
   }
   return {
@@ -716,7 +909,45 @@ const financeChartOption = computed(() => {
   };
 });
 
-const mainChartOption = computed(() => activeRole.value === 'FINANCE' ? financeChartOption.value : operationsChartOption.value);
+const warehouseChartOption = computed(() => {
+  const trendRows = Array.isArray(currentData.value?.warehouseTrend) ? currentData.value.warehouseTrend : [];
+  const labels = trendRows.map((item) => String(item.date || '').slice(5) || '--');
+  const shippedItemCounts = trendRows.map((item) => Number(item.shippedItemCount || 0));
+  const shippedOrderCounts = trendRows.map((item) => Number(item.shippedOrderCount || 0));
+  const policyUpdateCounts = trendRows.map((item) => Number(item.stockPolicyUpdateCount || 0));
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      formatter: (items = []) => {
+        const rows = Array.isArray(items) ? items : [items];
+        const title = rows[0]?.axisValueLabel || rows[0]?.name || '';
+        return [title, ...rows.map((item) => {
+          const unit = item.seriesName === '发货件数' ? '件' : (item.seriesName === '发货订单数' ? '单' : '次');
+          return `${item.marker || ''}${item.seriesName}：${Number(item.value || 0)} ${unit}`;
+        })].join('<br/>');
+      },
+    },
+    legend: { top: 0, textStyle: { color: '#64748b' } },
+    grid: { left: 10, right: 18, top: 44, bottom: 8, containLabel: true },
+    xAxis: { type: 'category', boundaryGap: true, data: labels, axisLabel: { color: '#94a3b8' } },
+    yAxis: [
+      { type: 'value', name: '发货件数', minInterval: 1, splitLine: { lineStyle: { color: 'rgba(148,163,184,.14)' } }, axisLabel: { color: '#94a3b8' } },
+      { type: 'value', name: '订单/调整', minInterval: 1, splitLine: { show: false }, axisLabel: { color: '#94a3b8' } },
+    ],
+    series: [
+      { name: '发货件数', type: 'line', smooth: true, data: shippedItemCounts, lineStyle: { width: 3, color: '#3b82f6' }, itemStyle: { color: '#3b82f6' }, areaStyle: { color: 'rgba(59,130,246,.10)' } },
+      { name: '发货订单数', type: 'line', yAxisIndex: 1, smooth: true, data: shippedOrderCounts, lineStyle: { width: 3, color: '#22c55e' }, itemStyle: { color: '#22c55e' } },
+      { name: '策略调整次数', type: 'bar', yAxisIndex: 1, barWidth: 18, data: policyUpdateCounts, itemStyle: { color: 'rgba(245,158,11,.38)', borderRadius: [8, 8, 0, 0] }, emphasis: { itemStyle: { color: 'rgba(245,158,11,.56)' } } },
+    ],
+  };
+});
+
+const mainChartOption = computed(() => {
+  if (activeRole.value === 'FINANCE') return financeChartOption.value;
+  if (activeRole.value === 'WAREHOUSE') return warehouseChartOption.value;
+  return operationsChartOption.value;
+});
 
 
 const sideMeta = computed(() => {
@@ -729,12 +960,73 @@ const sideMeta = computed(() => {
 const sideChartOption = computed(() => {
   if (activeRole.value === 'FINANCE') {
     return {
-      tooltip: { trigger: 'item' },
+      color: ['#2563eb', '#7c3aed', '#22c55e'],
+      tooltip: {
+        trigger: 'item',
+        formatter: '{b}<br/>数量：{c}<br/>占比：{d}%',
+        backgroundColor: 'rgba(15,23,42,.92)',
+        borderColor: 'rgba(226,232,240,.72)',
+        borderWidth: 1,
+        textStyle: { color: '#fff', fontSize: 12, fontWeight: 700 },
+        extraCssText: 'box-shadow:0 14px 30px rgba(15,23,42,.14);border-radius:12px;',
+      },
+      legend: {
+        bottom: 0,
+        left: 'center',
+        itemWidth: 9,
+        itemHeight: 9,
+        icon: 'circle',
+        itemGap: 16,
+        textStyle: { color: '#64748b', fontSize: 11, fontWeight: 700 },
+      },
       series: [{
         type: 'pie',
-        radius: ['66%', '82%'],
-        center: ['50%', '50%'],
-        label: { show: true, color: '#475569', formatter: '{b}\n{d}%' },
+        radius: ['54%', '76%'],
+        center: ['50%', '44%'],
+        minAngle: 8,
+        avoidLabelOverlap: true,
+        padAngle: 2,
+        labelLine: {
+          show: true,
+          length: 12,
+          length2: 22,
+          smooth: true,
+          lineStyle: { color: 'rgba(100,116,139,.52)', width: 1.2 },
+        },
+        label: {
+          show: true,
+          color: '#334155',
+          fontSize: 11,
+          fontWeight: 700,
+          lineHeight: 16,
+          formatter: ({ name, percent }) => `{name|${name}}\n{percent|${Number(percent || 0).toFixed(1)}%}`,
+          rich: {
+            name: {
+              color: '#334155',
+              fontSize: 11,
+              fontWeight: 700,
+              lineHeight: 16,
+            },
+            percent: {
+              color: '#475569',
+              fontSize: 12,
+              fontWeight: 900,
+              lineHeight: 16,
+            },
+          },
+        },
+        emphasis: {
+          scale: true,
+          scaleSize: 5,
+          itemStyle: { shadowBlur: 16, shadowColor: 'rgba(15,23,42,.18)' },
+        },
+        itemStyle: {
+          borderWidth: 4,
+          borderColor: 'rgba(255,255,255,.96)',
+          borderRadius: 8,
+          shadowBlur: 8,
+          shadowColor: 'rgba(15,23,42,.08)',
+        },
         data: [
           { value: summary.value.pendingReconcileCount || 0, name: '待处理差异账单', itemStyle: { color: '#2563eb' } },
           { value: summary.value.hangingCount || 0, name: '挂账未闭环', itemStyle: { color: '#7c3aed' } },
@@ -745,16 +1037,57 @@ const sideChartOption = computed(() => {
   }
   if (activeRole.value === 'WAREHOUSE') {
     return {
-      tooltip: { trigger: 'item' },
+      tooltip: {
+        trigger: 'item',
+        formatter: '{b}<br/>SKU：{c}<br/>占比：{d}%',
+        backgroundColor: 'rgba(6,78,59,.92)',
+        borderWidth: 0,
+        textStyle: { color: '#fff', fontSize: 12 },
+      },
+      legend: {
+        bottom: 2,
+        left: 'center',
+        itemWidth: 8,
+        itemHeight: 8,
+        icon: 'circle',
+        itemGap: 14,
+        textStyle: { color: '#64748b', fontSize: 11, fontWeight: 600 },
+      },
       series: [{
         type: 'pie',
-        radius: ['66%', '82%'],
-        center: ['50%', '50%'],
-        label: { show: true, color: '#475569', formatter: '{b}\n{d}%' },
+        radius: ['48%', '70%'],
+        center: ['50%', '43%'],
+        minAngle: 8,
+        avoidLabelOverlap: true,
+        padAngle: 2,
+        labelLine: {
+          show: true,
+          length: 14,
+          length2: 28,
+          smooth: true,
+          lineStyle: { color: 'rgba(34,197,94,.46)', width: 1.2 },
+        },
+        label: {
+          show: true,
+          color: '#166534',
+          fontSize: 11,
+          fontWeight: 700,
+          lineHeight: 16,
+          formatter: ({ name, percent }) => `${name}\n${Number(percent || 0).toFixed(1)}%`,
+        },
+        emphasis: {
+          scale: true,
+          scaleSize: 5,
+          itemStyle: { shadowBlur: 14, shadowColor: 'rgba(22,163,74,.16)' },
+        },
+        itemStyle: {
+          borderWidth: 4,
+          borderColor: '#fff',
+        },
         data: [
           { value: summary.value.lowStockCount || 0, name: '低库存', itemStyle: { color: '#f59e0b' } },
-          { value: summary.value.outOfStockCount || 0, name: '缺货', itemStyle: { color: '#fb7185' } },
           { value: summary.value.normalCount || 0, name: '正常', itemStyle: { color: '#22c55e' } },
+          { value: summary.value.highStockCount || 0, name: '高库存', itemStyle: { color: '#8b5cf6' } },
         ],
       }],
     };
@@ -944,7 +1277,19 @@ const pickFinanceDiffRemark = (row = {}) => (
 const financeDiffRemarkText = (row = {}) => {
   const explicitRemark = pickFinanceDiffRemark(row);
   if (explicitRemark) return translateFinanceRemark(explicitRemark);
-  if (row.reconcileStatus === 'DIFF') return '存在对账差异，待处理';
+  const fallbackParts = [
+    row.reconcileStatus === 'DIFF' ? '存在对账差异，待处理' : '',
+    row.hangingFollow ? '挂账跟进中' : '',
+    row.onlineDiff ? '线上对账差异' : '',
+    row.completedRecord || row.archivedTask ? '已完成对账' : '',
+    row.processStatus ? `处理状态：${translateFinanceRemark(row.processStatus)}` : '',
+    row.diffType ? `差异类型：${translateFinanceRemark(row.diffType)}` : '',
+    row.reason ? `原因：${translateFinanceRemark(row.reason)}` : '',
+    row.failReason ? `失败原因：${translateFinanceRemark(row.failReason)}` : '',
+    row.raw?.diffRemark ? `原始备注：${translateFinanceRemark(row.raw.diffRemark)}` : '',
+    row.raw?.reconcileRemark ? `原始备注：${translateFinanceRemark(row.raw.reconcileRemark)}` : '',
+  ].filter(Boolean);
+  if (fallbackParts.length) return fallbackParts.join('；');
   if (row.reconcileStatus === 'MATCHED') return '已完成对账';
   if (row.reconcileStatus === 'PENDING') return '待对账，等待线上账单核验';
   return '--';
@@ -1117,33 +1462,171 @@ const handleFinanceFlowView = (row) => {
 
 const DashboardWarehouseTable = {
   props: ['rows'],
+  data() {
+    return {
+      filters: { keyword: '', stockStatus: 'ALL', diffStatus: 'ALL', riskOnly: false },
+      detailVisible: false,
+      currentRow: null,
+    };
+  },
   computed: {
-    warnings() {
-      return this.rows?.warnings || [];
+    warnings() { return this.rows?.warnings || []; },
+    logs() { return this.rows?.logs || []; },
+    reconciliations() { return this.rows?.reconciliations || []; },
+    inventoryRows() {
+      const diffSkuMap = new Map(this.reconciliations.map((item) => [String(this.pick(item, ['skuId', 'skuCode', 'skuNo', 'id'], '')), item]));
+      const logSkuMap = new Map(this.logs.map((item) => [String(this.pick(item, ['skuId', 'skuCode', 'skuNo', 'id'], '')), item]));
+      const baseRows = this.warnings.map((item) => {
+        const skuKey = String(this.pick(item, ['skuId', 'skuCode', 'skuNo', 'id'], ''));
+        return this.normalizeInventoryRow(item, diffSkuMap.get(skuKey), logSkuMap.get(skuKey));
+      });
+      this.reconciliations.forEach((item) => {
+        const skuKey = String(this.pick(item, ['skuId', 'skuCode', 'skuNo', 'id'], ''));
+        if (!baseRows.some((row) => String(row.skuId) === skuKey)) baseRows.push(this.normalizeInventoryRow(item, item, logSkuMap.get(skuKey)));
+      });
+      return baseRows;
     },
-    logs() {
-      return this.rows?.logs || [];
+    filteredRows() {
+      const keyword = this.filters.keyword.trim().toLowerCase();
+      return this.inventoryRows.filter((row) => {
+        const hitKeyword = !keyword || [row.skuId, row.skuName, row.categoryName].some((value) => String(value || '').toLowerCase().includes(keyword));
+        const hitStatus = this.filters.stockStatus === 'ALL' || row.stockStatus === this.filters.stockStatus;
+        const hitDiff = this.filters.diffStatus === 'ALL' || (this.filters.diffStatus === 'DIFF' ? row.hasDiff : !row.hasDiff);
+        const hitRisk = !this.filters.riskOnly || row.stockStatus !== 'NORMAL' || row.hasDiff;
+        return hitKeyword && hitStatus && hitDiff && hitRisk;
+      });
+    },
+    detailLogs() {
+      if (!this.currentRow) return [];
+      return this.logs.filter((item) => String(this.pick(item, ['skuId', 'skuCode', 'skuNo', 'id'], '')) === String(this.currentRow.skuId)).slice(0, 5);
+    },
+  },
+  methods: {
+    pick(row, keys, fallback = '--') {
+      const value = keys.map((key) => row?.[key]).find((item) => item !== undefined && item !== null && item !== '');
+      return value ?? fallback;
+    },
+    toNumber(value) { return Number(value || 0); },
+    normalizeInventoryRow(row, diffRow, logRow) {
+      const availableStock = this.toNumber(this.pick(row, ['availableStock', 'afterAvailableStock', 'dbAvailableStock', 'stock'], 0));
+      const lockedStock = this.toNumber(this.pick(row, ['lockedStock', 'dbLockedStock'], 0));
+      const totalStock = this.toNumber(this.pick(row, ['totalStock', 'dbTotalStock'], availableStock + lockedStock));
+      const threshold = this.toNumber(this.pick(row, ['lowStockThreshold', 'warningThreshold', 'threshold'], 0));
+      const warningStatus = String(this.pick(row, ['warningStatus', 'status'], '')).toUpperCase();
+      const hasDiff = Boolean(diffRow) && !['MATCHED', 'CONSISTENT', 'DONE'].includes(String(this.pick(diffRow, ['status', 'reconcileStatus'], '')).toUpperCase());
+      const stockStatus = ['HIGH', 'OVERSTOCK'].includes(warningStatus) ? 'HIGH' : (['LOW', 'WARNING', 'PENDING'].includes(warningStatus) || (threshold > 0 && availableStock <= threshold) ? 'LOW' : 'NORMAL');
+      return {
+        raw: row,
+        diffRow,
+        logRow,
+        skuId: this.pick(row, ['skuId', 'skuCode', 'skuNo', 'id']),
+        skuName: this.pick(row, ['skuName', 'productName', 'name'], '未命名 SKU'),
+        categoryName: this.pick(row, ['categoryName', 'category', 'categoryPath'], '--'),
+        totalStock,
+        lockedStock,
+        availableStock,
+        stockStatus,
+        threshold,
+        replenishGap: stockStatus === 'LOW' && threshold > availableStock ? threshold - availableStock : 0,
+        lastStockTime: this.pick(logRow || row, ['createTime', 'createdAt', 'updateTime', 'updatedAt', 'reconcileTime'], '--'),
+        hasDiff,
+        diffQuantity: this.pick(diffRow || row, ['diffQuantity', 'differenceQuantity', 'stockDiff', 'diffStock'], 0),
+      };
+    },
+    stockStatusMeta(status) {
+      return {
+        NORMAL: { label: '正常', type: 'success' },
+        LOW: { label: '低库存', type: 'warning' },
+        HIGH: { label: '高库存/滞销', type: 'primary' },
+      }[status] || { label: '--', type: 'info' };
+    },
+    rowClassName({ row }) {
+      if (row.hasDiff) return 'warehouse-inventory-row--diff';
+      if (row.stockStatus === 'LOW') return 'warehouse-inventory-row--low';
+      if (row.stockStatus === 'HIGH') return 'warehouse-inventory-row--high';
+      return '';
+    },
+    resetFilters() { this.filters = { keyword: '', stockStatus: 'ALL', diffStatus: 'ALL', riskOnly: false }; },
+    openDetail(row) { this.currentRow = row; this.detailVisible = true; },
+    goLog(row) { this.$router?.push({ path: '/stock-logs', query: { skuId: row.skuId, page: 1 } }); },
+    exportRows() {
+      const exportData = this.filteredRows.map((row) => ({
+        'SKU ID': row.skuId,
+        'SKU 名称': row.skuName,
+        '商品分类': row.categoryName,
+        '总库存': row.totalStock,
+        '锁定库存': row.lockedStock,
+        '可用库存': row.availableStock,
+        '库存状态': this.stockStatusMeta(row.stockStatus).label,
+        '预警阈值': row.threshold,
+        '补货缺口': row.replenishGap || '',
+        '最近出入库时间': row.lastStockTime,
+        '库存差异': row.hasDiff ? `有差异${row.diffQuantity ? `（${row.diffQuantity}）` : ''}` : '无',
+      }));
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(exportData.length ? exportData : [{ 提示: '暂无符合条件的库存明细' }]);
+      XLSX.utils.book_append_sheet(workbook, worksheet, '库存明细');
+      XLSX.writeFile(workbook, `库存明细-${formatDate(new Date())}.xlsx`);
     },
   },
   template: `
-    <div class="nested-grid">
-      <div class="nested-block">
-        <div class="nested-block__title">库存预警</div>
-        <el-table :data="warnings" class="dashboard-table" height="240">
-          <el-table-column prop="skuId" label="SKU" width="100" />
-          <el-table-column prop="productName" label="商品" min-width="160" />
-          <el-table-column prop="availableStock" label="可用库存" width="110" />
-          <el-table-column prop="warningStatus" label="预警状态" min-width="120" />
-        </el-table>
+    <div class="warehouse-inventory-panel">
+      <div class="warehouse-inventory-toolbar">
+        <el-input v-model="filters.keyword" class="warehouse-inventory-search" size="small" clearable placeholder="请输入 SKU ID / 名称" />
+        <el-select v-model="filters.stockStatus" size="small" class="warehouse-inventory-select">
+          <el-option label="全部状态" value="ALL" />
+          <el-option label="正常" value="NORMAL" />
+          <el-option label="低库存" value="LOW" />
+          <el-option label="高库存/滞销" value="HIGH" />
+        </el-select>
+        <el-select v-model="filters.diffStatus" size="small" class="warehouse-inventory-select">
+          <el-option label="全部差异" value="ALL" />
+          <el-option label="有库存差异" value="DIFF" />
+          <el-option label="无库存差异" value="NO_DIFF" />
+        </el-select>
+        <el-switch v-model="filters.riskOnly" size="small" active-text="仅看风险 SKU" />
+        <div class="warehouse-inventory-toolbar__spacer"></div>
+        <el-button size="small" @click="resetFilters">重置</el-button>
+        <el-button size="small" type="primary" plain @click="exportRows">导出明细</el-button>
       </div>
-      <div class="nested-block">
-        <div class="nested-block__title">库存日志</div>
-        <el-table :data="logs" class="dashboard-table" height="240">
-          <el-table-column prop="skuId" label="SKU" width="100" />
-          <el-table-column prop="changeType" label="类型" width="120" />
-          <el-table-column prop="createTime" label="时间" min-width="160" />
+      <el-table :data="filteredRows" class="dashboard-table warehouse-inventory-table" height="300" empty-text="暂无符合条件的库存明细" :row-class-name="rowClassName">
+        <el-table-column prop="skuId" label="SKU ID" width="112" fixed="left" show-overflow-tooltip />
+        <el-table-column prop="skuName" label="SKU 名称" min-width="190" fixed="left" show-overflow-tooltip />
+        <el-table-column prop="categoryName" label="商品分类" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="totalStock" label="总库存" width="86" align="right" />
+        <el-table-column prop="lockedStock" label="锁定库存" width="92" align="right" />
+        <el-table-column label="可用库存" width="96" align="right"><template #default="{ row }"><strong class="warehouse-stock-available">{{ row.availableStock }}</strong></template></el-table-column>
+        <el-table-column label="库存状态" width="118"><template #default="{ row }"><el-tag size="small" :type="stockStatusMeta(row.stockStatus).type" effect="light">{{ stockStatusMeta(row.stockStatus).label }}</el-tag></template></el-table-column>
+        <el-table-column prop="threshold" label="预警阈值" width="90" align="right" />
+        <el-table-column label="补货缺口" width="90" align="right"><template #default="{ row }"><span :class="{ 'warehouse-gap--warning': row.replenishGap > 0 }">{{ row.replenishGap > 0 ? row.replenishGap : '-' }}</span></template></el-table-column>
+        <el-table-column prop="lastStockTime" label="最近出入库" min-width="160" />
+        <el-table-column label="库存差异" width="104"><template #default="{ row }"><el-tag size="small" :type="row.hasDiff ? 'danger' : 'success'" effect="light">{{ row.hasDiff ? '有差异' : '无' }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="112" fixed="right"><template #default="{ row }"><el-button size="small" link type="primary" @click="openDetail(row)">详情</el-button><el-button size="small" link type="primary" @click="goLog(row)">日志</el-button></template></el-table-column>
+      </el-table>
+      <div class="warehouse-inventory-summary">共 {{ filteredRows.length }} 条，风险 SKU {{ filteredRows.filter(row => row.stockStatus !== 'NORMAL' || row.hasDiff).length }} 条</div>
+      <el-dialog v-model="detailVisible" title="SKU 库存详情" width="680px" destroy-on-close>
+        <el-descriptions v-if="currentRow" :column="2" border>
+          <el-descriptions-item label="SKU ID">{{ currentRow.skuId }}</el-descriptions-item>
+          <el-descriptions-item label="库存状态">{{ stockStatusMeta(currentRow.stockStatus).label }}</el-descriptions-item>
+          <el-descriptions-item label="SKU 名称" :span="2">{{ currentRow.skuName }}</el-descriptions-item>
+          <el-descriptions-item label="商品分类">{{ currentRow.categoryName }}</el-descriptions-item>
+          <el-descriptions-item label="最近出入库">{{ currentRow.lastStockTime }}</el-descriptions-item>
+          <el-descriptions-item label="总库存">{{ currentRow.totalStock }}</el-descriptions-item>
+          <el-descriptions-item label="锁定库存">{{ currentRow.lockedStock }}</el-descriptions-item>
+          <el-descriptions-item label="可用库存">{{ currentRow.availableStock }}</el-descriptions-item>
+          <el-descriptions-item label="预警阈值">{{ currentRow.threshold }}</el-descriptions-item>
+          <el-descriptions-item label="补货缺口">{{ currentRow.replenishGap || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="库存差异">{{ currentRow.hasDiff ? '有差异' : '无' }}</el-descriptions-item>
+        </el-descriptions>
+        <div class="warehouse-detail-log-title">最近 5 条出入库记录</div>
+        <el-table :data="detailLogs" height="180" empty-text="暂无近期库存日志">
+          <el-table-column prop="operationType" label="操作类型" width="130" show-overflow-tooltip />
+          <el-table-column prop="changeQuantity" label="变更量" width="90" align="right" />
+          <el-table-column prop="createdAt" label="时间" min-width="160" />
+          <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
         </el-table>
-      </div>
+        <template #footer><el-button @click="detailVisible = false">关闭</el-button><el-button v-if="currentRow" type="primary" @click="goLog(currentRow)">查看完整日志</el-button></template>
+      </el-dialog>
     </div>
   `,
 };
@@ -1184,15 +1667,16 @@ const tableMeta = computed(() => {
   }
   if (activeRole.value === 'WAREHOUSE') {
     return {
-      title: '库存明细',
-      desc: '库存预警与操作日志。',
+      title: '近3日库存明细记录',
+      desc: '基于当前、前一天、前前天库存日志关联 SKU，追踪可用库存、预警状态与最近出入库变动。',
       component: DashboardWarehouseTable,
       rows: {
         warnings: tables.value.left,
         logs: tables.value.right,
+        reconciliations: currentData.value?.reconciliations || [],
       },
-      actionText: '库存页',
-      action: () => goStocks('LOW'),
+      actionText: '进入库存',
+      action: () => goStocks(),
     };
   }
   return {
@@ -1206,6 +1690,7 @@ const tableMeta = computed(() => {
 });
 
 const hasTableRows = computed(() => {
+  if (activeRole.value === 'WAREHOUSE') return true;
   if (activeRole.value === 'OPERATIONS') return operationOrderRows.value.length > 0 || operationAftersaleRows.value.length > 0;
   const rows = tableMeta.value.rows;
   if (Array.isArray(rows)) return rows.length > 0;
@@ -1332,6 +1817,20 @@ onBeforeUnmount(() => resetRole(activeRole.value));
 .risk-item__badge--warning{background:linear-gradient(135deg,rgba(254,243,199,.98),rgba(253,230,138,.84));color:#d97706}
 .risk-item__badge--normal{background:linear-gradient(135deg,rgba(219,234,254,.98),rgba(191,219,254,.82));color:#2563eb}
 .nested-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.warehouse-inventory-panel{display:flex;flex-direction:column;gap:10px}
+.warehouse-inventory-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:16px;background:rgba(248,250,252,.78);border:1px solid rgba(226,232,240,.72)}
+.warehouse-inventory-search{width:220px}
+.warehouse-inventory-select{width:136px}
+.warehouse-inventory-toolbar__spacer{flex:1;min-width:12px}
+.warehouse-stock-available{font-size:14px;color:#0f172a}
+.warehouse-gap--warning{font-weight:900;color:#f97316}
+.warehouse-inventory-summary{font-size:12px;font-weight:800;color:#94a3b8;text-align:right}
+.warehouse-inventory-table :deep(.warehouse-inventory-row--low td){background:#fff7ed!important}
+.warehouse-inventory-table :deep(.warehouse-inventory-row--high td){background:#faf5ff!important}
+.warehouse-inventory-table :deep(.warehouse-inventory-row--diff td){background:#fff1f2!important}
+.warehouse-inventory-table :deep(.warehouse-inventory-row--low td:first-child){box-shadow:inset 4px 0 0 #f59e0b}
+.warehouse-inventory-table :deep(.warehouse-inventory-row--high td:first-child){box-shadow:inset 4px 0 0 #8b5cf6}
+.warehouse-inventory-table :deep(.warehouse-inventory-row--diff td:first-child){box-shadow:inset 4px 0 0 #ef4444}
 .finance-flow-panel{display:flex;flex-direction:column;gap:12px}
 .finance-flow-filter{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid rgba(226,232,240,.86);border-radius:18px;background:linear-gradient(180deg,rgba(250,251,255,.96),rgba(243,246,255,.88));box-shadow:inset 0 1px 0 rgba(255,255,255,.78)}
 .finance-flow-filter :deep(.el-segmented){--el-segmented-bg-color:rgba(241,245,249,.92);--el-segmented-item-selected-bg-color:#fff;--el-segmented-item-selected-color:#2563eb;--el-border-radius-base:12px;padding:3px;border:1px solid rgba(226,232,240,.9);box-shadow:none}
@@ -1359,7 +1858,25 @@ onBeforeUnmount(() => resetRole(activeRole.value));
 .ops-table-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:34px;padding:8px 4px 0}
 .ops-table-pagination__summary{font-size:12px;font-weight:800;color:#94a3b8;white-space:nowrap}
 .nested-block__title{margin-bottom:10px;font-size:14px;font-weight:800;color:#334155}
+.warehouse-inventory-panel{display:flex;flex-direction:column;gap:10px}
+.warehouse-inventory-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:18px;background:linear-gradient(180deg,rgba(250,251,255,.95),rgba(243,246,255,.9));border:1px solid rgba(226,232,240,.72);box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
+.warehouse-inventory-toolbar__spacer{flex:1;min-width:12px}
+.warehouse-inventory-search{width:220px}
+.warehouse-inventory-select{width:136px}
+.warehouse-stock-available{font-weight:900;color:#0f172a}
+.warehouse-gap--warning{font-weight:900;color:#f97316}
+.warehouse-inventory-summary{font-size:12px;font-weight:800;color:#94a3b8;text-align:right}
+.warehouse-inventory-pagination{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;min-height:34px;padding:2px 4px 0}
+.warehouse-page-size-control{display:flex;align-items:center;gap:6px;color:#64748b;font-size:12px;font-weight:800;white-space:nowrap}
+.warehouse-page-size-control :deep(.el-input-number){width:94px}
+.warehouse-detail-log-title{margin:16px 0 10px;font-size:14px;font-weight:900;color:#334155}
 .dashboard-table{width:100%}
+.warehouse-inventory-table :deep(.warehouse-inventory-row--low td){background:#fff7ed!important}
+.warehouse-inventory-table :deep(.warehouse-inventory-row--high td){background:#faf5ff!important}
+.warehouse-inventory-table :deep(.warehouse-inventory-row--diff td){background:#fff1f2!important}
+.warehouse-inventory-table :deep(.warehouse-inventory-row--low td:first-child){box-shadow:inset 4px 0 0 #f59e0b}
+.warehouse-inventory-table :deep(.warehouse-inventory-row--high td:first-child){box-shadow:inset 4px 0 0 #8b5cf6}
+.warehouse-inventory-table :deep(.warehouse-inventory-row--diff td:first-child){box-shadow:inset 4px 0 0 #ef4444}
 .dashboard-page--operations .hero-visual__panel strong{color:#1d4ed8}
 .dashboard-page--finance .hero-visual__panel strong{color:#7c3aed}
 .dashboard-page--warehouse .hero-visual__panel strong{color:#16a34a}

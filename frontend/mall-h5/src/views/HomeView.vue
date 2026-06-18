@@ -95,7 +95,6 @@ import FloatingCartButton from '../components/FloatingCartButton.vue';
 import { useUserStore } from '../stores/user';
 import { formatPrice } from '../utils/format';
 import { getProductImage } from '../utils/productVisual';
-import { ensureAccessGate } from '../utils/requireLogin';
 
 const SALES_REFRESH_KEY = 'mallfei:product-sales-refresh';
 const HOME_CATEGORIES_CACHE_KEY = 'mallfei:h5-home-categories-cache-v1';
@@ -371,7 +370,8 @@ const loadData = async ({ silent = false, forceCategories = false, forceProducts
 };
 
 const handleProfileAction = async () => {
-  if (!await ensureAccessGate(router, '/profile', { force: true })) {
+  if (!userStore.isLogin) {
+    router.push({ path: '/login', query: { redirect: '/profile' } });
     return;
   }
   router.push('/profile');

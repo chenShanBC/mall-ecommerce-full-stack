@@ -8,6 +8,7 @@ export function logoutAdmin() { return request.delete('/api/admin/logout'); }
 export function fetchDashboard(params = {}) { return request.get('/api/admin/dashboard', { params }); }
 export function fetchAdminFinanceCumulativeNetIncome() { return request.get('/api/admin/dashboard/finance-cumulative-net-income'); }
 export function fetchAdminFinanceTrend() { return request.get('/api/admin/dashboard/finance-trend'); }
+export function fetchAdminWarehouseTrend() { return request.get('/api/admin/dashboard/warehouse-trend'); }
 export function fetchAdminAccounts(params = {}) { return request.get('/api/admin/accounts', { params }); }
 export function fetchAdminRoles() { return request.get('/api/admin/roles'); }
 export function fetchAdminPermissions() { return request.get('/api/admin/permissions'); }
@@ -92,6 +93,7 @@ export function handleAdminProductViolation(productId, data) { return request.po
 export function uploadProductImage(file) { const formData = new FormData(); formData.append('file', file); return request.post('/api/files/product-image', formData, { headers: { 'Content-Type': 'multipart/form-data' } }); }
 export function fetchAdminCategories() { return request.get('/api/admin/categories'); }
 export function fetchAdminStocks(params = {}) { return request.get('/api/admin/stocks', { params }); }
+export function fetchAdminTodayActiveStocks(params = {}) { return request.get('/api/admin/stocks/today-active', { params }); }
 export function fetchWarningStocks(params = {}) { return request.get('/api/admin/stocks/warnings', { params }); }
 export function fetchStockLogs(params = {}) { return request.get('/api/admin/stocks/logs', { params }); }
 export function updateAdminStockPolicy(skuId, data) { return request.put(`/api/admin/stocks/${skuId}/policy`, data); }

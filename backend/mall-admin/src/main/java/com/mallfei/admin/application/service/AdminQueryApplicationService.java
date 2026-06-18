@@ -361,6 +361,54 @@ public class AdminQueryApplicationService {
         return rows;
     }
 
+    public List<AdminDashboardWarehouseTrendView> warehouseTrend() {
+        requireAdmin();
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(6);
+        Map<LocalDate, Long> shippedItemCountByDate = queryAmountByDate(
+                "SELECT DATE(o.shipped_at) AS biz_date, COALESCE(SUM(oi.quantity), 0) AS amount "
+                        + "FROM oms_order o "
+                        + "JOIN oms_order_item oi ON oi.order_id = o.id "
+                        + "WHERE o.shipped_at IS NOT NULL "
+                        + "AND DATE(o.shipped_at) BETWEEN ? AND ? "
+                        + "AND o.deleted_at IS NULL "
+                        + "GROUP BY DATE(o.shipped_at)",
+                startDate,
+                endDate
+        );
+        Map<LocalDate, Long> shippedOrderCountByDate = queryAmountByDate(
+                "SELECT DATE(shipped_at) AS biz_date, COUNT(*) AS amount "
+                        + "FROM oms_order "
+                        + "WHERE shipped_at IS NOT NULL "
+                        + "AND DATE(shipped_at) BETWEEN ? AND ? "
+                        + "AND deleted_at IS NULL "
+                        + "GROUP BY DATE(shipped_at)",
+                startDate,
+                endDate
+        );
+        Map<LocalDate, Long> stockPolicyUpdateCountByDate = queryAmountByDate(
+                "SELECT DATE(created_at) AS biz_date, COUNT(*) AS amount "
+                        + "FROM ums_admin_operation_log "
+                        + "WHERE DATE(created_at) BETWEEN ? AND ? "
+                        + "AND operation_module = 'STOCK' "
+                        + "AND operation_type = 'STOCK_POLICY_UPDATE' "
+                        + "AND operation_result = 'SUCCESS' "
+                        + "GROUP BY DATE(created_at)",
+                startDate,
+                endDate
+        );
+        List<AdminDashboardWarehouseTrendView> rows = new ArrayList<>();
+        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+            rows.add(new AdminDashboardWarehouseTrendView(
+                    date.toString(),
+                    shippedItemCountByDate.getOrDefault(date, 0L),
+                    shippedOrderCountByDate.getOrDefault(date, 0L),
+                    stockPolicyUpdateCountByDate.getOrDefault(date, 0L)
+            ));
+        }
+        return rows;
+    }
+
     private long financePaidAmountCent(LocalDate startDate, LocalDate endDate) {
         String dateCondition = startDate == null || endDate == null ? "" : " AND DATE(created_at) BETWEEN ? AND ?";
         String sql = "SELECT COALESCE(SUM(pay_amount_cent), 0) AS amount "
@@ -565,6 +613,79 @@ public class AdminQueryApplicationService {
         return new PageResult<>(result.page(), result.size(), result.total(), result.pages(), result.records().stream().map(this::withSkuName).toList());
     }
 
+    public PageResult<AdminTodayActiveStockView> todayActiveStockList(Long skuId, String stockStatus, String warningStatus, LocalDate stockDate, Long currentTimestamp, long page, long size, String sortBy, String sortOrder) {
+        requireAdmin();
+        long actualPage = Math.max(1, page);
+        long actualSize = Math.max(1, Math.min(size, 200));
+        String orderBy = stockOrderBy(sortBy);
+        String orderDirection = "desc".equalsIgnoreCase(sortOrder) ? "DESC" : "ASC";
+        StringBuilder logWhere = new StringBuilder(" WHERE l.created_at >= ? AND l.created_at < ?");
+        StringBuilder stockWhere = new StringBuilder();
+        List<Object> args = new ArrayList<>();
+        LocalDate actualStockDate = stockDate != null ? stockDate : (currentTimestamp == null ? LocalDate.now() : java.time.Instant.ofEpochMilli(currentTimestamp).atZone(java.time.ZoneId.systemDefault()).toLocalDate());
+        LocalDateTime startTime = actualStockDate.minusDays(2).atStartOfDay();
+        LocalDateTime endTime = actualStockDate.plusDays(1).atStartOfDay();
+        args.add(startTime);
+        args.add(endTime);
+        if (skuId != null) {
+            stockWhere.append(" AND s.sku_id = ?");
+            args.add(skuId);
+        }
+        if (!blank(stockStatus)) {
+            stockWhere.append(" AND s.stock_status = ?");
+            args.add(stockStatus.trim().toUpperCase());
+        }
+        if (!blank(warningStatus)) {
+            stockWhere.append(" AND s.warning_status = ?");
+            args.add(warningStatus.trim().toUpperCase());
+        }
+        String baseFrom = " FROM ims_stock s JOIN (" +
+                " SELECT l.sku_id, MAX(l.created_at) AS latest_stock_time" +
+                " FROM ims_stock_operation_log l" + logWhere +
+                " GROUP BY l.sku_id" +
+                ") recent ON recent.sku_id = s.sku_id" +
+                " LEFT JOIN pms_sku sku ON sku.id = s.sku_id" +
+                " LEFT JOIN pms_spu spu ON spu.id = sku.spu_id" +
+                " LEFT JOIN pms_category cat ON cat.id = spu.category_id" +
+                " WHERE 1=1" + stockWhere;
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(1)" + baseFrom, Long.class, args.toArray());
+        List<Object> pageArgs = new ArrayList<>(args);
+        pageArgs.add(actualSize);
+        pageArgs.add((actualPage - 1) * actualSize);
+        List<AdminTodayActiveStockView> rows = jdbcTemplate.query("SELECT s.sku_id, COALESCE(sku.sku_name, spu.name) AS sku_name, sku.spu_id, spu.category_id, cat.name AS category_name, COALESCE(pt.name, cat.name) AS product_type_name, s.total_stock, s.locked_stock, s.available_stock, s.stock_status, s.low_stock_threshold, s.high_stock_threshold, s.warning_status, recent.latest_stock_time" +
+                        " FROM ims_stock s JOIN (" +
+                        " SELECT l.sku_id, MAX(l.created_at) AS latest_stock_time" +
+                        " FROM ims_stock_operation_log l" + logWhere +
+                        " GROUP BY l.sku_id" +
+                        ") recent ON recent.sku_id = s.sku_id" +
+                        " LEFT JOIN pms_sku sku ON sku.id = s.sku_id" +
+                        " LEFT JOIN pms_spu spu ON spu.id = sku.spu_id" +
+                        " LEFT JOIN pms_category cat ON cat.id = spu.category_id" +
+                        " LEFT JOIN pms_category pt ON pt.id = cat.parent_id" +
+                        " WHERE 1=1" + stockWhere +
+                        " ORDER BY " + orderBy + " " + orderDirection + " LIMIT ? OFFSET ?",
+                (rs, rowNum) -> new AdminTodayActiveStockView(
+                        rs.getLong("sku_id"),
+                        rs.getString("sku_name"),
+                        rs.getObject("spu_id", Long.class),
+                        rs.getObject("category_id", Long.class),
+                        rs.getString("category_name"),
+                        rs.getString("product_type_name"),
+                        rs.getInt("total_stock"),
+                        rs.getInt("locked_stock"),
+                        rs.getInt("available_stock"),
+                        rs.getString("stock_status"),
+                        rs.getInt("low_stock_threshold"),
+                        rs.getInt("high_stock_threshold"),
+                        rs.getString("warning_status"),
+                        rs.getTimestamp("latest_stock_time") == null ? null : rs.getTimestamp("latest_stock_time").toLocalDateTime().toString(),
+                        "TODAY_STOCK_LOG"
+                ), pageArgs.toArray());
+        long actualTotal = total == null ? 0 : total;
+        long pages = (actualTotal + actualSize - 1) / actualSize;
+        return new PageResult<>(actualPage, actualSize, actualTotal, pages, rows);
+    }
+
     public PageResult<StockSnapshot> warningStocks(long page, long size) {
         requireAdmin();
         long actualPage = Math.max(1, page);
@@ -631,6 +752,22 @@ public class AdminQueryApplicationService {
             case "payAmount" -> Comparator.comparing(AdminReconcileRowView::payAmount, Comparator.nullsLast(Long::compareTo));
             case "reconcileStatus" -> Comparator.comparing(AdminReconcileRowView::reconcileStatus, Comparator.nullsLast(String::compareTo));
             default -> Comparator.comparing(AdminReconcileRowView::orderId, Comparator.nullsLast(Long::compareTo));
+        };
+    }
+
+    private String stockOrderBy(String sortBy) {
+        String actualSortBy = blank(sortBy) ? "latestStockTime" : sortBy;
+        return switch (actualSortBy) {
+            case "skuId" -> "s.sku_id";
+            case "availableStock" -> "s.available_stock";
+            case "lockedStock" -> "s.locked_stock";
+            case "totalStock" -> "s.total_stock";
+            case "stockStatus" -> "s.stock_status";
+            case "warningStatus" -> "s.warning_status";
+            case "lowStockThreshold" -> "s.low_stock_threshold";
+            case "highStockThreshold" -> "s.high_stock_threshold";
+            case "latestStockTime" -> "recent.latest_stock_time";
+            default -> "recent.latest_stock_time";
         };
     }
 
