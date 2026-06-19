@@ -55,7 +55,7 @@ public class ProductApplicationService {
     public List<CategoryAdminView> adminCategories() { return productDomainService.loadAllCategories().stream().map(productViewAssembler::toCategoryAdminView).toList(); }
     public Category createCategory(String name, Long parentId, Integer sortOrder) { return productDomainService.createCategory(name, parentId, sortOrder); }
     public Category updateCategory(Long categoryId, String name, Long parentId, Integer sortOrder, String status) { return productDomainService.updateCategory(categoryId, name, parentId, sortOrder, status); }
-    public PageResponse<AdminProductPageRowView> adminProductPage() { return new ProductQueryApplicationService(productDomainService, productViewAssembler, stockFacade, productSalesStatApplicationService).adminProductPage(new AdminProductPageQuery(null, null, null, null, null, null, null, null, 1, 10)); }
+    public PageResponse<AdminProductPageRowView> adminProductPage() { return new ProductQueryApplicationService(productDomainService, productViewAssembler, stockFacade, productSalesStatApplicationService).adminProductPage(new AdminProductPageQuery(null, null, null, null, null, null, null, null, null, 1, 10)); }
 
     public AdminProductDetailView adminProductDetail(Long productId) {
         ProductSpu product = productDomainService.loadProduct(productId);

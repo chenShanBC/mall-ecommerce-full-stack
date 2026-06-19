@@ -76,15 +76,17 @@ const canShowProductMenu = computed(() => adminStore.hasPermission('product:view
 const reconciliationMenuPath = computed(() => adminStore.hasPermission('reconciliation:view') ? '/reconciliations' : '/reconciliations?tab=stock');
 
 const handleMenuSelect = async (path) => {
-  if (path === route.path) {
-    return;
-  }
   const valid = await adminStore.ensureSessionValid();
   if (!valid) {
     router.push('/login');
     return;
   }
-  router.push(path);
+  const target = { path, query: { _menuRefresh: String(Date.now()) } };
+  if (path === route.path) {
+    router.replace(target);
+    return;
+  }
+  router.push(target);
 };
 </script>
 

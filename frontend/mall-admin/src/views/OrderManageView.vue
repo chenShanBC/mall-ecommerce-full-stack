@@ -84,7 +84,7 @@
       <div class="admin-pagination"><el-pagination background layout="sizes, prev, pager, next, total" :current-page="pager.page" :page-size="pager.size" :page-sizes="ADMIN_PAGE_SIZES" :total="pager.total" @current-change="handlePageChange" @size-change="handleSizeChange" /></div>
     </el-card>
 
-    <el-dialog v-model="detailVisible" title="订单详情" width="920px">
+    <el-dialog draggable v-model="detailVisible" title="订单详情" width="920px">
       <div v-if="detail" class="admin-detail">
         <div class="admin-detail__title">订单：{{ detail.orderNo }}</div>
         <div class="admin-detail__grid">

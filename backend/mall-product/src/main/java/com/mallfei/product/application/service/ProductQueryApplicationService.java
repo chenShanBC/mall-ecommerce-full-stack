@@ -115,21 +115,24 @@ public class ProductQueryApplicationService {
         int lowSalesThreshold = positiveOrDefault(query.lowSalesThreshold(), DEFAULT_LOW_SALES_THRESHOLD);
         List<ProductSpu> allProducts = productDomainService.loadAllProducts();
         Map<Long, ProductSalesStatApplicationService.ProductSalesAggregate> recent30DaySalesBySpu = productSalesStatApplicationService.recent30DaySalesBySpuIds(allProducts.stream().map(ProductSpu::id).toList());
+        Map<Long, ProductSpu> allProductBySkuId = allProducts.stream()
+                .flatMap(product -> product.skus().stream().filter(sku -> sku.id() != null).map(sku -> Map.entry(sku.id(), product)))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (left, right) -> left, LinkedHashMap::new));
+        Map<Long, List<StockSnapshot>> stocksByProductId = stockFacade.stockListBySkuIds(allProductBySkuId.keySet().stream().toList()).stream()
+                .collect(Collectors.groupingBy(stock -> allProductBySkuId.get(stock.skuId()).id(), LinkedHashMap::new, Collectors.toList()));
         List<ProductSpu> filtered = allProducts.stream()
                 .filter(product -> query.keyword() == null || query.keyword().isBlank() || product.name().contains(query.keyword()))
                 .filter(product -> query.categoryId() == null || query.categoryId().equals(product.categoryId()))
                 .filter(product -> query.status() == null || query.status().isBlank() || query.status().equals(product.status()))
                 .filter(product -> matchSalesBand(product, query.salesBand(), hotSalesThreshold, lowSalesThreshold, recent30DaySalesBySpu))
+                .filter(product -> matchStockWarningStatus(product, query.stockWarningStatus(), stocksByProductId))
                 .sorted(productComparator(query.sortBy(), query.sortOrder(), recent30DaySalesBySpu))
                 .toList();
 
         PageResult<ProductSpu> pageResult = PageResult.of(filtered, query.page(), query.size());
         List<ProductSpu> pageProducts = pageResult.records();
-        Map<Long, ProductSpu> productBySkuId = pageProducts.stream()
-                .flatMap(product -> product.skus().stream().filter(sku -> sku.id() != null).map(sku -> Map.entry(sku.id(), product)))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (left, right) -> left, LinkedHashMap::new));
-        Map<Long, Integer> stockTotalByProductId = stockFacade.stockListBySkuIds(productBySkuId.keySet().stream().toList()).stream()
-                .collect(Collectors.groupingBy(stock -> productBySkuId.get(stock.skuId()).id(), LinkedHashMap::new, Collectors.summingInt(StockSnapshot::totalStock)));
+        Map<Long, Integer> stockTotalByProductId = pageProducts.stream()
+                .collect(Collectors.toMap(ProductSpu::id, product -> stocksByProductId.getOrDefault(product.id(), List.of()).stream().mapToInt(StockSnapshot::totalStock).sum(), (left, right) -> left, LinkedHashMap::new));
         List<AdminProductPageRowView> rows = pageProducts.stream()
                 .map(product -> {
                     int monthlySalesCount = monthlySales(product, recent30DaySalesBySpu);
@@ -167,6 +170,14 @@ public class ProductQueryApplicationService {
             return true;
         }
         return resolveSalesBand(monthlySales(product, recent30DaySalesBySpu), hotSalesThreshold, lowSalesThreshold).equalsIgnoreCase(salesBand);
+    }
+
+    private boolean matchStockWarningStatus(ProductSpu product, String stockWarningStatus, Map<Long, List<StockSnapshot>> stocksByProductId) {
+        if (blank(stockWarningStatus)) {
+            return true;
+        }
+        return stocksByProductId.getOrDefault(product.id(), List.of()).stream()
+                .anyMatch(stock -> stockWarningStatus.equalsIgnoreCase(stock.warningStatus()));
     }
 
     private String resolveSalesBand(int monthlySalesCount, int hotSalesThreshold, int lowSalesThreshold) {

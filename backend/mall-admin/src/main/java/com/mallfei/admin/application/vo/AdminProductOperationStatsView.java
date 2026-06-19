@@ -14,6 +14,10 @@ public record AdminProductOperationStatsView(
         long hotSellingCount,
         @Schema(description = "低销商品数，按上架且近30天销量小于低销阈值统计", example = "12")
         long lowSellingCount,
+        @Schema(description = "热销低库存商品数", example = "3")
+        long hotLowStockCount,
+        @Schema(description = "低销高库存商品数", example = "7")
+        long lowHighStockCount,
         @Schema(description = "近7天完成销量", example = "86")
         long recent7DaySalesCount,
         @Schema(description = "近30天完成销量", example = "320")

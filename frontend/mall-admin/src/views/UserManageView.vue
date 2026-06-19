@@ -58,7 +58,7 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="detailVisible" title="用户详情" width="820px">
+    <el-dialog draggable v-model="detailVisible" title="用户详情" width="820px">
       <div v-if="detail" class="admin-detail">
         <div class="admin-detail__title">{{ detail.nickname || '-' }}</div>
         <div class="admin-detail__grid user-detail-grid">

@@ -29,7 +29,7 @@
 <el-table-column prop="highStockThreshold" :label="text('highThreshold')" min-width="120" sortable="custom" />
 <el-table-column v-if="canShowActions" :label="text('actions')" min-width="390" fixed="right" align="center"><template #default="{ row }"><div class="stock-actions"><el-button v-if="canAdjust" class="stock-action-button" size="small" @click="openAdjust(row)">{{ text('adjust') }}</el-button><el-button v-if="canUpdatePolicy" class="stock-action-button stock-action-button--warning" size="small" type="warning" @click="openPolicy(row)">{{ text('policy') }}</el-button><el-button v-if="canCheckConsistency" class="stock-action-button stock-action-button--check" size="small" type="success" :loading="checkingSkuId === row.skuId" @click="checkStockConsistency(row)">{{ text('consistencyCheck') }}</el-button><el-button v-if="canHandleWarning && row.warningStatus !== 'NORMAL'" class="stock-action-button stock-action-button--danger" size="small" type="danger" @click="openWarning(row)">{{ text('warningHandle') }}</el-button></div></template></el-table-column>
 </el-table></div><div class="admin-pagination"><el-pagination background layout="sizes, prev, pager, next, total" :current-page="pager.page" :page-size="pager.size" :page-sizes="ADMIN_PAGE_SIZES" :total="pager.total" @current-change="handlePageChange" @size-change="handleSizeChange" /></div></el-card>
-<el-dialog v-model="adjustVisible" :title="text('adjustTitle')" width="560px" append-to-body destroy-on-close align-center class="admin-beauty-dialog stock-adjust-dialog"><div class="stock-current-snapshot"><div class="stock-current-snapshot__title">{{ text('currentSnapshot') }}</div><div class="stock-current-snapshot__items"><span>{{ text('total') }} = {{ currentStockSnapshot.totalStock }}</span><span>{{ text('available') }} = {{ currentStockSnapshot.availableStock }}</span><span>{{ text('locked') }} = {{ currentStockSnapshot.lockedStock }}</span></div></div><el-form ref="adjustFormRef" :model="adjustForm" :rules="adjustRules" label-width="108px" class="admin-dialog-form"><el-form-item :label="text('adjustmentType')" prop="adjustmentType"><el-select v-model="adjustForm.adjustmentType" class="stock-adjust-control" @change="handleAdjustTypeChange"><el-option v-for="item in adjustmentTypes" :key="item.value" :label="item.label" :value="item.value"><div class="stock-adjust-option"><span>{{ item.label }}</span><small>{{ item.description }}</small></div></el-option></el-select></el-form-item><el-form-item v-if="isBusinessAdjust" :label="text('changeQuantity')" prop="changeQuantity"><el-input-number v-model="adjustForm.changeQuantity" :min="1" class="stock-adjust-control" /></el-form-item><template v-else><el-form-item :label="text('total')" prop="totalStock"><el-input-number v-model="adjustForm.totalStock" :min="0" class="stock-adjust-control" @change="recalculateAvailable" /></el-form-item><el-form-item :label="text('locked')" prop="lockedStock"><el-input-number v-model="adjustForm.lockedStock" :min="0" class="stock-adjust-control" @change="recalculateAvailable" /></el-form-item><el-form-item :label="text('available')" prop="availableStock"><el-input-number v-model="adjustForm.availableStock" :min="0" class="stock-adjust-control" disabled /></el-form-item></template><el-form-item :label="text('reason')" prop="reason"><el-select v-model="adjustForm.reason" class="stock-adjust-control" :placeholder="text('selectReason')"><el-option v-for="item in currentAdjustReasons" :key="item" :label="item" :value="item" /></el-select></el-form-item><el-form-item :label="text('remark')" prop="remark"><el-input v-model="adjustForm.remark" type="textarea" :rows="3" :placeholder="text('remarkPlaceholder')" /></el-form-item></el-form><template #footer><el-button :disabled="adjustSubmitting" @click="adjustVisible=false">{{ text('cancel') }}</el-button><el-button type="primary" :loading="adjustSubmitting" @click="submitAdjust">{{ text('submit') }}</el-button></template></el-dialog>
+<el-dialog draggable v-model="adjustVisible" :title="text('adjustTitle')" width="560px" append-to-body destroy-on-close align-center class="admin-beauty-dialog stock-adjust-dialog"><div class="stock-current-snapshot"><div class="stock-current-snapshot__title">{{ text('currentSnapshot') }}</div><div class="stock-current-snapshot__items"><span>{{ text('total') }} = {{ currentStockSnapshot.totalStock }}</span><span>{{ text('available') }} = {{ currentStockSnapshot.availableStock }}</span><span>{{ text('locked') }} = {{ currentStockSnapshot.lockedStock }}</span></div></div><el-form ref="adjustFormRef" :model="adjustForm" :rules="adjustRules" label-width="108px" class="admin-dialog-form"><el-form-item :label="text('adjustmentType')" prop="adjustmentType"><el-select v-model="adjustForm.adjustmentType" class="stock-adjust-control" @change="handleAdjustTypeChange"><el-option v-for="item in adjustmentTypes" :key="item.value" :label="item.label" :value="item.value"><div class="stock-adjust-option"><span>{{ item.label }}</span><small>{{ item.description }}</small></div></el-option></el-select></el-form-item><el-form-item v-if="isBusinessAdjust" :label="text('changeQuantity')" prop="changeQuantity"><el-input-number v-model="adjustForm.changeQuantity" :min="1" class="stock-adjust-control" /></el-form-item><template v-else><el-form-item :label="text('total')" prop="totalStock"><el-input-number v-model="adjustForm.totalStock" :min="0" class="stock-adjust-control" @change="recalculateAvailable" /></el-form-item><el-form-item :label="text('locked')" prop="lockedStock"><el-input-number v-model="adjustForm.lockedStock" :min="0" class="stock-adjust-control" @change="recalculateAvailable" /></el-form-item><el-form-item :label="text('available')" prop="availableStock"><el-input-number v-model="adjustForm.availableStock" :min="0" class="stock-adjust-control" disabled /></el-form-item></template><el-form-item :label="text('reason')" prop="reason"><el-select v-model="adjustForm.reason" class="stock-adjust-control" :placeholder="text('selectReason')"><el-option v-for="item in currentAdjustReasons" :key="item" :label="item" :value="item" /></el-select></el-form-item><el-form-item :label="text('remark')" prop="remark"><el-input v-model="adjustForm.remark" type="textarea" :rows="3" :placeholder="text('remarkPlaceholder')" /></el-form-item></el-form><template #footer><el-button :disabled="adjustSubmitting" @click="adjustVisible=false">{{ text('cancel') }}</el-button><el-button type="primary" :loading="adjustSubmitting" @click="submitAdjust">{{ text('submit') }}</el-button></template></el-dialog>
 <el-dialog v-model="policyVisible" :title="text('policyTitle')" width="460px" append-to-body destroy-on-close align-center class="admin-beauty-dialog stock-policy-dialog"><el-form ref="policyFormRef" :model="policyForm" :rules="policyRules" label-width="100px" class="admin-dialog-form"><el-form-item :label="text('stockStatus')" prop="stockStatus"><el-select v-model="policyForm.stockStatus" style="width:180px"><el-option :label="text('active')" value="ACTIVE" /><el-option :label="text('frozen')" value="FROZEN" /><el-option :label="text('offline')" value="OFFLINE" /></el-select></el-form-item><el-form-item :label="text('lowThreshold')" prop="lowStockThreshold"><el-input-number v-model="policyForm.lowStockThreshold" :min="0" /></el-form-item><el-form-item :label="text('highThreshold')" prop="highStockThreshold"><el-input-number v-model="policyForm.highStockThreshold" :min="0" /></el-form-item><el-form-item :label="text('policyReason')" prop="reason"><el-input v-model="policyForm.reason" type="textarea" :rows="3" /></el-form-item></el-form><template #footer><el-button :disabled="policySubmitting" @click="policyVisible=false">{{ text('cancel') }}</el-button><el-button type="primary" :loading="policySubmitting" @click="submitPolicy">{{ text('submit') }}</el-button></template></el-dialog>
 <el-dialog v-model="warningVisible" :title="text('warningTitle')" width="460px" append-to-body destroy-on-close align-center class="admin-beauty-dialog stock-warning-dialog"><el-form ref="warningFormRef" :model="warningForm" :rules="warningRules" label-width="100px" class="admin-dialog-form"><el-form-item :label="text('action')" prop="action"><el-select v-model="warningForm.action" style="width:220px"><el-option :label="text('freezeStock')" value="FREEZE" /><el-option :label="text('recoverActive')" value="RECOVER_ACTIVE" /><el-option :label="text('offlineProduct')" value="OFFLINE" /></el-select></el-form-item><el-form-item :label="text('note')" prop="note"><el-input v-model="warningForm.note" type="textarea" :rows="3" /></el-form-item></el-form><template #footer><el-button :disabled="warningSubmitting" @click="warningVisible=false">{{ text('cancel') }}</el-button><el-button type="primary" :loading="warningSubmitting" @click="submitWarning">{{ text('submit') }}</el-button></template></el-dialog>
 </AdminLayout>
@@ -71,23 +71,32 @@ const submitAdjust=async()=>{const valid=await adjustFormRef.value?.validate().c
   font-size: 13px;
 }
 .stock-filter-form {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(220px, 1fr)) auto;
-  gap: 18px 22px;
-  align-items: end;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 12px;
 }
 .stock-filter-form :deep(.el-form-item) {
   margin: 0;
-  display: block;
+  display: inline-flex;
+  align-items: center;
 }
 .stock-filter-form :deep(.el-form-item__label) {
-  display: block;
-  margin-bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 8px 0 0;
   color: #475569;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 32px;
+  white-space: nowrap;
 }
-.stock-filter-control,
+.stock-filter-form :deep(.el-form-item__content) {
+  display: inline-flex;
+  align-items: center;
+}
+.stock-filter-control {
+  width: 180px;
+}
 .stock-filter-control :deep(.el-input__wrapper),
 .stock-filter-control :deep(.el-select__wrapper) {
   width: 100%;

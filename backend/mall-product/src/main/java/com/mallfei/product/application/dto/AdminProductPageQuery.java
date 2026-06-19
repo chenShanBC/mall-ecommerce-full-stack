@@ -5,6 +5,7 @@ public record AdminProductPageQuery(
         Long categoryId,
         String status,
         String salesBand,
+        String stockWarningStatus,
         Integer hotSalesThreshold,
         Integer lowSalesThreshold,
         String sortBy,

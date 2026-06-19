@@ -31,7 +31,7 @@
       </el-table>
     </el-card>
 
-    <el-dialog v-model="detailVisible" title="售后详情" width="720px">
+    <el-dialog draggable v-model="detailVisible" title="售后详情" width="720px">
       <div v-if="detail" class="admin-detail__grid">
         <div class="admin-detail__item"><span class="admin-detail__label">售后单号</span>{{ detail.aftersaleNo }}</div>
         <div class="admin-detail__item"><span class="admin-detail__label">订单号</span>{{ detail.orderNo }}</div>

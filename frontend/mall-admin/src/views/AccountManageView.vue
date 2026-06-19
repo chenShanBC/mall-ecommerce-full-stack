@@ -64,7 +64,7 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="mode === 'create' ? '新建运营账号' : '编辑账号权限'" width="720px">
+    <el-dialog draggable v-model="dialogVisible" :title="mode === 'create' ? '新建运营账号' : '编辑账号权限'" width="720px">
       <el-form :model="form" label-width="100px" class="admin-dialog-form">
         <el-form-item v-if="mode === 'create'" label="关联用户ID"><el-input v-model.number="form.userId" placeholder="可选" /></el-form-item>
         <el-form-item v-if="mode === 'create'" label="账号"><el-input v-model="form.username" /></el-form-item>

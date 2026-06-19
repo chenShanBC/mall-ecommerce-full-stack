@@ -1,5 +1,6 @@
 import { computed, reactive, ref } from 'vue';
 import * as XLSX from 'xlsx';
+import { useAdminStore } from '../../stores/admin';
 import {
   fetchAdminAftersales,
   fetchAdminFinanceCumulativeNetIncome,
@@ -33,9 +34,12 @@ const sumBy = (rows, keys) => rows.reduce((sum, row) => sum + toNumber(firstOf(r
 const normalizeProduct = (item) => ({
   ...item,
   id: firstOf(item, ['id', 'productId', 'spuId']),
+  productId: firstOf(item, ['productId', 'id', 'spuId']),
   name: firstOf(item, ['name', 'productName', 'spuName', 'title'], '未命名商品'),
   status: firstOf(item, ['status', 'saleStatus', 'productStatus'], 'UNKNOWN'),
+  salesBand: String(firstOf(item, ['salesBand'], '') || '').toUpperCase(),
   salesCount: toNumber(firstOf(item, ['salesCount', 'saleCount', 'soldCount'], 0)),
+  monthlySalesCount: toNumber(firstOf(item, ['monthlySalesCount', 'monthly_sales_count', 'recent30DaySalesCount'], firstOf(item, ['salesCount', 'saleCount', 'soldCount'], 0))),
   salesAmountCent: toNumber(firstOf(item, ['salesAmountCent', 'saleAmountCent', 'gmvCent', 'salesAmount'], 0)),
   availableStock: toNumber(firstOf(item, ['availableStock', 'stock', 'stockQuantity', 'totalStock'], 0)),
 });
@@ -123,8 +127,31 @@ const dateFromTimestamp = (timestamp) => {
 };
 
 const buildRisk = (label, count, desc, level = 'NORMAL') => ({ label, count: toNumber(count), desc, level });
+const DEFAULT_PRODUCT_SALES_THRESHOLD = { hotSalesThreshold: 100, lowSalesThreshold: 10 };
+const normalizeSalesThreshold = (value, fallback) => {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue >= 0 ? numberValue : fallback;
+};
+const productSalesThresholdSessionKey = (adminId) => `mallfei-admin-product-sales-threshold-session:${adminId || 'anonymous'}`;
+const loadProductSalesThresholdSession = (adminId) => {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(productSalesThresholdSessionKey(adminId)) || 'null');
+    if (!saved) return null;
+    return {
+      hotSalesThreshold: normalizeSalesThreshold(saved.hotSalesThreshold, DEFAULT_PRODUCT_SALES_THRESHOLD.hotSalesThreshold),
+      lowSalesThreshold: normalizeSalesThreshold(saved.lowSalesThreshold, DEFAULT_PRODUCT_SALES_THRESHOLD.lowSalesThreshold),
+    };
+  } catch {
+    return null;
+  }
+};
+const normalizeProductSalesThresholdConfig = (threshold = {}) => ({
+  hotSalesThreshold: normalizeSalesThreshold(threshold.hotThreshold || threshold.hotSalesThreshold, DEFAULT_PRODUCT_SALES_THRESHOLD.hotSalesThreshold),
+  lowSalesThreshold: normalizeSalesThreshold(threshold.slowThreshold || threshold.lowSalesThreshold, DEFAULT_PRODUCT_SALES_THRESHOLD.lowSalesThreshold),
+});
 
 export function useDashboardData() {
+  const adminStore = useAdminStore();
   const range = ref(createDefaultRange());
   const activeRole = ref('OPERATIONS');
   const roleToken = ref(0);
@@ -135,7 +162,12 @@ export function useDashboardData() {
 
   const todayStockDate = computed(() => formatDate(new Date()));
   const params = computed(() => ({ startDate: range.value.startDate, endDate: range.value.endDate, rangeType: range.value.type }));
-  const cacheKeyOf = (role) => `${role}:${range.value.type}:${range.value.startDate}:${range.value.endDate}:${role === 'WAREHOUSE' ? todayStockDate.value : ''}`;
+  const productThresholdCacheKey = () => {
+    const sessionThreshold = loadProductSalesThresholdSession(adminStore.adminId);
+    if (sessionThreshold) return `session:${sessionThreshold.hotSalesThreshold}:${sessionThreshold.lowSalesThreshold}`;
+    return 'default';
+  };
+  const cacheKeyOf = (role) => `${role}:${range.value.type}:${range.value.startDate}:${range.value.endDate}:${role === 'WAREHOUSE' ? todayStockDate.value : ''}:${role === 'PRODUCTS' ? productThresholdCacheKey() : ''}`;
   const getCache = (role) => cache.get(cacheKeyOf(role));
   const setCache = (role, payload) => cache.set(cacheKeyOf(role), payload);
 
@@ -187,17 +219,26 @@ export function useDashboardData() {
     const orderRows = recordsOf(orders).map(normalizeOrder).sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
     const aftersaleRows = recordsOf(aftersales).map(normalizeAftersale);
     const pendingReviewAftersaleCount = aftersaleRows.filter((item) => item.status === 'PENDING_REVIEW').length;
+    const totalOrderCount = toNumber(stats.totalOrderCount || totalOf(orders));
+    const pendingOrderCount = toNumber(stats.pendingOrderCount);
+    const paidOrderCount = toNumber(stats.paidOrderCount || stats.payOrderCount);
+    const shippedOrderCount = toNumber(stats.shippedOrderCount);
+    const completedOrderCount = toNumber(stats.completedOrderCount);
+    const cancelledOrderCount = toNumber(stats.cancelledOrderCount || stats.cancelOrderCount || stats.closedOrderCount);
+    const fulfillmentBaseCount = paidOrderCount + shippedOrderCount + completedOrderCount || Math.max(totalOrderCount - pendingOrderCount - cancelledOrderCount, 0);
+    const calculatedFulfillmentRate = fulfillmentBaseCount > 0 ? Math.round((completedOrderCount / fulfillmentBaseCount) * 100) : 0;
+    const overviewFulfillmentRate = toNumber(overview.fulfillmentRate);
     const summary = {
-      totalOrderCount: toNumber(stats.totalOrderCount || totalOf(orders)),
+      totalOrderCount,
       todayOrderCount: toNumber(stats.todayOrderCount),
-      pendingOrderCount: toNumber(stats.pendingOrderCount),
-      paidOrderCount: toNumber(stats.paidOrderCount || stats.payOrderCount),
-      shippedOrderCount: toNumber(stats.shippedOrderCount),
-      completedOrderCount: toNumber(stats.completedOrderCount),
-      cancelledOrderCount: toNumber(stats.cancelledOrderCount || stats.cancelOrderCount || stats.closedOrderCount),
+      pendingOrderCount,
+      paidOrderCount,
+      shippedOrderCount,
+      completedOrderCount,
+      cancelledOrderCount,
       abnormalOrderCount: toNumber(stats.paymentExceptionOrderCount || overview.abnormalOrderCount),
       pendingAftersaleCount: pendingReviewAftersaleCount,
-      fulfillmentRate: toNumber(overview.fulfillmentRate),
+      fulfillmentRate: overviewFulfillmentRate > 0 || completedOrderCount === 0 ? overviewFulfillmentRate : calculatedFulfillmentRate,
       paidAmountCent: toNumber(overview.paidAmountCent || sumBy(orderRows, ['payAmountCent', 'totalAmountCent', 'amountCent'])),
     };
     const risks = [
@@ -501,48 +542,64 @@ export function useDashboardData() {
     const risks = [
       buildRisk('库存预警', summary.warningCount, '查看全部高低库存预警 SKU 并处理库存风险', summary.warningCount > 0 ? 'WARNING' : 'NORMAL'),
       buildRisk('低库存 SKU', summary.lowStockCount, '低于预警阈值的 SKU 需要补货', summary.lowStockCount > 0 ? 'WARNING' : 'NORMAL'),
-      buildRisk('滞销/高库存 SKU', summary.highStockCount, '库存积压 SKU 建议促销、清仓或调整采购', summary.highStockCount > 0 ? 'WARNING' : 'NORMAL'),
+      buildRisk('高库存 SKU', summary.highStockCount, '库存积压 SKU 建议促销、清仓或调整采购', summary.highStockCount > 0 ? 'WARNING' : 'NORMAL'),
       buildRisk('库存对账不一致', summary.stockDiffCount, 'Redis 与数据库库存数据存在不一致', summary.stockDiffCount > 0 ? 'HIGH' : 'NORMAL'),
     ];
     return { overview, summary, risks, todos: risks, stocks, stockTotal: totalOf(stocksPayload), warnings, warningTotal: totalOf(warningsPayload), logs, reconciliations, warehouseTrend };
   }, options);
 
   const loadProducts = (options = {}) => safeLoad('PRODUCTS', async () => {
-    const [overviewRes, productsRes, thresholdRes] = await Promise.all([
-      fetchDashboard(params.value),
-      fetchAdminProductPage({ ...params.value, page: 1, size: 12, sortField: 'salesCount', sortOrder: 'desc' }),
+    const [sessionThresholdRes, thresholdRes] = await Promise.all([
+      Promise.resolve(loadProductSalesThresholdSession(adminStore.adminId)),
       fetchAdminProductSalesThresholdConfig(),
     ]);
-    const overview = normalizeResponse(overviewRes, {});
-    const productsPayload = normalizeResponse(productsRes, {});
+    const sessionThreshold = sessionThresholdRes || null;
     const threshold = normalizeResponse(thresholdRes, {});
+    const resolvedThreshold = sessionThreshold || normalizeProductSalesThresholdConfig(threshold);
+    const hotThreshold = normalizeSalesThreshold(resolvedThreshold.hotSalesThreshold, DEFAULT_PRODUCT_SALES_THRESHOLD.hotSalesThreshold);
+    const slowThreshold = normalizeSalesThreshold(resolvedThreshold.lowSalesThreshold, DEFAULT_PRODUCT_SALES_THRESHOLD.lowSalesThreshold);
+    const commonThresholdParams = { hotSalesThreshold: hotThreshold, lowSalesThreshold: slowThreshold };
+    const [overviewRes, productsRes, onlineCountRes, hotProductsRes, slowProductsRes] = await Promise.all([
+      fetchDashboard({ ...params.value, ...commonThresholdParams }),
+      fetchAdminProductPage({ ...params.value, ...commonThresholdParams, page: 1, size: 12, sortBy: 'monthlySalesCount', sortField: 'monthlySalesCount', sortOrder: 'desc' }),
+      fetchAdminProductPage({ status: 'ONLINE', ...commonThresholdParams, page: 1, size: 1 }),
+      fetchAdminProductPage({ ...commonThresholdParams, salesBand: 'HOT', page: 1, size: 1, sortBy: 'monthlySalesCount', sortField: 'monthlySalesCount', sortOrder: 'desc' }),
+      fetchAdminProductPage({ ...commonThresholdParams, salesBand: 'LOW', page: 1, size: 1, sortBy: 'monthlySalesCount', sortField: 'monthlySalesCount', sortOrder: 'asc' }),
+    ]);
+    const overview = normalizeResponse(overviewRes, {});
+    const overviewProductStats = overview.productStats || {};
+    const productsPayload = normalizeResponse(productsRes, {});
+    const onlineCountPayload = normalizeResponse(onlineCountRes, {});
+    const hotProductsPayload = normalizeResponse(hotProductsRes, {});
+    const slowProductsPayload = normalizeResponse(slowProductsRes, {});
     const products = recordsOf(productsPayload).map(normalizeProduct);
-    const hotThreshold = toNumber(threshold.hotThreshold || threshold.hotSalesThreshold || 100);
-    const slowThreshold = toNumber(threshold.slowThreshold || threshold.lowSalesThreshold || 1);
-    const hotProducts = products.filter((item) => item.salesCount >= hotThreshold);
-    const slowProducts = products.filter((item) => item.salesCount <= slowThreshold);
-    const lowStockHotProducts = hotProducts.filter((item) => item.availableStock <= 10);
-    const highStockSlowProducts = slowProducts.filter((item) => item.availableStock >= 50);
+    const productTotal = toNumber(overviewProductStats.totalCount || totalOf(productsPayload));
+    const onSaleCount = toNumber(overviewProductStats.onlineCount || totalOf(onlineCountPayload));
+    const hotCount = toNumber(overviewProductStats.hotSellingCount || totalOf(hotProductsPayload));
+    const slowCount = toNumber(overviewProductStats.lowSellingCount || totalOf(slowProductsPayload));
+    const lowStockHotCount = toNumber(overviewProductStats.hotLowStockCount || 0);
+    const highStockSlowCount = toNumber(overviewProductStats.lowHighStockCount || 0);
     const summary = {
-      productTotal: totalOf(productsPayload),
-      onSaleCount: toNumber(overview.onSaleProductCount || products.filter((item) => ['ON_SALE', 'ONSALE', 'SALE'].includes(item.status)).length),
-      offSaleCount: toNumber(overview.offSaleProductCount || products.filter((item) => ['OFF_SALE', 'OFFSALE', 'OFF'].includes(item.status)).length),
+      productTotal,
+      onSaleCount,
+      offSaleCount: toNumber(overview.offSaleProductCount || Math.max(productTotal - onSaleCount, 0)),
       totalSalesCount: sumBy(products, ['salesCount']),
       totalSalesAmountCent: sumBy(products, ['salesAmountCent', 'salesAmount']),
       hotThreshold,
       slowThreshold,
-      hotCount: hotProducts.length,
-      slowCount: slowProducts.length,
-      lowStockHotCount: lowStockHotProducts.length,
-      highStockSlowCount: highStockSlowProducts.length,
+      hotCount,
+      slowCount,
+      lowStockHotCount,
+      highStockSlowCount,
     };
     const risks = [
-      buildRisk('高销量低库存', summary.lowStockHotCount, '热销商品库存不足，建议补货', summary.lowStockHotCount > 0 ? 'HIGH' : 'NORMAL'),
-      buildRisk('低销量高库存', summary.highStockSlowCount, '库存积压商品建议促销或清仓', summary.highStockSlowCount > 0 ? 'WARNING' : 'NORMAL'),
+      buildRisk('热销低库存商品', summary.lowStockHotCount, '热销商品库存不足，建议补货', summary.lowStockHotCount > 0 ? 'HIGH' : 'NORMAL'),
+      buildRisk('低销高库存商品', summary.highStockSlowCount, '低销商品库存积压，建议促销或清仓', summary.highStockSlowCount > 0 ? 'WARNING' : 'NORMAL'),
+      buildRisk('待上架商品', summary.offSaleCount, '下架商品可评估补充信息后上架', summary.offSaleCount > 0 ? 'LOW' : 'NORMAL'),
       buildRisk('滞销商品', summary.slowCount, '低销量商品建议优化图文、价格或下架', summary.slowCount > 0 ? 'LOW' : 'NORMAL'),
       buildRisk('热销商品', summary.hotCount, '保持热销商品库存供给稳定', 'NORMAL'),
     ];
-    return { overview, products, productTotal: totalOf(productsPayload), threshold, summary, risks, todos: risks };
+    return { overview, products, productTotal, threshold, summary, risks, todos: risks };
   }, options);
 
   const loadCurrentRole = async (options = {}) => {

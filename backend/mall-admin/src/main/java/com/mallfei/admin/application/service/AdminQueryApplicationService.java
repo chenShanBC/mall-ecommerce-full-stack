@@ -293,9 +293,9 @@ public class AdminQueryApplicationService {
         );
     }
 
-    public AdminDashboardOverviewView dashboardOverview() {
+    public AdminDashboardOverviewView dashboardOverview(Integer hotSalesThreshold, Integer lowSalesThreshold) {
         requireAdmin();
-        return buildDashboardOverview();
+        return buildDashboardOverview(hotSalesThreshold, lowSalesThreshold);
     }
 
     public Map<String, Long> financeCumulativeNetIncome() {
@@ -457,7 +457,7 @@ public class AdminQueryApplicationService {
         }, startDate, endDate);
     }
 
-    private AdminDashboardOverviewView buildDashboardOverview() {
+    private AdminDashboardOverviewView buildDashboardOverview(Integer hotSalesThresholdOverride, Integer lowSalesThresholdOverride) {
         List<Order> orders = orderFacade.findAll();
         List<com.mallfei.pay.domain.model.PayOrder> pays = payFacade.findAll();
         Map<String, PayOrder> payByOrderNo = pays.stream()
@@ -496,7 +496,7 @@ public class AdminQueryApplicationService {
         long abnormalReconcileCount = payAbnormalReconcileCount + stockAbnormalReconcileCount;
         long stockWarningCount = warningStats.lowCount() + warningStats.highCount();
         List<AdminStockOperationLogView> recentStockOperationLogs = recentStockOperationLogs();
-        AdminProductOperationStatsView productStats = buildProductOperationStats();
+        AdminProductOperationStatsView productStats = buildProductOperationStats(hotSalesThresholdOverride, lowSalesThresholdOverride);
         List<AdminProductSalesMonthlyTrendView> productSalesMonthlyTrend = productFacade.recentMonthlySalesTrend(6).stream()
                 .map(item -> new AdminProductSalesMonthlyTrendView(item.month(), item.quantity(), item.amountCent()))
                 .toList();
@@ -583,28 +583,69 @@ public class AdminQueryApplicationService {
                 .toList();
     }
 
-    private AdminProductOperationStatsView buildProductOperationStats() {
+    private AdminProductOperationStatsView buildProductOperationStats(Integer hotSalesThresholdOverride, Integer lowSalesThresholdOverride) {
         AdminProductSalesThresholdConfigView thresholdConfig = operationConfigApplicationService.productSalesThresholdConfig();
-        int hotSellingThreshold = thresholdConfig.hotSalesThreshold();
-        int lowSellingThreshold = thresholdConfig.lowSalesThreshold();
+        int hotSellingThreshold = positiveOrDefault(hotSalesThresholdOverride, thresholdConfig.hotSalesThreshold());
+        int lowSellingThreshold = positiveOrDefault(lowSalesThresholdOverride, thresholdConfig.lowSalesThreshold());
         List<ProductSpu> products = productFacade.findAll();
-        Map<Long, com.mallfei.product.application.service.ProductSalesStatApplicationService.ProductSalesAggregate> recent30DaySalesBySpu = productFacade.recent30DaySalesBySpuIds(products.stream().map(ProductSpu::id).toList());
-        long onlineCount = products.stream().filter(product -> "ONLINE".equalsIgnoreCase(product.status())).count();
-        long pendingOnlineCount = products.stream().filter(product -> !"ONLINE".equalsIgnoreCase(product.status())).count();
-        long hotSellingCount = products.stream()
-                .filter(product -> "ONLINE".equalsIgnoreCase(product.status()))
+        List<ProductSpu> onlineProducts = products.stream().filter(product -> "ONLINE".equalsIgnoreCase(product.status())).toList();
+        Map<Long, com.mallfei.product.application.service.ProductSalesStatApplicationService.ProductSalesAggregate> recent30DaySalesBySpu = productFacade.recent30DaySalesBySpuIds(onlineProducts.stream().map(ProductSpu::id).toList());
+        Map<Long, List<StockSnapshot>> stockByProductId = buildStockByProductId(onlineProducts);
+        long hotSellingCount = onlineProducts.stream()
                 .filter(product -> monthlySales(product, recent30DaySalesBySpu) >= hotSellingThreshold)
                 .count();
-        long lowSellingCount = products.stream()
-                .filter(product -> "ONLINE".equalsIgnoreCase(product.status()))
+        long lowSellingCount = onlineProducts.stream()
                 .filter(product -> monthlySales(product, recent30DaySalesBySpu) <= lowSellingThreshold)
                 .count();
-        return new AdminProductOperationStatsView(products.size(), onlineCount, pendingOnlineCount, hotSellingCount, lowSellingCount, productFacade.recent7DaySalesCount(), productFacade.recent30DaySalesCount(), productFacade.currentMonthSalesCount(), productFacade.recent30DaySalesAmountCent());
+        long hotLowStockCount = onlineProducts.stream()
+                .filter(product -> monthlySales(product, recent30DaySalesBySpu) >= hotSellingThreshold)
+                .filter(product -> hasLowStock(stockByProductId.get(product.id())))
+                .count();
+        long lowHighStockCount = onlineProducts.stream()
+                .filter(product -> monthlySales(product, recent30DaySalesBySpu) <= lowSellingThreshold)
+                .filter(product -> hasHighStock(stockByProductId.get(product.id())))
+                .count();
+        return new AdminProductOperationStatsView(products.size(), onlineProducts.size(), products.size() - onlineProducts.size(), hotSellingCount, lowSellingCount, hotLowStockCount, lowHighStockCount, productFacade.recent7DaySalesCount(), productFacade.recent30DaySalesCount(), productFacade.currentMonthSalesCount(), productFacade.recent30DaySalesAmountCent());
+    }
+
+    private Map<Long, List<StockSnapshot>> buildStockByProductId(List<ProductSpu> products) {
+        List<Long> skuIds = products.stream()
+                .flatMap(product -> product.skus().stream())
+                .filter(sku -> sku.id() != null)
+                .map(sku -> sku.id())
+                .toList();
+        Map<Long, Long> skuToProductId = products.stream()
+                .flatMap(product -> product.skus().stream()
+                        .filter(sku -> sku.id() != null)
+                        .map(sku -> Map.entry(sku.id(), product.id())))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (left, right) -> left, java.util.LinkedHashMap::new));
+        return stockFacade.stockListBySkuIds(skuIds).stream()
+                .collect(Collectors.groupingBy(stock -> skuToProductId.get(stock.skuId()), java.util.LinkedHashMap::new, Collectors.toList()));
+    }
+
+    private boolean hasLowStock(List<StockSnapshot> stocks) {
+        return stocks != null && stocks.stream().anyMatch(stock -> stock.availableStock() != null && stock.availableStock() <= lowStockThreshold(stock));
+    }
+
+    private boolean hasHighStock(List<StockSnapshot> stocks) {
+        return stocks != null && stocks.stream().anyMatch(stock -> stock.availableStock() != null && stock.availableStock() >= highStockThreshold(stock));
+    }
+
+    private int lowStockThreshold(StockSnapshot stock) {
+        return stock.lowStockThreshold() == null ? 10 : stock.lowStockThreshold();
+    }
+
+    private int highStockThreshold(StockSnapshot stock) {
+        return stock.highStockThreshold() == null ? 50 : stock.highStockThreshold();
     }
 
     private int monthlySales(ProductSpu product, Map<Long, com.mallfei.product.application.service.ProductSalesStatApplicationService.ProductSalesAggregate> recent30DaySalesBySpu) {
         com.mallfei.product.application.service.ProductSalesStatApplicationService.ProductSalesAggregate aggregate = recent30DaySalesBySpu.get(product.id());
         return aggregate == null ? 0 : aggregate.quantity();
+    }
+
+    private int positiveOrDefault(Integer value, int defaultValue) {
+        return value == null || value < 0 ? defaultValue : value;
     }
 
     public PageResult<StockSnapshot> stockList(Long skuId, String stockStatus, String warningStatus, long page, long size, String sortBy, String sortOrder) {

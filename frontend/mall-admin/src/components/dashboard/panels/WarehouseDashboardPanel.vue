@@ -9,7 +9,7 @@
     </div>
 
     <div class="panel-grid panel-grid--2">
-      <DashboardDataTable title="风险雷达 / 仓储待办" desc="聚合缺货、低库存、滞销高库存和库存对账风险" :columns="riskColumns" :rows="data.risks || []" :loading="loading" @refresh="$emit('refresh')" />
+      <DashboardDataTable title="风险雷达 / 仓储待办" desc="聚合缺货、低库存、高库存和库存对账风险" :columns="riskColumns" :rows="data.risks || []" :loading="loading" @refresh="$emit('refresh')" />
       <DashboardDataTable title="库存预警列表" desc="优先展示需要补货、促销清仓或人工处理的库存风险" :columns="warningColumns" :rows="data.warnings || []" :loading="loading" @refresh="$emit('refresh')" />
     </div>
 
@@ -37,12 +37,12 @@ const warningText = computed(() => warningLevel.value === 'danger' ? `存在 ${s
 const metrics = computed(() => [
   { label: '预警 SKU 数', value: summary.value.warningCount || props.data.warningTotal, hint: '低库存/高库存预警', danger: Number(summary.value.warningCount || props.data.warningTotal || 0) > 0, path: '/stocks' },
   { label: '缺货 SKU 数', value: summary.value.outOfStockCount, hint: '可售库存为 0', danger: Number(summary.value.outOfStockCount || 0) > 0, path: '/stocks', query: { warningStatus: 'LOW' } },
-  { label: '滞销/高库存', value: summary.value.highStockCount, hint: '库存积压 SKU', danger: Number(summary.value.highStockCount || 0) > 0, path: '/stocks', query: { warningStatus: 'HIGH', page: 1 } },
+  { label: '高库存', value: summary.value.highStockCount, hint: '库存积压 SKU', danger: Number(summary.value.highStockCount || 0) > 0, path: '/stocks', query: { warningStatus: 'HIGH', page: 1 } },
   { label: '库存对账异常', value: summary.value.stockDiffCount, hint: 'Redis/数据库库存不一致', danger: Number(summary.value.stockDiffCount || 0) > 0, path: '/reconciliations', query: { tab: 'stock', stockStatus: 'INCONSISTENT', stockPage: 1 } },
   { label: '今日库存变动', value: summary.value.stockLogCount, hint: '库存流水数量', path: '/stock-logs' },
   { label: '待处理预警', value: summary.value.pendingWarningCount, hint: '未闭环库存预警', danger: Number(summary.value.pendingWarningCount || 0) > 0, path: '/stocks' },
 ]);
-const stockOption = computed(() => ({ tooltip: { trigger: 'item' }, legend: { bottom: 0, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11 } }, series: [{ type: 'pie', radius: ['48%', '68%'], center: ['50%', '42%'], avoidLabelOverlap: true, label: { formatter: '{b}', fontSize: 11 }, labelLine: { length: 8, length2: 8 }, data: [{ name: '正常', value: summary.value.normalCount || 0, itemStyle: { color: '#22c55e' } }, { name: '缺货', value: summary.value.outOfStockCount || 0, itemStyle: { color: '#dc2626' } }, { name: '低库存', value: summary.value.lowStockCount || 0, itemStyle: { color: '#f59e0b' } }, { name: '滞销/高库存', value: summary.value.highStockCount || 0, itemStyle: { color: '#0ea5e9' } }, { name: '对账异常', value: summary.value.stockDiffCount || 0, itemStyle: { color: '#7c3aed' } }] }] }));
+const stockOption = computed(() => ({ tooltip: { trigger: 'item' }, legend: { bottom: 0, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11 } }, series: [{ type: 'pie', radius: ['48%', '68%'], center: ['50%', '42%'], avoidLabelOverlap: true, label: { formatter: '{b}', fontSize: 11 }, labelLine: { length: 8, length2: 8 }, data: [{ name: '正常', value: summary.value.normalCount || 0, itemStyle: { color: '#22c55e' } }, { name: '缺货', value: summary.value.outOfStockCount || 0, itemStyle: { color: '#dc2626' } }, { name: '低库存', value: summary.value.lowStockCount || 0, itemStyle: { color: '#f59e0b' } }, { name: '高库存', value: summary.value.highStockCount || 0, itemStyle: { color: '#0ea5e9' } }, { name: '对账异常', value: summary.value.stockDiffCount || 0, itemStyle: { color: '#7c3aed' } }] }] }));
 const changeGroups = computed(() => logs.value.reduce((acc, item) => { const key = item.changeType || 'UNKNOWN'; acc[key] = (acc[key] || 0) + 1; return acc; }, {}));
 const changeOption = computed(() => ({ tooltip: { trigger: 'item' }, legend: { bottom: 0, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11 } }, series: [{ type: 'pie', radius: ['48%', '68%'], center: ['50%', '42%'], label: { formatter: '{b}', fontSize: 11 }, data: Object.entries(changeGroups.value).map(([name, value]) => ({ name, value })) }] }));
 const hasStock = computed(() => [summary.value.normalCount, summary.value.outOfStockCount, summary.value.lowStockCount, summary.value.highStockCount, summary.value.stockDiffCount].some(Boolean));
@@ -53,7 +53,7 @@ const reconcileColumns = [{ prop: 'skuId', label: 'SKU ID', width: 100 }, { prop
 const logColumns = [{ prop: 'skuId', label: 'SKU ID', width: 100 }, { prop: 'changeType', label: '类型', type: 'tag', width: 140 }, { prop: 'changeQuantity', label: '变更量', width: 110 }, { prop: 'operatorName', label: '操作人', width: 120 }, { prop: 'createTime', label: '时间', minWidth: 170 }];
 const handleStockDrilldown = (event) => {
   if (event.name === '低库存') go('/stocks', { warningStatus: 'LOW', page: 1 });
-  if (event.name === '滞销/高库存') go('/stocks', { warningStatus: 'HIGH', page: 1 });
+  if (event.name === '高库存') go('/stocks', { warningStatus: 'HIGH', page: 1 });
   if (event.name === '对账异常') go('/reconciliations', { tab: 'stock', stockStatus: 'INCONSISTENT', stockPage: 1 });
 };
 const go = (path, query = {}) => router.push({ path, query });

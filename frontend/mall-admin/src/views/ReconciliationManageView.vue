@@ -236,7 +236,7 @@
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog v-model="createVisible" title="创建线上对账任务" width="460px">
+    <el-dialog draggable v-model="createVisible" title="创建线上对账任务" width="460px">
       <el-form :model="createForm" label-width="90px">
         <el-form-item label="对账日期"><el-date-picker v-model="createForm.reconcileDate" type="date" value-format="YYYY-MM-DD" :disabled-date="disableReconcileDate" placeholder="请选择未创建过的对账账期" style="width: 100%" /></el-form-item>
         <el-form-item label="渠道"><el-select v-model="createForm.channel" style="width: 100%"><el-option label="MOCK模拟渠道" value="MOCK" /><el-option label="支付宝" value="ALIPAY" /></el-select></el-form-item>

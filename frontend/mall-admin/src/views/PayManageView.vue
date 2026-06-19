@@ -156,7 +156,7 @@
       </el-tabs>
     </el-card>
 
-    <el-dialog v-model="detailVisible" title="支付单详情" width="820px" append-to-body destroy-on-close align-center class="admin-beauty-dialog pay-detail-dialog">
+    <el-dialog draggable v-model="detailVisible" title="支付单详情" width="820px" append-to-body destroy-on-close align-center class="admin-beauty-dialog pay-detail-dialog">
       <div v-if="detail" class="pay-detail-card admin-dialog-detail-panel">
         <div class="pay-detail-hero">
           <div>

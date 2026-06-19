@@ -17,6 +17,8 @@ const props = defineProps({
   },
 });
 
+const emit = defineEmits(['chart-click']);
+
 const chartRef = ref(null);
 let chartInstance = null;
 let resizeObserver = null;
@@ -26,6 +28,7 @@ const renderChart = async () => {
   if (!chartRef.value) return;
   if (!chartInstance) {
     chartInstance = echarts.init(chartRef.value);
+    chartInstance.on('click', (params) => emit('chart-click', params));
   }
   chartInstance.setOption(props.option, true);
   chartInstance.resize();
