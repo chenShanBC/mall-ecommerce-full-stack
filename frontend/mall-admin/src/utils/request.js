@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { ADMIN_FORCE_LOGOUT_MESSAGE_KEY } from './adminForceLogout';
 
-const LOGIN_PATH = '/login';
+const LOGIN_PATH = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/login`;
 const UNAUTHORIZED_CODE = 'AUTH_401';
 
 const redirectToLogin = (message = '') => {

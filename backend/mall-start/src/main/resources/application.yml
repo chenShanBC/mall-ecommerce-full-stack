@@ -6,7 +6,7 @@ spring:
     name: mall-fei
   profiles:
     # local / cloud
-    active: ${SPRING_PROFILES_ACTIVE:local}
+    active: ${SPRING_PROFILES_ACTIVE:cloud}
   servlet:
     multipart:
       max-file-size: 2MB

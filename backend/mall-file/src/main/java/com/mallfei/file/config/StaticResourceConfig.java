@@ -25,13 +25,19 @@ public class StaticResourceConfig implements WebMvcConfigurer {
         String resourceLocation = uploadPath.toUri().toString();
 
         registry.addResourceHandler(publicBasePath + "/**")
-                .addResourceLocations(resourceLocation);
+                .addResourceLocations(resourceLocation)
+                .setCachePeriod(3600);
 
         // 兼容历史路径：/upload/** -> /uploads/**
         if (!"/upload".equals(publicBasePath)) {
             registry.addResourceHandler("/upload/**")
-                    .addResourceLocations(resourceLocation);
+                    .addResourceLocations(resourceLocation)
+                    .setCachePeriod(3600);
         }
+
+        registry.addResourceHandler("/images/**")
+                .addResourceLocations("classpath:/static/images/")
+                .setCachePeriod(3600);
     }
 
     private String normalizePublicBasePath(String basePath) {

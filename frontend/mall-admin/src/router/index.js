@@ -43,12 +43,12 @@ router.beforeEach(async (to) => {
   const token = localStorage.getItem('mall-admin-token');
   if (to.meta.requiresAuth && !token) {
     await adminStore.logout();
-    return '/login';
+    return { path: '/login', query: { redirect: to.fullPath } };
   }
   if (token && to.meta.requiresAuth) {
     const valid = await adminStore.ensureSessionValid();
     if (!valid) {
-      return '/login';
+      return { path: '/login', query: { redirect: to.fullPath } };
     }
     adminStore.initForceLogout(router);
   }

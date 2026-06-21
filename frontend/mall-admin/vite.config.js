@@ -5,7 +5,7 @@ import Components from 'unplugin-vue-components/vite';
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers';
 
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? '/admin/' : '/',
+  base: process.env.VITE_ADMIN_BASE || '/admin/',
   plugins: [
     vue(),
     AutoImport({
@@ -19,7 +19,7 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5174,
     strictPort: true,
-    allowedHosts: ['localhost', '127.0.0.1', '0.0.0.0'],
+    allowedHosts: ['localhost', '127.0.0.1', '0.0.0.0', 'mallfei.cloud'],
     proxy: {
       '/api': {
         target: process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:9090',

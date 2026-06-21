@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/mall_fei?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&connectTimeout=5000&socketTimeout=10000
-    username: root
-    password: 123456
+    url: jdbc:mysql://${MALL_MYSQL_HOST:127.0.0.1}:${MALL_MYSQL_PORT:3306}/${MALL_MYSQL_DATABASE:mall_fei}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&connectTimeout=5000&socketTimeout=10000
+    username: ${MALL_MYSQL_USERNAME:root}
+    password: ${MALL_MYSQL_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
