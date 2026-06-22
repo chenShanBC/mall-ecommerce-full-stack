@@ -76,6 +76,14 @@ public class MybatisCategoryRepository implements CategoryRepository {
         return findById(category.id()).orElseThrow();
     }
 
+    @Override
+    public void softDelete(Long id) {
+        CategoryDO categoryDO = new CategoryDO();
+        categoryDO.setId(id);
+        categoryDO.setDeletedAt(java.time.LocalDateTime.now());
+        categoryMapper.updateById(categoryDO);
+    }
+
     private Category toDomain(CategoryDO categoryDO) {
         return new Category(
                 categoryDO.getId(),

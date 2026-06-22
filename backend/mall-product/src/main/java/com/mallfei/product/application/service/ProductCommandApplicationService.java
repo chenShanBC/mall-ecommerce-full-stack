@@ -39,6 +39,14 @@ public class ProductCommandApplicationService {
         return productDomainService.updateCategory(categoryId, name, parentId, sortOrder, status);
     }
 
+    public Category updateCategoryStatus(Long categoryId, String status) {
+        return productDomainService.updateCategoryStatus(categoryId, status);
+    }
+
+    public void deleteCategory(Long categoryId) {
+        productDomainService.deleteCategory(categoryId);
+    }
+
     public AdminProductSummaryView createProduct(AdminCreateProductRequest request) {
         ProductSpu persisted = productDomainService.createProduct(request);
         publishStockInit(persisted.skus(), request.skus().stream().collect(Collectors.toMap(AdminCreateProductRequest.SkuInput::skuCode, AdminCreateProductRequest.SkuInput::initialStock, (left, right) -> right, LinkedHashMap::new)));

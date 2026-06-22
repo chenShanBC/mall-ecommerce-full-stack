@@ -4,8 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "vite --mode devlocal",
+    "dev:local": "vite --mode devlocal",
+    "dev:cloud": "vite --mode cloud",
+    "build": "vite build --mode cloud",
+    "build:local": "vite build --mode devlocal",
+    "build:cloud": "vite build --mode cloud",
     "preview": "vite preview"
   },
   "dependencies": {

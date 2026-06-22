@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <van-nav-bar title="订单详情" left-arrow @click-left="router.back()" />
+    <van-nav-bar title="订单详情" left-arrow @click-left="handleBack" />
 
     <div v-if="order" class="content">
       <div class="card">
@@ -181,6 +181,14 @@ let countdownBaseTime = Date.now();
 let refreshingAfterCountdown = false;
 let payStatusPoller = null;
 let payStatusPollAttempts = 0;
+
+const handleBack = () => {
+  if (route.query.fromPayReturn === '1') {
+    router.replace('/orders');
+    return;
+  }
+  router.back();
+};
 
 const handlePayReturnStorage = async (event) => {
   if (event.key !== 'mallfei:pay-return-refresh' || !event.newValue) {

@@ -52,6 +52,11 @@ public final class AdminPermissionCatalog {
     public static final String PRODUCT_SALES_THRESHOLD_CONFIG = "product:sales-threshold:config";
     public static final String PRODUCT_VIOLATION_HANDLE = "product:violation:handle";
     public static final String CATEGORY_MANAGE = "category:manage";
+    public static final String CATEGORY_VIEW = "category:view";
+    public static final String CATEGORY_CREATE = "category:create";
+    public static final String CATEGORY_UPDATE = "category:update";
+    public static final String CATEGORY_STATUS_UPDATE = "category:status:update";
+    public static final String CATEGORY_DELETE = "category:delete";
 
     public static final String STOCK_VIEW = "stock:view";
     public static final String STOCK_LOG_VIEW = "stock:log:view";
@@ -138,7 +143,12 @@ public final class AdminPermissionCatalog {
             permission(PRODUCT_SALES_THRESHOLD_VIEW, "商品销售阈值查看", "product", "商品管理", false),
             permission(PRODUCT_SALES_THRESHOLD_CONFIG, "商品销售阈值配置", "product", "商品管理", true),
             permission(PRODUCT_VIOLATION_HANDLE, "商品违规处理", "product", "商品管理", true),
-            permission(CATEGORY_MANAGE, "类目管理", "product", "商品管理", false),
+            permission(CATEGORY_MANAGE, "类目管理（兼容旧权限）", "product", "商品管理", false),
+            permission(CATEGORY_VIEW, "类目查看", "product", "商品管理", false),
+            permission(CATEGORY_CREATE, "类目创建", "product", "商品管理", false),
+            permission(CATEGORY_UPDATE, "类目更新", "product", "商品管理", false),
+            permission(CATEGORY_STATUS_UPDATE, "类目状态调整", "product", "商品管理", false),
+            permission(CATEGORY_DELETE, "类目删除", "product", "商品管理", true),
 
             permission(STOCK_VIEW, "库存查看", "stock", "库存管理", false),
             permission(STOCK_LOG_VIEW, "库存流水查看", "stock", "库存管理", false),
@@ -220,7 +230,7 @@ public final class AdminPermissionCatalog {
 
     private static final List<String> PRODUCT_OPERATOR = List.of(
             DASHBOARD_VIEW, DASHBOARD_PRODUCTS_VIEW,
-            PRODUCT_VIEW, PRODUCT_DETAIL_VIEW, PRODUCT_CREATE, PRODUCT_UPDATE, PRODUCT_ON_SALE, PRODUCT_OFF_SALE, PRODUCT_STATUS_UPDATE, PRODUCT_SALES_VIEW, PRODUCT_SALES_THRESHOLD_VIEW, PRODUCT_SALES_THRESHOLD_CONFIG, PRODUCT_VIOLATION_HANDLE, CATEGORY_MANAGE,
+            PRODUCT_VIEW, PRODUCT_DETAIL_VIEW, PRODUCT_CREATE, PRODUCT_UPDATE, PRODUCT_ON_SALE, PRODUCT_OFF_SALE, PRODUCT_STATUS_UPDATE, PRODUCT_SALES_VIEW, PRODUCT_SALES_THRESHOLD_VIEW, PRODUCT_SALES_THRESHOLD_CONFIG, PRODUCT_VIOLATION_HANDLE, CATEGORY_MANAGE, CATEGORY_VIEW, CATEGORY_CREATE, CATEGORY_UPDATE, CATEGORY_STATUS_UPDATE, CATEGORY_DELETE,
             STOCK_VIEW, STOCK_WARNING_VIEW,
             ORDER_VIEW, ORDER_DETAIL_VIEW
     );

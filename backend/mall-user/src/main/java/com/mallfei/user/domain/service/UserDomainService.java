@@ -108,14 +108,54 @@ public class UserDomainService {
         String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1000000));
         loginSmsCodeRepository.saveLoginCode(mobile, code, LOGIN_SMS_EXPIRE_SECONDS);
         loginSmsCodeRepository.markSendCooldown(mobile, LOGIN_SMS_COOLDOWN_SECONDS);
-        String consoleMessage = String.format("[MOCK_SMS] mobile=%s, loginCode=%s, expireSeconds=%d", mobile, code, LOGIN_SMS_EXPIRE_SECONDS);
+        printMockSms("loginCode", mobile, code, LOGIN_SMS_EXPIRE_SECONDS);
+        return new SmsCodeSendResult(mobile, LOGIN_SMS_EXPIRE_SECONDS, code);
+    }
+
+    public SmsCodeSendResult sendMobileBindSmsCode(Long userId, String mobile) {
+        validateMobileBindTarget(userId, mobile);
+        if (!loginSmsCodeRepository.canSendMobileBindCode(userId, mobile)) {
+            throw BusinessException.badRequest("验证码发送过于频繁，请60秒后再试");
+        }
+        String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1000000));
+        loginSmsCodeRepository.saveMobileBindCode(userId, mobile, code, LOGIN_SMS_EXPIRE_SECONDS);
+        loginSmsCodeRepository.markMobileBindSendCooldown(userId, mobile, LOGIN_SMS_COOLDOWN_SECONDS);
+        printMockSms("mobileBindCode", mobile, code, LOGIN_SMS_EXPIRE_SECONDS);
+        return new SmsCodeSendResult(mobile, LOGIN_SMS_EXPIRE_SECONDS, code);
+    }
+
+    public UserAccount bindMobile(Long userId, String mobile, String code) {
+        validateMobileBindTarget(userId, mobile);
+        String cachedCode = loginSmsCodeRepository.getMobileBindCode(userId, mobile);
+        if (cachedCode == null || cachedCode.isBlank()) {
+            throw BusinessException.badRequest("验证码已过期，请重新获取");
+        }
+        if (!cachedCode.equals(code)) {
+            throw BusinessException.badRequest("验证码错误");
+        }
+        loginSmsCodeRepository.deleteMobileBindCode(userId, mobile);
+        UserAccount existing = loadById(userId);
+        return userAccountRepository.update(existing.withMobile(mobile));
+    }
+
+    private void validateMobileBindTarget(Long userId, String mobile) {
+        UserAccount existing = loadById(userId);
+        if (existing.mobile() != null && !existing.mobile().isBlank() && existing.mobile().equals(mobile)) {
+            throw BusinessException.badRequest("新手机号不能与当前手机号一致");
+        }
+        if (userAccountRepository.existsByMobile(mobile)) {
+            throw BusinessException.badRequest("手机号已被其他用户绑定");
+        }
+    }
+
+    private void printMockSms(String codeName, String mobile, String code, int expireSeconds) {
+        String consoleMessage = String.format("[MOCK_SMS] mobile=%s, %s=%s, expireSeconds=%d", mobile, codeName, code, expireSeconds);
         System.out.println("========================================");
         System.out.println("模拟短信验证码已生成");
         System.out.println(consoleMessage);
         System.out.println("========================================");
         System.err.println(consoleMessage);
         log.info(consoleMessage);
-        return new SmsCodeSendResult(mobile, LOGIN_SMS_EXPIRE_SECONDS, code);
     }
 
     public UserAccount loginBySmsCode(String mobile, String code) {
@@ -214,7 +254,7 @@ public class UserDomainService {
         String normalizedAvatar = (avatarUrl == null || avatarUrl.isBlank()) ? "/images/default-avatar.svg" : avatarUrl.trim();
         return userAccountRepository.save(new UserAccount(
                 null,
-                null,
+                "",
                 passwordCodec.encode(rawPassword),
                 trimmedNickname,
                 normalizedAvatar,

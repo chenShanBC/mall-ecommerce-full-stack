@@ -5,7 +5,7 @@
     <div class="section-card">
       <div class="section-title">个人资料</div>
       <div class="avatar-panel">
-        <img class="avatar-preview" :src="avatarPreview" alt="avatar" />
+        <img class="avatar-preview" :src="avatarPreview" alt="avatar" referrerpolicy="no-referrer" @error="avatarPreviewFailed = true" />
         <van-uploader
           :after-read="handleAvatarUpload"
           :max-count="1"
@@ -19,14 +19,54 @@
       <van-form @submit="handleUpdateProfile">
         <van-cell-group inset>
           <van-field v-model.trim="profileForm.nickname" label="昵称" placeholder="请输入昵称" maxlength="20" />
-          <van-field :model-value="userStore.maskedMobile" label="绑定手机号" readonly />
+          <van-field :model-value="userStore.maskedMobile" label="绑定手机号" readonly>
+            <template #button>
+              <van-button class="mobile-change-btn" size="small" native-type="button" @click.stop.prevent="openMobileBindPopup">
+                更绑手机号
+              </van-button>
+            </template>
+          </van-field>
         </van-cell-group>
-        <div class="tip">当前阶段手机号仅支持展示，换绑功能后续单独开放。</div>
+        <div class="tip">支付宝头像若因防盗链加载失败，可点击“同步第三方头像”保存到个人资料后刷新。</div>
         <div class="actions">
           <van-button round block type="primary" native-type="submit" :loading="savingProfile">保存资料</van-button>
         </div>
       </van-form>
     </div>
+
+    <van-popup v-model:show="showMobileBindPopup" round position="bottom" class="mobile-bind-popup" @closed="handleMobileBindPopupClosed">
+      <div class="popup-header">
+        <div>
+          <div class="popup-title">更换手机号</div>
+          <div class="popup-subtitle">当前手机号：{{ userStore.maskedMobile }}</div>
+        </div>
+      </div>
+      <van-form @submit="handleBindMobile">
+        <van-cell-group inset>
+          <van-field v-model.trim="mobileBindForm.mobile" label="新手机号" placeholder="请输入要绑定的新手机号" maxlength="11" />
+          <van-field v-model.trim="mobileBindForm.code" label="验证码" placeholder="请输入6位验证码" maxlength="6">
+            <template #button>
+              <van-button
+                size="small"
+                plain
+                type="primary"
+                native-type="button"
+                :disabled="mobileBindCountdown > 0"
+                :loading="sendingMobileCode"
+                @click.stop.prevent="handleSendMobileBindCode"
+              >
+                {{ mobileBindCountdown > 0 ? `${mobileBindCountdown}s` : '发送验证码' }}
+              </van-button>
+            </template>
+          </van-field>
+        </van-cell-group>
+        <div class="tip">先输入要绑定的新手机号并发送模拟验证码，验证码校验通过后完成绑定或换绑。</div>
+        <div v-if="mobileBindDebugCode" class="debug-code">模拟验证码：{{ mobileBindDebugCode }}</div>
+        <div class="actions popup-actions">
+          <van-button round block type="primary" native-type="submit" :loading="bindingMobile">确认绑定/换绑</van-button>
+        </div>
+      </van-form>
+    </van-popup>
 
     <div class="section-card">
       <div class="section-title">修改密码</div>
@@ -45,10 +85,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { showConfirmDialog, showFailToast, showLoadingToast, showSuccessToast } from 'vant';
 import { useRouter } from 'vue-router';
-import { uploadAvatar } from '../api';
+import { sendMobileBindSmsCode, uploadAvatar } from '../api';
 import { useUserStore } from '../stores/user';
 
 const router = useRouter();
@@ -69,6 +109,13 @@ const backendOrigin = (() => {
 const savingProfile = ref(false);
 const savingPassword = ref(false);
 const uploadingAvatar = ref(false);
+const avatarPreviewFailed = ref(false);
+const showMobileBindPopup = ref(false);
+const sendingMobileCode = ref(false);
+const bindingMobile = ref(false);
+const mobileBindCountdown = ref(0);
+const mobileBindDebugCode = ref('');
+let mobileBindCountdownTimer = null;
 const profileForm = reactive({
   nickname: '',
   avatarUrl: '',
@@ -77,6 +124,10 @@ const passwordForm = reactive({
   oldPassword: '',
   newPassword: '',
   confirmPassword: '',
+});
+const mobileBindForm = reactive({
+  mobile: '',
+  code: '',
 });
 
 const defaultAvatarSvg = "data:image/svg+xml;utf8," + encodeURIComponent(`
@@ -95,11 +146,7 @@ const defaultAvatarSvg = "data:image/svg+xml;utf8," + encodeURIComponent(`
 
 const normalizeAvatarPath = (url) => {
   if (!url) return url;
-  const normalizedUrl = String(url).trim().replace(/^\/upload\//i, '/uploads/');
-  if (/^https:\/\/img\.mallfei\.local\//i.test(normalizedUrl)) {
-    return '';
-  }
-  return normalizedUrl;
+  return String(url).trim().replace(/^\/upload\//i, '/uploads/');
 };
 
 const buildAvatarPathFromUploadResult = (fileInfo = {}) => {
@@ -132,9 +179,10 @@ const resolveAvatarUrl = (url) => {
   return `${backendOrigin}/${normalizedUrl}`;
 };
 
-const avatarPreview = computed(() => resolveAvatarUrl(profileForm.avatarUrl));
+const avatarPreview = computed(() => (avatarPreviewFailed.value ? defaultAvatarSvg : resolveAvatarUrl(profileForm.avatarUrl)));
 
 const syncForm = () => {
+  avatarPreviewFailed.value = false;
   profileForm.nickname = userStore.profile?.nickname || '';
   profileForm.avatarUrl = userStore.profile?.avatarUrl || '';
 };
@@ -143,6 +191,52 @@ const resetPasswordForm = () => {
   passwordForm.oldPassword = '';
   passwordForm.newPassword = '';
   passwordForm.confirmPassword = '';
+};
+
+const isValidMobile = (mobile) => /^1\d{10}$/.test(mobile || '');
+
+const startMobileBindCountdown = (seconds = 60) => {
+  mobileBindCountdown.value = seconds;
+  clearInterval(mobileBindCountdownTimer);
+  mobileBindCountdownTimer = window.setInterval(() => {
+    if (mobileBindCountdown.value <= 1) {
+      clearInterval(mobileBindCountdownTimer);
+      mobileBindCountdown.value = 0;
+      return;
+    }
+    mobileBindCountdown.value -= 1;
+  }, 1000);
+};
+
+const resetMobileBindForm = () => {
+  mobileBindForm.mobile = '';
+  mobileBindForm.code = '';
+  mobileBindDebugCode.value = '';
+  clearInterval(mobileBindCountdownTimer);
+  mobileBindCountdown.value = 0;
+};
+
+const openMobileBindPopup = () => {
+  showMobileBindPopup.value = true;
+};
+
+const handleMobileBindPopupClosed = () => {
+  if (!bindingMobile.value) {
+    resetMobileBindForm();
+  }
+};
+
+const validateMobileBindTarget = () => {
+  const mobile = mobileBindForm.mobile;
+  if (!isValidMobile(mobile)) {
+    showFailToast('请输入正确的新手机号');
+    return false;
+  }
+  if (mobile === userStore.profile?.mobile) {
+    showFailToast('新手机号不能与当前手机号一致');
+    return false;
+  }
+  return true;
 };
 
 const handleBack = () => {
@@ -238,6 +332,45 @@ const handleChangePassword = async () => {
   }
 };
 
+const handleSendMobileBindCode = async () => {
+  if (!validateMobileBindTarget()) {
+    return;
+  }
+  try {
+    sendingMobileCode.value = true;
+    const { data } = await sendMobileBindSmsCode({ mobile: mobileBindForm.mobile });
+    mobileBindDebugCode.value = data?.data?.debugCode || data?.data?.code || '';
+    startMobileBindCountdown(data?.data?.expireSeconds || 60);
+    showSuccessToast('模拟验证码已发送');
+  } catch (error) {
+    showFailToast(error?.response?.data?.message || error?.response?.data?.msg || '验证码发送失败');
+  } finally {
+    sendingMobileCode.value = false;
+  }
+};
+
+const handleBindMobile = async () => {
+  if (!validateMobileBindTarget()) {
+    return;
+  }
+  if (!/^\d{6}$/.test(mobileBindForm.code || '')) {
+    showFailToast('请输入6位验证码');
+    return;
+  }
+  try {
+    bindingMobile.value = true;
+    await userStore.bindMobile({ ...mobileBindForm });
+    await userStore.loadProfile(true);
+    showMobileBindPopup.value = false;
+    resetMobileBindForm();
+    showSuccessToast('手机号绑定成功');
+  } catch (error) {
+    showFailToast(error?.response?.data?.message || error?.response?.data?.msg || '手机号绑定失败');
+  } finally {
+    bindingMobile.value = false;
+  }
+};
+
 onMounted(async () => {
   try {
     await userStore.loadProfile();
@@ -245,6 +378,10 @@ onMounted(async () => {
   } catch (error) {
     showFailToast(error?.response?.data?.msg || '用户信息加载失败');
   }
+});
+
+onBeforeUnmount(() => {
+  clearInterval(mobileBindCountdownTimer);
 });
 </script>
 
@@ -329,7 +466,64 @@ onMounted(async () => {
   padding: 12px 16px 0;
 }
 
+.debug-code {
+  margin: 10px 16px 0;
+  padding: 10px 12px;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+}
+
 .actions {
   padding: 16px;
+}
+
+.mobile-change-btn {
+  min-width: 82px;
+  height: 28px;
+  padding: 0 12px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #5b6cff 0%, #6f7cff 100%);
+  box-shadow: 0 4px 10px rgba(91, 108, 255, 0.16);
+}
+
+.mobile-change-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 3px 8px rgba(91, 108, 255, 0.14);
+}
+
+.mobile-change-btn :deep(.van-button__text) {
+  color: #ffffff;
+}
+
+.mobile-bind-popup {
+  padding: 22px 0 calc(16px + env(safe-area-inset-bottom));
+}
+
+.popup-header {
+  padding: 0 16px 16px;
+}
+
+.popup-title {
+  color: #111827;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.popup-subtitle {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.popup-actions {
+  padding-bottom: 0;
 }
 </style>

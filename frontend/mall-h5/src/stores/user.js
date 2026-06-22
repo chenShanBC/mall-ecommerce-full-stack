@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import {
+  bindCurrentUserMobile,
   changeCurrentUserPassword,
   fetchCurrentUser,
   loginByPassword,
@@ -140,6 +141,12 @@ export const useUserStore = defineStore('user', {
     },
     async changePassword(form) {
       const { data } = await changeCurrentUserPassword(form);
+      return data.data;
+    },
+    async bindMobile(form) {
+      const { data } = await bindCurrentUserMobile(form);
+      this.profile = data.data;
+      this.profileLoaded = true;
       return data.data;
     },
     clearSession() {

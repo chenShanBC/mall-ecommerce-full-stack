@@ -2,7 +2,7 @@
   <div class="page">
     <div class="profile-hero">
       <div class="hero-main">
-        <img class="hero-avatar" :src="avatarUrl" alt="avatar" />
+        <img class="hero-avatar" :src="avatarUrl" alt="avatar" referrerpolicy="no-referrer" @click="previewAvatar" @error="handleAvatarError" />
         <div>
           <div class="hero-title">{{ profileName }}</div>
           <div class="hero-subtitle">{{ userStore.maskedMobile }}</div>
@@ -32,14 +32,15 @@
 </template>
 
 <script setup>
-import { computed, onActivated, onMounted } from 'vue';
-import { showFailToast, showSuccessToast } from 'vant';
+import { computed, onActivated, onMounted, ref } from 'vue';
+import { showFailToast, showImagePreview, showSuccessToast } from 'vant';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../stores/user';
 import { ensureAccessGate, redirectLoginWithNotice } from '../utils/requireLogin';
 
 const router = useRouter();
 const userStore = useUserStore();
+const avatarLoadFailed = ref(false);
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 const backendOrigin = (() => {
@@ -69,6 +70,9 @@ const normalizeAvatarPath = (url) => {
 };
 
 const avatarUrl = computed(() => {
+  if (avatarLoadFailed.value) {
+    return defaultAvatarSvg;
+  }
   const rawAvatarUrl = normalizeAvatarPath(userStore.profile?.avatarUrl);
   if (!rawAvatarUrl) {
     return defaultAvatarSvg;
@@ -82,6 +86,17 @@ const avatarUrl = computed(() => {
   return `${backendOrigin}/${rawAvatarUrl}`;
 });
 
+const handleAvatarError = () => {
+  avatarLoadFailed.value = true;
+};
+
+const previewAvatar = () => {
+  showImagePreview({
+    images: [avatarUrl.value],
+    closeable: true,
+  });
+};
+
 const handleLogout = async () => {
   await userStore.logout();
   showSuccessToast('已退出登录');
@@ -94,6 +109,7 @@ const ensureSession = async (force = false) => {
     if (!valid) {
       return;
     }
+    avatarLoadFailed.value = false;
   } catch {
     showFailToast('登录状态已失效，请重新登录');
     router.replace('/login');
@@ -146,6 +162,7 @@ onActivated(() => {
   object-fit: cover;
   border: 2px solid rgba(255, 255, 255, 0.35);
   background: rgba(255, 255, 255, 0.2);
+  cursor: zoom-in;
 }
 
 .hero-title {

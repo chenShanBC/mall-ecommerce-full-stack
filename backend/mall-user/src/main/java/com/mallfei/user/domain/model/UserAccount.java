@@ -68,4 +68,15 @@ public record UserAccount(
                 status
         );
     }
+
+    public UserAccount withMobile(String newMobile) {
+        return new UserAccount(
+                id,
+                newMobile,
+                passwordHash,
+                nickname,
+                avatarUrl,
+                status
+        );
+    }
 }

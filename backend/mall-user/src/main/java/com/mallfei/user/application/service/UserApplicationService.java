@@ -7,6 +7,8 @@ import com.mallfei.common.enums.IdentityType;
 import com.mallfei.user.application.dto.LoginCaptchaVerifyRequest;
 import com.mallfei.user.application.dto.UserAddressCreateRequest;
 import com.mallfei.user.application.dto.UserAddressUpdateRequest;
+import com.mallfei.user.application.dto.UserMobileBindCodeSendRequest;
+import com.mallfei.user.application.dto.UserMobileBindRequest;
 import com.mallfei.user.application.dto.UserPasswordChangeRequest;
 import com.mallfei.user.application.dto.UserPasswordLoginRequest;
 import com.mallfei.user.application.dto.UserProfileUpdateRequest;
@@ -95,6 +97,15 @@ public class UserApplicationService {
     public void changeCurrentUserPassword(UserPasswordChangeRequest request) {
         userDomainService.changePassword(currentUserId(), request.oldPassword(), request.newPassword(), request.confirmPassword());
         authFacade.logout();
+    }
+
+    public SmsCodeSendResult sendMobileBindSmsCode(UserMobileBindCodeSendRequest request) {
+        return userDomainService.sendMobileBindSmsCode(currentUserId(), request.mobile());
+    }
+
+    public UserProfileVO bindCurrentUserMobile(UserMobileBindRequest request) {
+        UserAccount updated = userDomainService.bindMobile(currentUserId(), request.mobile(), request.code());
+        return toProfileVO(updated);
     }
 
     public void logout() {

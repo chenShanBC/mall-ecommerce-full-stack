@@ -57,11 +57,12 @@ onMounted(async () => {
     const { data } = await exchangeAlipayLoginTicket({ loginTicket });
     await persistLoginResult(data.data);
     showSuccessToast('支付宝登录成功');
-    await router.replace('/home');
+    await router.replace({ path: '/home' });
   } catch (error) {
     status.value = 'error';
     message.value = error?.response?.data?.message || '支付宝登录失败，请返回登录页重试';
     showFailToast('登录处理失败');
+    await router.replace({ path: '/login', query: {} });
   } finally {
     toast.close();
   }

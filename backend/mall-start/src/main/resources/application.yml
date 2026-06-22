@@ -1,12 +1,22 @@
 server:
   port: 9090
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
 
 spring:
   application:
     name: mall-fei
+  http:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
   profiles:
     # local / cloud
-    active: ${SPRING_PROFILES_ACTIVE:cloud}
+    active: ${SPRING_PROFILES_ACTIVE:local}
   servlet:
     multipart:
       max-file-size: 2MB
@@ -83,6 +93,13 @@ mall:
       format: json
   user:
     alipay-login:
+      gateway: ${MALL_USER_ALIPAY_GATEWAY:https://openapi.alipay.com/gateway.do}
+      app-id: ${MALL_USER_ALIPAY_APP_ID:}
+      merchant-private-key: ${MALL_USER_ALIPAY_PRIVATE_KEY:}
+      alipay-public-key: ${MALL_USER_ALIPAY_PUBLIC_KEY:}
+      sign-type: RSA2
+      charset: UTF-8
+      format: json
       redirect-uri: ${MALL_USER_ALIPAY_REDIRECT_URI:https://mallfei.cloud/api/users/login/alipay/callback}
       frontend-redirect-uri: ${MALL_USER_ALIPAY_FRONTEND_REDIRECT_URI:https://mallfei.cloud/alipay-landing}
       state-expire-seconds: ${MALL_USER_ALIPAY_STATE_EXPIRE_SECONDS:300}

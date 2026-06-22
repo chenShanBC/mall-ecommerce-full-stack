@@ -46,7 +46,11 @@
               <template v-if="!isTaskArchived(row)">
                 <el-button v-if="canRunTask" size="small" type="primary" plain @click="generateLocal(row)">生成本地</el-button>
                 <el-button v-if="canImportBill && isMockTask(row)" size="small" type="warning" plain @click="generateMock(row)">生成Mock账单</el-button>
-                <el-upload v-else-if="canImportBill && isAlipayTask(row)" :show-file-list="false" accept=".csv,text/csv" :before-upload="(file) => uploadAlipayCsv(row, file)"><el-button size="small" type="warning" plain>上传支付宝CSV</el-button></el-upload>
+                <template v-else-if="canImportBill && isAlipayTask(row)">
+                  <el-upload class="inline-upload" :auto-upload="false" :show-file-list="false" accept=".csv,.zip,text/csv,application/zip" :on-change="(file) => uploadAlipayCsv(row, file)">
+                    <el-button size="small" type="primary" plain>导入渠道账单</el-button>
+                  </el-upload>
+                </template>
                 <el-button v-if="canRunTask" size="small" type="success" @click="matchTask(row)">自动勾兑</el-button>
                 <el-button v-if="canCompleteTask(row)" size="small" type="info" plain @click="completeTask(row)">完成归档</el-button>
               </template>
@@ -427,6 +431,7 @@ const toLocalDateKey = (value) => {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
+const todayKey = () => toLocalDateKey(new Date());
 const yesterdayKey = () => {
   const date = new Date();
   date.setDate(date.getDate() - 1);
@@ -434,6 +439,10 @@ const yesterdayKey = () => {
 };
 const createForm = reactive({ reconcileDate: yesterdayKey(), channel: 'MOCK', remark: '' });
 const dateKey = (value) => toLocalDateKey(value);
+const isBeforeToday = (value) => {
+  const targetDate = dateKey(value);
+  return !!targetDate && targetDate < todayKey();
+};
 const hasExistingReconcileTask = (reconcileDate, channel) => {
   const targetDate = dateKey(reconcileDate);
   const targetChannel = channel ? String(channel).toUpperCase() : '';
@@ -441,8 +450,7 @@ const hasExistingReconcileTask = (reconcileDate, channel) => {
 };
 const disableReconcileDate = (date) => {
   const targetDate = dateKey(date);
-  const yesterday = yesterdayKey();
-  return targetDate >= yesterday || hasExistingReconcileTask(targetDate, createForm.channel);
+  return targetDate >= todayKey() || hasExistingReconcileTask(targetDate, createForm.channel);
 };
 const createDateDuplicated = computed(() => hasExistingReconcileTask(createForm.reconcileDate, createForm.channel));
 const archiveSuccessRate = computed(() => {
@@ -754,6 +762,10 @@ const submitCreateTask = async () => {
     ElMessage.warning('请选择对账日期');
     return;
   }
+  if (!isBeforeToday(createForm.reconcileDate)) {
+    ElMessage.warning('只能创建今天以前账期的对账任务');
+    return;
+  }
   if (createDateDuplicated.value) {
     ElMessage.warning('该对账日期已存在任务，请选择其它日期');
     return;
@@ -790,16 +802,24 @@ const generateMock = async (row) => {
     if (error !== 'cancel') ElMessage.error(error?.response?.data?.msg || '生成Mock渠道账单失败');
   }
 };
-const uploadAlipayCsv = async (row, file) => {
+const uploadAlipayCsv = async (row, uploadFile) => {
+  const file = uploadFile?.raw;
+  if (!file) return;
+  const fileName = file.name.toLowerCase();
+  if (!fileName.endsWith('.csv') && !fileName.endsWith('.zip')) {
+    ElMessage.warning('请选择从支付宝正式应用下载的渠道账单 CSV 或 ZIP 文件');
+    return;
+  }
   try {
+    await confirmAction(`确认导入文件 ${file.name} 作为任务 ${row.taskNo} 的支付宝渠道账单吗？将覆盖已有渠道账单和差异。`);
     const { data } = await uploadAdminAlipayChannelBills(row.id, file);
     applyTaskUpdate(data.data);
-    ElMessage.success('支付宝渠道账单已上传');
+    ElMessage.success('支付宝渠道账单已导入');
     if (currentTask.value?.id === row.id) await loadAllDetailTables();
   } catch (error) {
-    ElMessage.error(error?.response?.data?.msg || '上传支付宝账单失败');
+    const message = error?.response?.data?.message || error?.response?.data?.msg || error?.message;
+    if (error !== 'cancel') ElMessage.error(message || '导入支付宝渠道账单失败');
   }
-  return false;
 };
 const matchTask = async (row) => {
   try {
@@ -1428,6 +1448,7 @@ onMounted(async () => {
 .reconcile-hero p { margin: 0; color: #64748b; }
 .reconcile-actions { display: flex; gap: 6px; flex-wrap: nowrap; justify-content: center; align-items: center; white-space: nowrap; }
 .reconcile-actions :deep(.el-button) { margin-left: 0; }
+.inline-upload { display: inline-flex; vertical-align: middle; }
 .task-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .task-summary-grid > div { padding: 16px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; display: flex; flex-direction: column; gap: 6px; }
 .task-summary-grid span { color: #64748b; font-size: 13px; }

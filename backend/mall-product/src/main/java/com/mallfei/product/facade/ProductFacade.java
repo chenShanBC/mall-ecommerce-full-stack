@@ -43,6 +43,8 @@ public class ProductFacade {
     public List<CategoryAdminView> adminCategories() { return productQueryApplicationService.adminCategories(); }
     public Category createCategory(String name, Long parentId, Integer sortOrder) { return productCommandApplicationService.createCategory(name, parentId, sortOrder); }
     public Category updateCategory(Long categoryId, String name, Long parentId, Integer sortOrder, String status) { return productCommandApplicationService.updateCategory(categoryId, name, parentId, sortOrder, status); }
+    public Category updateCategoryStatus(Long categoryId, String status) { return productCommandApplicationService.updateCategoryStatus(categoryId, status); }
+    public void deleteCategory(Long categoryId) { productCommandApplicationService.deleteCategory(categoryId); }
     public PageResponse<AdminProductPageRowView> adminProductPage(AdminProductPageQuery query) { return productQueryApplicationService.adminProductPage(query); }
     public AdminProductDetailView adminProductDetail(Long productId) { return productQueryApplicationService.adminProductDetail(productId); }
     public AdminProductSummaryView createProduct(AdminCreateProductRequest request) { return productCommandApplicationService.createProduct(request); }

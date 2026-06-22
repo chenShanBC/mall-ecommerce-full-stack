@@ -59,8 +59,19 @@ const statusDesc = computed(() => {
 
 const resolveReturnPath = () => context.value?.returnPath || '/orders';
 
-const notifyOpenerRefresh = () => {
+const resolveOrderReturnPath = () => {
   const returnPath = resolveReturnPath();
+  if (!returnPath.startsWith('/orders/')) {
+    return returnPath;
+  }
+  const [path, queryString = ''] = returnPath.split('?');
+  const params = new URLSearchParams(queryString);
+  params.set('fromPayReturn', '1');
+  return `${path}?${params.toString()}`;
+};
+
+const notifyOpenerRefresh = () => {
+  const returnPath = resolveOrderReturnPath();
   try {
     if (window.opener && !window.opener.closed) {
       const orderId = String(localStorage.getItem('mallfei:last-pay-order-id') || '');
@@ -92,7 +103,7 @@ const goOrders = () => {
 };
 
 const goBack = () => {
-  router.replace(resolveReturnPath());
+  router.replace(resolveOrderReturnPath());
 };
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

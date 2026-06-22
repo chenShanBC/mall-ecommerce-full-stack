@@ -11,10 +11,16 @@ import com.mallfei.admin.application.vo.AdminOnlineReconcileViews.HangingFollowV
 import com.mallfei.admin.application.vo.AdminOnlineReconcileViews.LocalBillItemView;
 import com.mallfei.admin.application.vo.AdminOnlineReconcileViews.OperationLogView;
 import com.mallfei.admin.application.vo.AdminOnlineReconcileViews.TaskView;
+import com.alipay.api.AlipayConfig;
+import com.alipay.api.DefaultAlipayClient;
+import com.alipay.api.domain.AlipayDataDataserviceBillDownloadurlQueryModel;
+import com.alipay.api.request.AlipayDataDataserviceBillDownloadurlQueryRequest;
+import com.alipay.api.response.AlipayDataDataserviceBillDownloadurlQueryResponse;
 import com.mallfei.auth.facade.AuthFacade;
 import com.mallfei.common.api.PageResult;
 import com.mallfei.common.auth.AuthenticatedPrincipal;
 import com.mallfei.common.exception.BusinessException;
+import com.mallfei.pay.config.AlipaySandboxProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -23,8 +29,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
@@ -39,6 +50,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 @Service
 public class AdminOnlineReconciliationApplicationService {
@@ -49,15 +62,18 @@ public class AdminOnlineReconciliationApplicationService {
     private final AuthFacade authFacade;
     private final AdminAccountManagementApplicationService adminAccountManagementApplicationService;
     private final AdminPayManagementApplicationService adminPayManagementApplicationService;
+    private final AlipaySandboxProperties alipayProperties;
 
     public AdminOnlineReconciliationApplicationService(JdbcTemplate jdbcTemplate,
                                                        AuthFacade authFacade,
                                                        AdminAccountManagementApplicationService adminAccountManagementApplicationService,
-                                                       AdminPayManagementApplicationService adminPayManagementApplicationService) {
+                                                       AdminPayManagementApplicationService adminPayManagementApplicationService,
+                                                       AlipaySandboxProperties alipayProperties) {
         this.jdbcTemplate = jdbcTemplate;
         this.authFacade = authFacade;
         this.adminAccountManagementApplicationService = adminAccountManagementApplicationService;
         this.adminPayManagementApplicationService = adminPayManagementApplicationService;
+        this.alipayProperties = alipayProperties;
     }
 
     public PageResult<TaskView> tasks(String status, String channel, long page, long size) {
@@ -86,12 +102,12 @@ public class AdminOnlineReconciliationApplicationService {
     public TaskView createTask(AdminReconcileTaskCreateRequest request) {
         requireAdmin();
         if (!request.reconcileDate().isBefore(LocalDate.now())) {
-            throw BusinessException.badRequest("只能创建今天以前的对账任务，请选择历史账期");
+            throw BusinessException.badRequest("只能创建今天以前账期的对账任务，请选择历史日期");
         }
         String channel = normalizeTaskChannel(request.channel());
         Long existingCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM pay_reconcile_task WHERE reconcile_date = ? AND channel = ?", Long.class, request.reconcileDate(), channel);
         if (existingCount != null && existingCount > 0) {
-            throw BusinessException.badRequest("该渠道下该对账日期已存在任务，请选择其它日期或渠道");
+            throw BusinessException.badRequest("该渠道下该对账日期已存在任务，不能重复创建");
         }
         String taskNo = "RC" + request.reconcileDate().format(TASK_NO_DATE) + channel + System.currentTimeMillis() % 100000;
         jdbcTemplate.update("INSERT INTO pay_reconcile_task(task_no,reconcile_date,channel,status,local_bill_status,channel_bill_status,match_status,remark,created_at) VALUES(?,?,?,?,?,?,?,?,NOW())",
@@ -172,6 +188,30 @@ public class AdminOnlineReconciliationApplicationService {
         refreshChannelStats(taskId);
         jdbcTemplate.update("UPDATE pay_reconcile_task SET status = CASE WHEN local_bill_status = 'READY' THEN 'CHANNEL_BILL_READY' ELSE 'CREATED' END, channel_bill_status = 'READY', match_status = 'NOT_MATCHED', updated_at = NOW() WHERE id = ?", taskId);
         adminAccountManagementApplicationService.recordOperation("RECONCILIATION", "ONLINE_RECONCILE_MOCK_CHANNEL_BILL_GENERATE", "生成Mock渠道账单：taskId=" + taskId + "，mode=" + resolvedMode, "SUCCESS");
+        return loadTask(taskId);
+    }
+
+    @Transactional
+    public TaskView downloadAlipayChannelBills(Long taskId) {
+        requireAdmin();
+        TaskView task = ensureMutableTask(taskId);
+        if (!"ALIPAY".equals(task.channel())) {
+            throw BusinessException.badRequest("当前任务不是支付宝渠道任务，不能下载支付宝账单");
+        }
+        byte[] billContent = downloadAlipayPlatformBill(task.reconcileDate());
+        List<AlipayChannelBillRow> rows = parseAlipayChannelBill(billContent);
+        if (rows.isEmpty()) {
+            throw BusinessException.badRequest("支付宝平台账单已下载，但未解析到有效流水。请确认沙箱账单是否已生成、账期是否正确，或稍后重试");
+        }
+        jdbcTemplate.update("DELETE FROM pay_reconcile_diff_item WHERE task_id = ?", taskId);
+        jdbcTemplate.update("DELETE FROM pay_reconcile_channel_bill_item WHERE task_id = ?", taskId);
+        for (AlipayChannelBillRow row : rows) {
+            jdbcTemplate.update("INSERT INTO pay_reconcile_channel_bill_item(task_id,biz_type,channel,out_trade_no,order_no,pay_order_no,refund_no,channel_trade_no,channel_refund_no,channel_status,amount_cent,fee_cent,trade_time,raw_line,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())",
+                    taskId, row.bizType(), task.channel(), row.outTradeNo(), row.orderNo(), row.payOrderNo(), row.refundNo(), row.channelTradeNo(), row.channelRefundNo(), row.channelStatus(), row.amountCent(), row.feeCent(), row.tradeTime(), row.rawLine());
+        }
+        refreshChannelStats(taskId);
+        jdbcTemplate.update("UPDATE pay_reconcile_task SET status = CASE WHEN local_bill_status = 'READY' THEN 'CHANNEL_BILL_READY' ELSE 'CREATED' END, channel_bill_status = 'READY', match_status = 'NOT_MATCHED', updated_at = NOW() WHERE id = ?", taskId);
+        adminAccountManagementApplicationService.recordOperation("RECONCILIATION", "ONLINE_RECONCILE_ALIPAY_CHANNEL_BILL_DOWNLOAD", "下载支付宝平台CSV账单：taskId=" + taskId + "，账期=" + task.reconcileDate(), "SUCCESS");
         return loadTask(taskId);
     }
 
@@ -476,9 +516,48 @@ public class AdminOnlineReconciliationApplicationService {
     }
 
     private List<AlipayChannelBillRow> parseAlipayChannelBill(MultipartFile file) {
+        try {
+            byte[] content = file.getBytes();
+            String filename = Objects.toString(file.getOriginalFilename(), "").toLowerCase();
+            if (filename.endsWith(".zip") || isZipContent(content)) {
+                return parseAlipayChannelBillZip(content);
+            }
+            return parseAlipayChannelBill(content);
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception error) {
+            throw BusinessException.badRequest("支付宝渠道账单读取失败：" + error.getMessage());
+        }
+    }
+
+    private List<AlipayChannelBillRow> parseAlipayChannelBillZip(byte[] content) {
+        List<AlipayChannelBillRow> rows = new ArrayList<>();
+        try (ZipInputStream zipInputStream = new ZipInputStream(new ByteArrayInputStream(content), java.nio.charset.Charset.forName("GBK"))) {
+            ZipEntry entry;
+            while ((entry = zipInputStream.getNextEntry()) != null) {
+                if (entry.isDirectory() || !entry.getName().toLowerCase().endsWith(".csv")) {
+                    continue;
+                }
+                byte[] csvContent = zipInputStream.readAllBytes();
+                rows.addAll(parseAlipayChannelBill(csvContent));
+            }
+        } catch (Exception error) {
+            throw BusinessException.badRequest("支付宝渠道账单 ZIP 解析失败：" + error.getMessage());
+        }
+        if (rows.isEmpty()) {
+            throw BusinessException.badRequest("支付宝渠道账单 ZIP 中未解析到有效 CSV 流水");
+        }
+        return rows;
+    }
+
+    private boolean isZipContent(byte[] content) {
+        return content != null && content.length >= 4 && content[0] == 'P' && content[1] == 'K';
+    }
+
+    private List<AlipayChannelBillRow> parseAlipayChannelBill(byte[] content) {
         List<AlipayChannelBillRow> rows = new ArrayList<>();
         Charset charset = StandardCharsets.UTF_8;
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), charset))) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(content), charset))) {
             List<String> headers = null;
             String line;
             while ((line = reader.readLine()) != null) {
@@ -517,9 +596,65 @@ public class AdminOnlineReconciliationApplicationService {
         return new AlipayChannelBillRow(bizType, outTradeNo, orderNo, payOrderNo, refundNo, channelTradeNo, channelRefundNo, normalizedStatus, amountCent == null ? 0L : Math.abs(amountCent), feeCent == null ? 0L : Math.abs(feeCent), tradeTime, rawLine);
     }
 
+    private byte[] downloadAlipayPlatformBill(LocalDate billDate) {
+        ensureAlipayConfigured();
+        try {
+            AlipayDataDataserviceBillDownloadurlQueryModel model = new AlipayDataDataserviceBillDownloadurlQueryModel();
+            model.setBillType("trade");
+            model.setBillDate(billDate.toString());
+
+            AlipayDataDataserviceBillDownloadurlQueryRequest request = new AlipayDataDataserviceBillDownloadurlQueryRequest();
+            request.setBizModel(model);
+
+            AlipayDataDataserviceBillDownloadurlQueryResponse response = createAlipaySdkClient().execute(request);
+            if (response == null || !response.isSuccess() || blank(response.getBillDownloadUrl())) {
+                String reason = response == null ? "支付宝无响应" : firstNonBlank(response.getSubMsg(), response.getMsg(), response.getBody());
+                throw BusinessException.badRequest("支付宝平台账单下载地址查询失败：" + reason);
+            }
+            HttpRequest downloadRequest = HttpRequest.newBuilder(URI.create(response.getBillDownloadUrl())).GET().build();
+            HttpResponse<byte[]> downloadResponse = HttpClient.newHttpClient().send(downloadRequest, HttpResponse.BodyHandlers.ofByteArray());
+            if (downloadResponse.statusCode() < 200 || downloadResponse.statusCode() >= 300 || downloadResponse.body() == null || downloadResponse.body().length == 0) {
+                throw BusinessException.badRequest("支付宝平台账单文件下载失败，HTTP状态码：" + downloadResponse.statusCode());
+            }
+            return downloadResponse.body();
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw BusinessException.badRequest("支付宝平台账单下载失败：" + exception.getMessage());
+        }
+    }
+
+    private com.alipay.api.AlipayClient createAlipaySdkClient() throws Exception {
+        AlipayConfig config = new AlipayConfig();
+        config.setServerUrl(alipayProperties.getGateway());
+        config.setAppId(alipayProperties.getAppId());
+        config.setPrivateKey(alipayProperties.getMerchantPrivateKey());
+        config.setFormat(alipayProperties.getFormat());
+        config.setCharset(alipayProperties.getCharset());
+        config.setSignType(alipayProperties.getSignType());
+        config.setAlipayPublicKey(alipayProperties.getAlipayPublicKey());
+        return new DefaultAlipayClient(config);
+    }
+
+    private void ensureAlipayConfigured() {
+        if (!alipayProperties.isEnabled()) {
+            throw BusinessException.badRequest("支付宝沙箱未启用，请先开启 mall.pay.alipay.enabled");
+        }
+        if (blank(alipayProperties.getAppId()) || blank(alipayProperties.getMerchantPrivateKey()) || blank(alipayProperties.getAlipayPublicKey())) {
+            throw BusinessException.badRequest("支付宝沙箱配置不完整，请补齐 appId、merchantPrivateKey、alipayPublicKey");
+        }
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (!blank(value)) return value;
+        }
+        return "未知错误";
+    }
+
     private String channelStatusOf(String bizType, String localStatus) {
         if ("PAY".equals(bizType)) {
-            if ("SUCCESS".equals(localStatus) || "REFUNDED".equals(localStatus) || "PARTIALLY_REFUNDED".equals(localStatus)) return "TRADE_SUCCESS";
+            if ("SUCCESS".equals(localStatus)) return "TRADE_SUCCESS";
             if ("CLOSED".equals(localStatus)) return "TRADE_CLOSED";
             return "WAIT_BUYER_PAY";
         }

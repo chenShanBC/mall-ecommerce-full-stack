@@ -92,6 +92,10 @@ export function updateAdminProductStatus(productId, data) { return request.patch
 export function handleAdminProductViolation(productId, data) { return request.post(`/api/admin/products/${productId}/violation-handle`, data); }
 export function uploadProductImage(file) { const formData = new FormData(); formData.append('file', file); return request.post('/api/files/product-image', formData, { headers: { 'Content-Type': 'multipart/form-data' } }); }
 export function fetchAdminCategories() { return request.get('/api/admin/categories'); }
+export function createAdminCategory(data) { return request.post('/api/admin/categories', data); }
+export function updateAdminCategory(categoryId, data) { return request.put(`/api/admin/categories/${categoryId}`, data); }
+export function updateAdminCategoryStatus(categoryId, data) { return request.patch(`/api/admin/categories/${categoryId}/status`, data); }
+export function deleteAdminCategory(categoryId) { return request.delete(`/api/admin/categories/${categoryId}`); }
 export function fetchAdminStocks(params = {}) { return request.get('/api/admin/stocks', { params }); }
 export function fetchAdminTodayActiveStocks(params = {}) { return request.get('/api/admin/stocks/today-active', { params }); }
 export function fetchWarningStocks(params = {}) { return request.get('/api/admin/stocks/warnings', { params }); }

@@ -536,6 +536,7 @@ const defaultRoleMeta = { code: 'OPERATIONS', label: '运营', title: '运营驾
 const currentRoleMeta = computed(() => DASHBOARD_ROLES.find((role) => role.code === activeRole.value) || DASHBOARD_ROLES[0] || defaultRoleMeta);
 const currentData = computed(() => state?.[activeRole.value] || {});
 const productSnapshot = ref({ products: [], total: 0 });
+const productCategorySnapshot = ref({ total: 0, enabled: 0 });
 const summary = computed(() => currentData.value?.summary || {});
 const overview = computed(() => currentData.value?.overview || {});
 const risks = computed(() => currentData.value?.risks || currentData.value?.todos || []);
@@ -736,7 +737,7 @@ const refreshCurrentRole = async () => {
   resetRole(activeRole.value, { clearState: false, clearCache: true });
   await loadCurrentRole({ force: true });
   if (activeRole.value === 'PRODUCTS') {
-    await Promise.all([loadHotLowStockRows(), loadSlowHighStockRows()]);
+    await Promise.all([loadHotLowStockRows(), loadSlowHighStockRows(), loadProductCategorySnapshot()]);
   }
 };
 
@@ -1068,7 +1069,8 @@ const toggleProductDistributionBand = (band) => {
 
 const productMeta = computed(() => ({
   total: productOverview.value.productTotal || 0,
-  onSale: productOverview.value.onSaleCount || 0,
+  categoryTotal: productCategorySnapshot.value.total || 0,
+  enabledCategory: productCategorySnapshot.value.enabled || 0,
   hot: productOverview.value.hotCount || 0,
   slow: productOverview.value.slowCount || 0,
   lowStockHot: hotLowStockDisplayCount.value,
@@ -1137,7 +1139,7 @@ const managementMeta = computed(() => {
       primaryLabel: '商品总数',
       primaryValue: productMeta.value.total,
       metrics: [
-        { label: '上架', value: productMeta.value.onSale },
+        { label: '商品分类', value: productMeta.value.categoryTotal },
         { label: '热销', value: productMeta.value.hot },
         { label: '滞销', value: productMeta.value.slow },
         { label: '热销低库存商品', value: hotLowStockDisplayCount.value },
@@ -2256,6 +2258,19 @@ const loadProductSnapshot = async () => {
   }
 };
 
+const loadProductCategorySnapshot = async () => {
+  try {
+    const { data } = await fetchAdminCategories();
+    const rows = data?.data || [];
+    productCategorySnapshot.value = {
+      total: rows.length,
+      enabled: rows.filter((item) => String(item.status || '').toUpperCase() === 'ENABLED').length,
+    };
+  } catch (error) {
+    productCategorySnapshot.value = { total: 0, enabled: 0 };
+  }
+};
+
 onMounted(async () => {
   const routeRole = normalizeDashboardRole(route.query.role);
   if (routeRole && routeRole !== activeRole.value) {
@@ -2263,7 +2278,7 @@ onMounted(async () => {
   }
   handleRoleVisibility();
   await syncDashboardRoleRoute(activeRole.value);
-  await Promise.all([loadCurrentRole(), loadProductSnapshot()]);
+  await Promise.all([loadCurrentRole(), loadProductSnapshot(), loadProductCategorySnapshot()]);
   if (activeRole.value === 'PRODUCTS') {
     await Promise.all([loadHotLowStockRows(), loadSlowHighStockRows()]);
   }

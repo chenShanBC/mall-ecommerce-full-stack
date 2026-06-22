@@ -38,12 +38,35 @@ public class ProductDomainService {
     }
 
     public Category createCategory(String name, Long parentId, Integer sortOrder) {
-        return categoryRepository.save(Category.create(name, parentId, sortOrder));
+        validateCategoryName(name);
+        validateCategoryNameUnique(null, name);
+        validateCategoryParent(null, parentId);
+        return categoryRepository.save(Category.create(name.trim(), parentId, sortOrder));
     }
 
     public Category updateCategory(Long categoryId, String name, Long parentId, Integer sortOrder, String status) {
         Category existing = loadCategory(categoryId);
-        return categoryRepository.update(existing.applyUpdate(name, parentId, sortOrder, status));
+        validateCategoryName(name);
+        validateCategoryNameUnique(categoryId, name);
+        validateCategoryParent(categoryId, parentId);
+        return categoryRepository.update(existing.applyUpdate(name.trim(), parentId, sortOrder, status));
+    }
+
+    public Category updateCategoryStatus(Long categoryId, String status) {
+        Category existing = loadCategory(categoryId);
+        return categoryRepository.update(existing.applyStatus(status));
+    }
+
+    public void deleteCategory(Long categoryId) {
+        loadCategory(categoryId);
+        boolean hasChildren = categoryRepository.findAll().stream().anyMatch(category -> categoryId.equals(category.parentId()));
+        if (hasChildren) {
+            throw BusinessException.badRequest("该分类下存在子分类，不能删除");
+        }
+        if (productRepository.countByCategoryId(categoryId) > 0) {
+            throw BusinessException.badRequest("该分类下存在商品，不能删除");
+        }
+        categoryRepository.softDelete(categoryId);
     }
 
     public List<ProductSpu> loadOnlineProducts() {
@@ -111,6 +134,38 @@ public class ProductDomainService {
 
     private ProductSpu buildProductSpu(Long id, String name, Long categoryId, String mainImageUrl, String description, String status, List<ProductSku> skus) {
         return ProductSpu.create(id, name, categoryId, mainImageUrl, "[]", description, status, skus);
+    }
+
+    private void validateCategoryName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            throw BusinessException.badRequest("类目名称不能为空");
+        }
+        if (name.trim().length() > 64) {
+            throw BusinessException.badRequest("类目名称不能超过64个字符");
+        }
+    }
+
+    private void validateCategoryNameUnique(Long categoryId, String name) {
+        String normalizedName = name == null ? "" : name.trim();
+        boolean duplicated = categoryRepository.findAll().stream()
+                .anyMatch(category -> normalizedName.equals(category.name()) && !category.id().equals(categoryId));
+        if (duplicated) {
+            throw BusinessException.badRequest("分类名称已存在，请使用其他名称");
+        }
+    }
+
+    private void validateCategoryParent(Long categoryId, Long parentId) {
+        Long normalizedParentId = parentId == null ? 0L : parentId;
+        if (normalizedParentId <= 0) {
+            return;
+        }
+        if (normalizedParentId.equals(categoryId)) {
+            throw BusinessException.badRequest("父类目不能选择自身");
+        }
+        Category parent = loadCategory(normalizedParentId);
+        if (parent.level() != null && parent.level() >= 2) {
+            throw BusinessException.badRequest("当前仅支持二级类目");
+        }
     }
 
     private void validateInitialStock(List<Integer> initialStocks) {

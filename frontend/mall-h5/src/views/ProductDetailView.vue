@@ -5,7 +5,10 @@
     <van-loading v-if="loading" size="24px" vertical class="loading-block">加载中...</van-loading>
 
     <template v-else-if="product">
-      <img class="banner" :src="activeBanner" :alt="product.name" @error="handleBannerImageError" />
+      <div class="banner-card" @click="previewProductImages">
+        <img class="banner" :src="activeBanner" :alt="product.name" @error="handleBannerImageError" />
+        <div class="preview-hint">点击查看大图</div>
+      </div>
 
       <div class="info-card">
         <div class="price-row">
@@ -68,7 +71,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { showFailToast, showSuccessToast } from 'vant';
+import { showFailToast, showImagePreview, showSuccessToast } from 'vant';
 import { addCartItem, fetchProductDetail } from '../api';
 import FloatingCartButton from '../components/FloatingCartButton.vue';
 import { useUserStore } from '../stores/user';
@@ -194,6 +197,20 @@ const handleBannerImageError = (event) => {
     return;
   }
   bannerImageFailedUrls.value = new Set([...bannerImageFailedUrls.value, failedUrl]);
+};
+
+const previewProductImages = () => {
+  const images = imageCandidates.value.filter((url) => !bannerImageFailedUrls.value.has(url));
+  const previewImages = images.length > 0 ? images : [activeBanner.value].filter(Boolean);
+  if (previewImages.length === 0) {
+    return;
+  }
+  const startPosition = Math.max(previewImages.indexOf(activeBanner.value), 0);
+  showImagePreview({
+    images: previewImages,
+    startPosition,
+    closeable: true,
+  });
 };
 
 const getSkuUnavailableText = (sku = {}) => {
@@ -340,16 +357,51 @@ onMounted(async () => {
   padding-top: 80px;
 }
 
-.banner {
-  display: block;
+.banner-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: calc(100% - 24px);
   height: 320px;
   margin: 12px;
-  object-fit: cover;
-  background: linear-gradient(135deg, #eef2ff 0%, #dbeafe 100%);
-  border-radius: 30px;
+  overflow: hidden;
+  background:
+    linear-gradient(45deg, rgba(226, 232, 240, 0.48) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(226, 232, 240, 0.48) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(226, 232, 240, 0.48) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(226, 232, 240, 0.48) 75%),
+    linear-gradient(135deg, #ffffff 0%, #edf4ff 100%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
   border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 30px;
   box-shadow: 0 24px 60px rgba(108, 123, 225, 0.14);
+  cursor: zoom-in;
+}
+
+.banner {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.preview-hint {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  padding: 6px 10px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  background: rgba(15, 23, 42, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16);
+  pointer-events: none;
 }
 
 .info-card {

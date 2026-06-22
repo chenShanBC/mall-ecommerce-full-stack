@@ -5,6 +5,8 @@ import com.mallfei.common.auth.RequireUser;
 import com.mallfei.user.application.dto.AlipayJsapiLoginRequest;
 import com.mallfei.user.application.dto.AlipayLoginExchangeRequest;
 import com.mallfei.user.application.dto.LoginCaptchaVerifyRequest;
+import com.mallfei.user.application.dto.UserMobileBindCodeSendRequest;
+import com.mallfei.user.application.dto.UserMobileBindRequest;
 import com.mallfei.user.application.dto.UserPasswordChangeRequest;
 import com.mallfei.user.application.dto.UserPasswordLoginRequest;
 import com.mallfei.user.application.dto.UserProfileUpdateRequest;
@@ -142,5 +144,19 @@ public class UserAuthController {
     public ApiResponse<?> changePassword(@Valid @RequestBody UserPasswordChangeRequest request) {
         userApplicationService.changeCurrentUserPassword(request);
         return ApiResponse.success("密码修改成功，请重新登录", Boolean.TRUE);
+    }
+
+    @RequireUser
+    @Operation(summary = "发送手机号绑定/换绑验证码")
+    @PostMapping("/me/mobile/send-code")
+    public ApiResponse<?> sendMobileBindCode(@Valid @RequestBody UserMobileBindCodeSendRequest request) {
+        return ApiResponse.success("验证码发送成功", userApplicationService.sendMobileBindSmsCode(request));
+    }
+
+    @RequireUser
+    @Operation(summary = "绑定/换绑当前用户手机号")
+    @PutMapping("/me/mobile")
+    public ApiResponse<?> bindMobile(@Valid @RequestBody UserMobileBindRequest request) {
+        return ApiResponse.success("手机号绑定成功", userApplicationService.bindCurrentUserMobile(request));
     }
 }

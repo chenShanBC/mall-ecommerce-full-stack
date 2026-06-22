@@ -65,20 +65,18 @@
     </div>
 
     <div class="third-login-wrap">
-      <van-button block plain type="primary" :loading="loading" :disabled="isLocalAlipayLoginDisabled" @click="handleAlipayLogin">
+      <van-button class="alipay-login-btn" block plain type="primary" :loading="loading" @click="handleAlipayLogin">
         支付宝快捷登录
       </van-button>
-      <div class="third-login-tip">
-        {{ isLocalAlipayLoginDisabled ? '本地开发暂不可用，需公网 HTTPS 回调后再开启' : '首次登录将自动创建账号并完成绑定' }}
-      </div>
+      <div class="third-login-tip">仅支持手机网页端，将跳转支付宝内部打开并运行该网站</div>
     </div>
 
     <van-popup v-model:show="showAlipayGuide" round class="alipay-guide-popup">
       <div class="alipay-guide">
         <div class="guide-title">浏览器唤起支付宝说明</div>
         <div class="guide-desc">
-          正在使用系统浏览器时，点击下方按钮会直接唤起支付宝授权。
-          若未唤起，请检查是否安装支付宝，并允许浏览器打开外部应用。
+          正在使用系统浏览器时，点击下方按钮会打开支付宝授权页。
+          正式环境会尝试唤起支付宝，沙箱环境会直接打开沙箱授权页。
         </div>
         <div class="guide-actions guide-actions-secondary">
           <van-button size="small" type="primary" :loading="wakeupLoading" :disabled="wakeupCooldown" @click="openAlipayAuthUrl">立即唤起支付宝授权</van-button>
@@ -476,7 +474,9 @@ const handleRegister = async () => {
 };
 const isAlipayWebView = () => /AlipayClient/i.test(navigator.userAgent || '');
 
+const isAlipaySandboxAuthUrl = (authUrl) => /(?:^|\.)alipaydev\.com/i.test(authUrl || '');
 const buildAlipaySchemeUrl = (authUrl) => `alipays://platformapi/startapp?appId=20000067&url=${encodeURIComponent(authUrl)}`;
+const resolveAlipayJumpUrl = (authUrl) => (isAlipaySandboxAuthUrl(authUrl) ? authUrl : buildAlipaySchemeUrl(authUrl));
 
 const persistLoginResult = async (result) => {
   userStore.token = result.token;
@@ -487,55 +487,64 @@ const persistLoginResult = async (result) => {
   await router.replace('/home');
 };
 
-const loginByAlipayJsapi = async () => {
-  if (!window.ap || typeof window.ap.getAuthCode !== 'function') {
-    showFailToast('当前环境不支持支付宝授权，请在支付宝内打开');
-    return false;
+const requestAlipayAuthCode = () => new Promise((resolve, reject) => {
+  if (window.ap && typeof window.ap.getAuthCode === 'function') {
+    window.ap.getAuthCode({ scopes: ['auth_user'] }, resolve);
+    return;
   }
-  return new Promise((resolve) => {
-    window.ap.getAuthCode({ scopes: ['auth_user'] }, async (res) => {
-      try {
-        const authCode = res?.authCode;
-        if (!authCode) {
-          showFailToast('未获取到支付宝授权码');
-          resolve(false);
-          return;
-        }
-        const { data } = await exchangeAlipayJsapiAuthCode({ authCode });
-        await persistLoginResult(data.data);
-        resolve(true);
-      } catch (error) {
-        const normalized = normalizeLoginError(error, '支付宝授权登录失败');
-        showAuthError(error, normalized.message);
-        resolve(false);
-      }
-    });
-  });
-};
+  if (window.AlipayJSBridge && typeof window.AlipayJSBridge.call === 'function') {
+    window.AlipayJSBridge.call('getAuthCode', { scopes: ['auth_user'] }, resolve);
+    return;
+  }
+  const onBridgeReady = () => {
+    document.removeEventListener('AlipayJSBridgeReady', onBridgeReady);
+    if (window.AlipayJSBridge && typeof window.AlipayJSBridge.call === 'function') {
+      window.AlipayJSBridge.call('getAuthCode', { scopes: ['auth_user'] }, resolve);
+    } else {
+      reject(new Error('当前支付宝环境不支持授权'));
+    }
+  };
+  document.addEventListener('AlipayJSBridgeReady', onBridgeReady, { once: true });
+  window.setTimeout(() => {
+    document.removeEventListener('AlipayJSBridgeReady', onBridgeReady);
+    reject(new Error('支付宝授权组件加载超时'));
+  }, 3000);
+});
 
-const handleAlipayLogin = async () => {
-  if (isLocalAlipayLoginDisabled) {
-    showFailToast('本地开发暂不可用，请先使用密码/验证码登录');
-    return;
-  }
-  if (!isAlipayWebView()) {
-    showAlipayGuide.value = true;
-    return;
-  }
+const extractAlipayAuthCode = (result = {}) => result.authCode || result.auth_code || result.code;
+
+const loginByAlipayJsapi = async () => {
   try {
-    loading.value = true;
-    await loginByAlipayJsapi();
-  } finally {
-    loading.value = false;
+    const res = await requestAlipayAuthCode();
+    const authCode = extractAlipayAuthCode(res);
+    if (!authCode) {
+      showFailToast('正在重新发起支付宝授权');
+      await openAlipayAuthUrl();
+      return false;
+    }
+    const { data } = await exchangeAlipayJsapiAuthCode({ authCode });
+    await persistLoginResult(data.data);
+    return true;
+  } catch (error) {
+    if (error?.response) {
+      const normalized = normalizeLoginError(error, '支付宝授权登录失败');
+      showAuthError(error, normalized.message);
+    } else {
+      showFailToast('正在重新发起支付宝授权');
+      await openAlipayAuthUrl();
+    }
+    return false;
   }
 };
 
 const openAlipayAuthUrl = async () => {
   if (wakeupLoading.value || wakeupCooldown.value) {
+    showFailToast('正在打开支付宝授权，请稍候');
     return;
   }
   try {
     wakeupLoading.value = true;
+    showSuccessToast('正在打开支付宝授权');
     const { data } = await fetchAlipayLoginAuthUrl();
     const authUrl = data?.data?.authUrl;
     if (!authUrl) {
@@ -543,14 +552,23 @@ const openAlipayAuthUrl = async () => {
       return;
     }
     wakeupCooldown.value = true;
-    window.location.href = buildAlipaySchemeUrl(authUrl);
+    window.location.assign(resolveAlipayJumpUrl(authUrl));
     wakeupCooldownTimer = window.setTimeout(() => {
       wakeupCooldown.value = false;
     }, 2500);
   } catch (error) {
-    showFailToast(error?.response?.data?.message || '唤起支付宝失败');
+    showFailToast(error?.response?.data?.message || error?.response?.data?.msg || '唤起支付宝失败，请稍后重试');
   } finally {
     wakeupLoading.value = false;
+  }
+};
+
+const handleAlipayLogin = async () => {
+  try {
+    loading.value = true;
+    await openAlipayAuthUrl();
+  } finally {
+    loading.value = false;
   }
 };
 
@@ -884,12 +902,21 @@ onBeforeUnmount(() => {
   padding: 12px;
   background: #fff;
   border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.alipay-login-btn {
+  height: 42px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 999px;
 }
 
 .third-login-tip {
   margin-top: 8px;
   color: #64748b;
   font-size: 12px;
+  line-height: 1.5;
   text-align: center;
 }
 

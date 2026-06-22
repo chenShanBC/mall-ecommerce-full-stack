@@ -23,6 +23,8 @@ public interface ProductRepository {
 
     Optional<ProductSpu> findBySkuId(Long skuId);
 
+    long countByCategoryId(Long categoryId);
+
     ProductSpu save(ProductSpu productSpu);
 
     ProductSpu update(ProductSpu productSpu);

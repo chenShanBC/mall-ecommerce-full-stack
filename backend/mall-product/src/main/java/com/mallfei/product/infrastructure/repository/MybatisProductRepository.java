@@ -73,6 +73,14 @@ public class MybatisProductRepository implements ProductRepository {
     }
 
     @Override
+    public long countByCategoryId(Long categoryId) {
+        if (categoryId == null) return 0;
+        return productSpuMapper.selectCount(new LambdaQueryWrapper<ProductSpuDO>()
+                .eq(ProductSpuDO::getCategoryId, categoryId)
+                .isNull(ProductSpuDO::getDeletedAt));
+    }
+
+    @Override
     @Transactional
     public ProductSpu save(ProductSpu productSpu) {
         ProductSpuDO spuDO = toSpuDO(productSpu);

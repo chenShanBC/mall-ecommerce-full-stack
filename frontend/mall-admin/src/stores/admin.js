@@ -27,7 +27,7 @@ export const useAdminStore = defineStore('admin', {
     getFirstAccessiblePath() {
       const entries = [
         { permission: 'dashboard:view', path: '/dashboard' },
-        { permission: 'product:view', path: '/products' },
+        { permissions: ['product:view', 'category:view', 'category:manage'], path: '/products' },
         { permission: 'order:view', path: '/orders' },
         { permission: 'stock:view', path: '/stocks' },
         { permission: 'payment:view', path: '/pays' },
@@ -37,7 +37,7 @@ export const useAdminStore = defineStore('admin', {
         { permission: 'admin:view', path: '/accounts' },
         { permission: 'log:operation:view', path: '/operation-logs' },
       ];
-      return entries.find((item) => this.hasPermission(item.permission))?.path || '/profile';
+      return entries.find((item) => item.permissions ? this.hasAnyPermission(item.permissions) : this.hasPermission(item.permission))?.path || '/profile';
     },
     persistProfile() {
       if (this.profile) {

@@ -73,6 +73,14 @@ export function changeCurrentUserPassword(data) {
   return request.put('/api/users/me/password', data);
 }
 
+export function sendMobileBindSmsCode(data) {
+  return request.post('/api/users/me/mobile/send-code', data);
+}
+
+export function bindCurrentUserMobile(data) {
+  return request.put('/api/users/me/mobile', data);
+}
+
 export function uploadAvatar(file) {
   const formData = new FormData();
   formData.append('file', file);

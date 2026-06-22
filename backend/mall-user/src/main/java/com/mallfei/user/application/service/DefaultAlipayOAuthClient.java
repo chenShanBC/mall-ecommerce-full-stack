@@ -7,15 +7,15 @@ import com.alipay.api.request.AlipayUserInfoShareRequest;
 import com.alipay.api.response.AlipaySystemOauthTokenResponse;
 import com.alipay.api.response.AlipayUserInfoShareResponse;
 import com.mallfei.common.exception.BusinessException;
-import com.mallfei.pay.config.AlipaySandboxProperties;
+import com.mallfei.user.config.UserAlipayLoginProperties;
 import org.springframework.stereotype.Component;
 
 @Component
 public class DefaultAlipayOAuthClient implements AlipayOAuthClient {
 
-    private final AlipaySandboxProperties props;
+    private final UserAlipayLoginProperties props;
 
-    public DefaultAlipayOAuthClient(AlipaySandboxProperties props) {
+    public DefaultAlipayOAuthClient(UserAlipayLoginProperties props) {
         this.props = props;
     }
 
@@ -29,7 +29,7 @@ public class DefaultAlipayOAuthClient implements AlipayOAuthClient {
             if (resp == null || !resp.isSuccess()) {
                 throw BusinessException.badRequest("支付宝授权码换取令牌失败");
             }
-            return new AlipayOAuthTokenResult(resp.getAccessToken(), resp.getUserId());
+            return new AlipayOAuthTokenResult(resp.getAccessToken(), firstNotBlank(resp.getUserId(), resp.getOpenId()));
         } catch (Exception e) {
             throw BusinessException.badRequest("支付宝授权登录失败，请重试");
         }
@@ -43,10 +43,14 @@ public class DefaultAlipayOAuthClient implements AlipayOAuthClient {
             if (resp == null || !resp.isSuccess()) {
                 throw BusinessException.badRequest("支付宝用户信息获取失败");
             }
-            return new AlipayOAuthUserInfo(resp.getUserId(), resp.getNickName(), resp.getAvatar());
+            return new AlipayOAuthUserInfo(resp.getUserId(), resp.getOpenId(), resp.getNickName(), resp.getAvatar());
         } catch (Exception e) {
             throw BusinessException.badRequest("支付宝用户信息获取失败");
         }
+    }
+
+    private String firstNotBlank(String first, String second) {
+        return first == null || first.isBlank() ? second : first;
     }
 
     private AlipayClient client() {

@@ -8,5 +8,9 @@ public interface AlipayOAuthClient {
 
     record AlipayOAuthTokenResult(String accessToken, String alipayUserId) {}
 
-    record AlipayOAuthUserInfo(String userId, String nickName, String avatar) {}
+    record AlipayOAuthUserInfo(String userId, String openId, String nickName, String avatar) {
+        public String stableUserId() {
+            return userId == null || userId.isBlank() ? openId : userId;
+        }
+    }
 }

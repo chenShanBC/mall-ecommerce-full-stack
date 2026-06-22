@@ -1,5 +1,7 @@
 <template>
-  <AdminLayout title="商品管理" @refresh="loadProducts" @logout="handleLogout">
+  <AdminLayout title="商品管理" @refresh="refreshCurrentTab" @logout="handleLogout">
+    <el-tabs v-model="activeTab" class="product-manage-tabs" @tab-change="handleTabChange">
+      <el-tab-pane label="商品列表" name="products">
     <el-card class="admin-page-card">
       <el-form :inline="true" :model="filters" class="admin-filter-form product-filter-form">
         <div class="product-filter-row product-filter-row--threshold">
@@ -12,7 +14,7 @@
         </div>
         <div class="product-filter-row product-filter-row--main">
           <el-form-item label="关键词"><el-input v-model="filters.keyword" clearable placeholder="商品名称" /></el-form-item>
-          <el-form-item label="类目"><el-select v-model="filters.categoryId" clearable style="width: 220px"><el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" /></el-select></el-form-item>
+          <el-form-item label="类目"><el-select v-model="filters.categoryId" clearable style="width: 220px"><el-option v-for="item in enabledCategories" :key="item.id" :label="item.name" :value="item.id" /></el-select></el-form-item>
           <el-form-item label="状态"><el-select v-model="filters.status" clearable style="width: 160px"><el-option label="上架" value="ONLINE" /><el-option label="下架" value="OFFLINE" /></el-select></el-form-item>
           <el-form-item label="销售表现"><el-select v-model="filters.salesBand" clearable style="width: 160px"><el-option label="热销商品" value="HOT" /><el-option label="常规商品" value="NORMAL" /><el-option label="低销商品" value="LOW" /></el-select></el-form-item>
           <el-form-item label="库存表现"><el-select v-model="filters.stockWarningStatus" clearable style="width: 160px"><el-option label="低库存" value="LOW" /><el-option label="正常库存" value="NORMAL" /><el-option label="高库存" value="HIGH" /></el-select></el-form-item>
@@ -87,7 +89,7 @@
       <el-form :model="productForm" label-width="90px" class="admin-dialog-form product-editor-form compact-product-editor">
         <div class="product-basic-grid">
           <el-form-item label="商品名称"><el-input v-model="productForm.name" maxlength="100" show-word-limit :disabled="!canEditBasic" /></el-form-item>
-          <el-form-item label="类目"><el-select v-model="productForm.categoryId" class="full-control" :disabled="!canEditBasic"><el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" /></el-select></el-form-item>
+          <el-form-item label="类目"><el-select v-model="productForm.categoryId" class="full-control" :disabled="!canEditBasic"><el-option v-for="item in enabledCategories" :key="item.id" :label="item.name" :value="item.id" /></el-select></el-form-item>
           <el-form-item v-if="editorMode === 'edit' && canUpdateStatus" label="SPU状态"><el-radio-group v-model="productForm.status"><el-radio-button value="ONLINE">上架</el-radio-button><el-radio-button value="OFFLINE">下架</el-radio-button></el-radio-group></el-form-item>
         </div>
         <el-form-item label="商品主图">
@@ -159,6 +161,54 @@
       </el-form>
       <template #footer><el-button @click="salesThresholdVisible = false">取消</el-button><el-button type="primary" @click="submitSalesThresholdDefault">保存默认值</el-button></template>
     </el-dialog>
+      </el-tab-pane>
+      <el-tab-pane label="商品分类" name="categories">
+        <el-card class="admin-page-card category-toolbar-card">
+          <div class="category-toolbar">
+            <div>
+              <div class="category-toolbar__title">商品分类管理</div>
+              <div class="category-toolbar__desc">维护商品分类名称、层级、排序和启用状态，商品列表与新增编辑商品会复用这里的分类数据。</div>
+            </div>
+            <el-button v-if="canCreateCategory" type="primary" @click="openCategoryCreate">新增分类</el-button>
+          </div>
+        </el-card>
+        <el-card>
+          <div class="admin-table-scroll">
+            <el-table v-loading="categoryLoading" :data="categoryRows" class="admin-table category-table" row-key="id" empty-text="暂无分类数据">
+              <el-table-column prop="id" label="ID" width="90" />
+              <el-table-column label="分类名称" min-width="220">
+                <template #default="{ row }">
+                  <span class="category-name" :class="{ 'category-name--child': row.level > 1 }">{{ row.name }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="父分类" min-width="160"><template #default="{ row }">{{ parentCategoryName(row.parentId) }}</template></el-table-column>
+              <el-table-column prop="level" label="层级" width="90" />
+              <el-table-column prop="sortOrder" label="排序" width="100" />
+              <el-table-column prop="status" label="状态" width="120"><template #default="{ row }"><el-tag :type="categoryStatusMeta(row.status).type">{{ categoryStatusMeta(row.status).label }}</el-tag></template></el-table-column>
+              <el-table-column label="操作" width="260" fixed="right" align="center">
+                <template #default="{ row }">
+                  <div class="product-actions">
+                    <el-button v-if="canUpdateCategory" class="product-action-btn product-action-btn--edit" size="small" @click="openCategoryEdit(row)">编辑</el-button>
+                    <el-button v-if="canUpdateCategoryStatus" class="product-action-btn" :class="row.status === 'ENABLED' ? 'product-action-btn--danger' : 'product-action-btn--success'" size="small" @click="toggleCategoryStatus(row)">{{ row.status === 'ENABLED' ? '禁用' : '启用' }}</el-button>
+                    <el-button v-if="canDeleteCategory" class="product-action-btn product-action-btn--danger" size="small" @click="removeCategory(row)">删除</el-button>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-card>
+      </el-tab-pane>
+    </el-tabs>
+
+    <el-dialog v-model="categoryEditorVisible" :title="categoryEditorMode === 'create' ? '新增分类' : '编辑分类'" width="520px" append-to-body destroy-on-close align-center>
+      <el-form :model="categoryForm" label-width="90px" class="admin-dialog-form">
+        <el-form-item label="分类名称"><el-input v-model="categoryForm.name" maxlength="64" show-word-limit placeholder="请输入分类名称" /></el-form-item>
+        <el-form-item label="父分类"><el-select v-model="categoryForm.parentId" class="full-control"><el-option label="一级分类" :value="0" /><el-option v-for="item in parentCategoryOptions" :key="item.id" :label="item.name" :value="item.id" :disabled="item.id === editingCategoryId" /></el-select></el-form-item>
+        <el-form-item label="排序值"><el-input-number v-model="categoryForm.sortOrder" :min="0" :max="999999" controls-position="right" /></el-form-item>
+        <el-form-item v-if="categoryEditorMode === 'edit'" label="状态"><el-radio-group v-model="categoryForm.status"><el-radio-button value="ENABLED">启用</el-radio-button><el-radio-button value="DISABLED">禁用</el-radio-button></el-radio-group></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="categoryEditorVisible = false">取消</el-button><el-button type="primary" :disabled="categoryEditorMode === 'create' ? !canCreateCategory : !canUpdateCategory" @click="submitCategory">保存</el-button></template>
+    </el-dialog>
   </AdminLayout>
 </template>
 
@@ -174,20 +224,28 @@ import { exportRowsToCsv } from '../utils/export';
 import { t } from '../utils/i18n';
 import { ADMIN_PAGE_SIZE, ADMIN_PAGE_SIZES } from '../utils/pagination';
 import { getStatusTagMeta } from '../utils/status';
-import { createAdminProduct, fetchAdminCategories, fetchAdminProductDetail, fetchAdminProductPage, fetchAdminProductSalesThresholdConfig, updateAdminProduct, updateAdminProductSalesThresholdConfig, updateAdminProductStatus, uploadProductImage } from '../api';
+import { createAdminCategory, createAdminProduct, deleteAdminCategory, fetchAdminCategories, fetchAdminProductDetail, fetchAdminProductPage, fetchAdminProductSalesThresholdConfig, updateAdminCategory, updateAdminCategoryStatus, updateAdminProduct, updateAdminProductSalesThresholdConfig, updateAdminProductStatus, uploadProductImage } from '../api';
 import { useAdminStore } from '../stores/admin';
 import { adminPageCache, isCacheFresh } from '../stores/pageCache';
 
 const route = useRoute();
 const router = useRouter();
 const adminStore = useAdminStore();
+const activeTab = ref(String(route.query.tab || 'products') === 'categories' ? 'categories' : 'products');
 const hasPerm = (permission) => adminStore.hasPermission(permission) || adminStore.hasPermission('product:update');
+const hasCategoryPermission = (permission) => adminStore.hasAnyPermission([permission, 'category:manage']);
 const canCreate = computed(() => adminStore.hasPermission('product:create'));
 const canEditBasic = computed(() => editorMode.value === 'create' ? canCreate.value : hasPerm('product:update'));
 const canEditSku = computed(() => editorMode.value === 'create' ? canCreate.value : hasPerm('product:update'));
 const canUpdateStatus = computed(() => adminStore.hasAnyPermission(['product:status:update', 'product:on_sale', 'product:off_sale']));
 const canEditProduct = computed(() => canEditBasic.value || canEditSku.value || canUpdateStatus.value);
 const canManageSalesThreshold = computed(() => adminStore.hasPermission('product:sales-threshold:config'));
+const canViewCategory = computed(() => adminStore.hasAnyPermission(['category:view', 'category:manage', 'product:view']));
+const canCreateCategory = computed(() => hasCategoryPermission('category:create'));
+const canUpdateCategory = computed(() => hasCategoryPermission('category:update'));
+const canUpdateCategoryStatus = computed(() => hasCategoryPermission('category:status:update'));
+const canDeleteCategory = computed(() => hasCategoryPermission('category:delete'));
+const canManageCategory = computed(() => canCreateCategory.value || canUpdateCategory.value || canUpdateCategoryStatus.value || canDeleteCategory.value);
 const products = ref(adminPageCache.products.list || []);
 const loading = ref(false);
 const categories = ref(adminPageCache.products.categories || []);
@@ -273,6 +331,16 @@ const salesThresholdVisible = ref(false);
 const salesThresholdForm = reactive({ hotSalesThreshold: salesThresholdBase.hotSalesThreshold, lowSalesThreshold: salesThresholdBase.lowSalesThreshold });
 const productForm = reactive({ name: '', categoryId: null, mainImageUrl: '', imagePreviewUrl: '', description: '', status: 'OFFLINE', skus: [] });
 const imageUploading = ref(false);
+const categoryLoading = ref(false);
+const categoryEditorVisible = ref(false);
+const categoryEditorMode = ref('create');
+const editingCategoryId = ref(null);
+const categoryForm = reactive({ name: '', parentId: 0, sortOrder: 0, status: 'ENABLED' });
+const categoryStatusMeta = (status) => String(status || '').toUpperCase() === 'ENABLED' ? { type: 'success', label: '启用' } : { type: 'info', label: '禁用' };
+const categoryRows = computed(() => [...categories.value].sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || Number(left.id || 0) - Number(right.id || 0)));
+const enabledCategories = computed(() => categoryRows.value.filter(item => String(item.status || '').toUpperCase() === 'ENABLED'));
+const parentCategoryOptions = computed(() => categoryRows.value.filter(item => Number(item.parentId || 0) === 0 && Number(item.level || 1) === 1));
+const parentCategoryName = (parentId) => Number(parentId || 0) === 0 ? '一级分类' : (categories.value.find(item => item.id === parentId)?.name || `#${parentId}`);
 const MAX_SKU_PRICE_YUAN = 100000;
 
 const centToYuan = (cent) => ((Number(cent || 0) / 100).toFixed(2));
@@ -320,9 +388,9 @@ const normalizeUploadPath = (url) => {
 };
 const resolveImageUrl = (url) => normalizeUploadPath(url);
 const resetForm = () => { productForm.name = ''; productForm.categoryId = null; productForm.mainImageUrl = ''; productForm.imagePreviewUrl = ''; productForm.description = ''; productForm.status = 'OFFLINE'; productForm.skus = []; specGroups.value = [{ name: '默认', values: ['默认'], pending: '' }]; generateSkus(); };
-const syncRoute = async () => { await router.replace({ path: '/products', query: { ...(filters.keyword ? { keyword: filters.keyword } : {}), ...(filters.categoryId ? { categoryId: String(filters.categoryId) } : {}), ...(filters.status ? { status: filters.status } : {}), ...(filters.salesBand ? { salesBand: filters.salesBand } : {}), ...(filters.stockWarningStatus ? { stockWarningStatus: filters.stockWarningStatus } : {}), ...(Number(filters.hotSalesThreshold) ? { hotSalesThreshold: String(filters.hotSalesThreshold) } : {}), ...(Number(filters.lowSalesThreshold) >= 0 ? { lowSalesThreshold: String(filters.lowSalesThreshold) } : {}), ...(query.sortBy ? { sortBy: query.sortBy } : {}), ...(query.sortOrder ? { sortOrder: query.sortOrder } : {}), ...(pager.page > 1 ? { page: String(pager.page) } : {}), ...(pager.size !== ADMIN_PAGE_SIZE ? { size: String(pager.size) } : {}) } }); };
+const syncRoute = async () => { await router.replace({ path: '/products', query: { ...(activeTab.value === 'categories' ? { tab: 'categories' } : {}), ...(filters.keyword ? { keyword: filters.keyword } : {}), ...(filters.categoryId ? { categoryId: String(filters.categoryId) } : {}), ...(filters.status ? { status: filters.status } : {}), ...(filters.salesBand ? { salesBand: filters.salesBand } : {}), ...(filters.stockWarningStatus ? { stockWarningStatus: filters.stockWarningStatus } : {}), ...(Number(filters.hotSalesThreshold) ? { hotSalesThreshold: String(filters.hotSalesThreshold) } : {}), ...(Number(filters.lowSalesThreshold) >= 0 ? { lowSalesThreshold: String(filters.lowSalesThreshold) } : {}), ...(query.sortBy ? { sortBy: query.sortBy } : {}), ...(query.sortOrder ? { sortOrder: query.sortOrder } : {}), ...(pager.page > 1 ? { page: String(pager.page) } : {}), ...(pager.size !== ADMIN_PAGE_SIZE ? { size: String(pager.size) } : {}) } }); };
 const loadProducts = async () => { loading.value = true; try { const { data } = await fetchAdminProductPage({ keyword: filters.keyword || undefined, categoryId: filters.categoryId || undefined, status: filters.status || undefined, salesBand: filters.salesBand || undefined, stockWarningStatus: filters.stockWarningStatus || undefined, hotSalesThreshold: filters.hotSalesThreshold, lowSalesThreshold: filters.lowSalesThreshold, sortBy: query.sortBy || undefined, sortOrder: query.sortOrder || undefined, page: pager.page, size: pager.size }); const pageData = data?.data || {}; products.value = pageData.records || []; pager.total = pageData.total || 0; if (data && data.success === false) ElMessage.warning(data.message || data.msg || '商品列表加载失败'); Object.assign(adminPageCache.products, { list: products.value, pager: { page: pager.page, size: pager.size, total: pager.total }, filters: { keyword: filters.keyword, categoryId: filters.categoryId, status: filters.status, salesBand: filters.salesBand, stockWarningStatus: filters.stockWarningStatus, hotSalesThreshold: filters.hotSalesThreshold, lowSalesThreshold: filters.lowSalesThreshold }, query: { sortBy: query.sortBy, sortOrder: query.sortOrder }, loaded: true, updatedAt: Date.now() }); } catch (error) { products.value = []; pager.total = 0; ElMessage.error(error?.response?.data?.msg || error?.response?.data?.message || '商品列表加载失败'); } finally { loading.value = false; } };
-const loadCategories = async () => { if (categories.value.length && isCacheFresh(adminPageCache.products.categoriesLoadedAt, 5 * 60 * 1000)) return; const { data } = await fetchAdminCategories(); categories.value = data.data || []; adminPageCache.products.categories = categories.value; adminPageCache.products.categoriesLoadedAt = Date.now(); };
+const loadCategories = async (force = false) => { if (!canViewCategory.value) return; if (!force && categories.value.length && isCacheFresh(adminPageCache.products.categoriesLoadedAt, 5 * 60 * 1000)) return; categoryLoading.value = true; try { const { data } = await fetchAdminCategories(); categories.value = data.data || []; adminPageCache.products.categories = categories.value; adminPageCache.products.categoriesLoadedAt = Date.now(); } finally { categoryLoading.value = false; } };
 const exportProducts = () => exportRowsToCsv('商品基础运营', products.value.map(row => ({ ...row, salesCount: salesText(row), monthlySalesCount: monthlySalesText(row), salesBandLabel: salesBandLabel(row) })), [{ label: 'ID', value: 'id' }, { label: '商品名称', value: 'name' }, { label: '类目ID', value: 'categoryId' }, { label: 'SKU数', value: 'skuCount' }, { label: '月销量', value: 'monthlySalesCount' }, { label: '销售表现', value: 'salesBandLabel' }, { label: '累计销量', value: 'salesCount' }, { label: '库存', value: 'stock' }, { label: '状态', value: 'status' }]);
 const handleSearch = async () => { pager.page = 1; await syncRoute(); await loadProducts(); };
 const handleReset = async () => { const effectiveThreshold = resolveEffectiveThreshold(); filters.keyword = ''; filters.categoryId = null; filters.status = ''; filters.salesBand = ''; filters.stockWarningStatus = ''; filters.hotSalesThreshold = effectiveThreshold.hotSalesThreshold; filters.lowSalesThreshold = effectiveThreshold.lowSalesThreshold; query.sortBy = 'id'; query.sortOrder = 'desc'; pager.page = 1; pager.size = ADMIN_PAGE_SIZE; await syncRoute(); await loadProducts(); };
@@ -333,6 +401,14 @@ const handlePageChange = async (page) => { pager.page = page; await syncRoute();
 const handleSizeChange = async (size) => { pager.size = size; pager.page = 1; await syncRoute(); await loadProducts(); };
 const handleSortChange = async ({ prop, order }) => { query.sortBy = prop || 'id'; query.sortOrder = order === 'descending' ? 'desc' : 'asc'; if (!order) query.sortOrder = 'desc'; pager.page = 1; await syncRoute(); await loadProducts(); };
 const openProductDetail = async (productId) => { try { const { data } = await fetchAdminProductDetail(productId); productDetail.value = { ...data.data, mainImageUrl: normalizeUploadPath(data.data?.mainImageUrl) }; detailVisible.value = true; } catch (error) { ElMessage.error(error?.response?.data?.msg || error?.response?.data?.message || '商品详情加载失败'); } };
+const nextCategorySortOrder = () => Math.max(0, ...categoryRows.value.map(item => Number(item.sortOrder || 0))) + 1;
+const isDuplicateCategoryName = () => categoryRows.value.some(item => item.name === categoryForm.name.trim() && item.id !== editingCategoryId.value);
+const openCategoryCreate = () => { if (!canCreateCategory.value) return ElMessage.warning('暂无新增分类权限'); categoryEditorMode.value = 'create'; editingCategoryId.value = null; Object.assign(categoryForm, { name: '', parentId: 0, sortOrder: nextCategorySortOrder(), status: 'ENABLED' }); categoryEditorVisible.value = true; };
+const openCategoryEdit = (row) => { if (!canUpdateCategory.value) return ElMessage.warning('暂无编辑分类权限'); categoryEditorMode.value = 'edit'; editingCategoryId.value = row.id; Object.assign(categoryForm, { name: row.name || '', parentId: row.parentId || 0, sortOrder: row.sortOrder || 0, status: row.status || 'ENABLED' }); categoryEditorVisible.value = true; };
+const validateCategoryForm = () => { if (!categoryForm.name.trim()) return '分类名称不能为空'; if (categoryForm.name.trim().length > 64) return '分类名称不能超过64个字符'; if (isDuplicateCategoryName()) return '分类名称已存在，请使用其他名称'; if (categoryForm.parentId === editingCategoryId.value) return '父分类不能选择自身'; return ''; };
+const submitCategory = async () => { if (categoryEditorMode.value === 'create' && !canCreateCategory.value) return ElMessage.warning('暂无新增分类权限'); if (categoryEditorMode.value === 'edit' && !canUpdateCategory.value) return ElMessage.warning('暂无编辑分类权限'); const error = validateCategoryForm(); if (error) return ElMessage.warning(error); const payload = { name: categoryForm.name.trim(), parentId: categoryForm.parentId || 0, sortOrder: categoryForm.sortOrder || 0, status: categoryForm.status }; try { if (categoryEditorMode.value === 'create') { await createAdminCategory(payload); ElMessage.success('分类创建成功'); } else { await updateAdminCategory(editingCategoryId.value, payload); ElMessage.success('分类保存成功'); } categoryEditorVisible.value = false; await loadCategories(true); } catch (submitError) { ElMessage.error(submitError?.response?.data?.msg || submitError?.response?.data?.message || '分类保存失败'); } };
+const toggleCategoryStatus = async (row) => { if (!canUpdateCategoryStatus.value) return ElMessage.warning('暂无调整分类状态权限'); const nextStatus = row.status === 'ENABLED' ? 'DISABLED' : 'ENABLED'; try { await confirmAction(`确认${nextStatus === 'ENABLED' ? '启用' : '禁用'}分类「${row.name}」？`); await updateAdminCategoryStatus(row.id, { status: nextStatus }); ElMessage.success('分类状态已更新'); await loadCategories(true); } catch (error) { if (error !== 'cancel') ElMessage.error(error?.response?.data?.msg || error?.response?.data?.message || '分类状态更新失败'); } };
+const removeCategory = async (row) => { if (!canDeleteCategory.value) return ElMessage.warning('暂无删除分类权限'); try { await confirmAction(`确认删除分类「${row.name}」？已关联商品或存在子分类时系统会阻止删除。`); await deleteAdminCategory(row.id); ElMessage.success('分类已删除'); await loadCategories(true); } catch (error) { if (error !== 'cancel') ElMessage.error(error?.response?.data?.msg || error?.response?.data?.message || '分类删除失败'); } };
 const openCreate = () => { editorMode.value = 'create'; editingProductId.value = null; resetForm(); editorVisible.value = true; };
 const parseSpecGroupsFromSkus = (skus) => { const map = new Map(); skus.forEach((sku) => { Object.entries(safeParseSpec(sku.specJson)).forEach(([key, value]) => { if (!map.has(key)) map.set(key, new Set()); map.get(key).add(value); }); }); return [...map.entries()].map(([name, values]) => ({ name, values: [...values], pending: '' })); };
 const openEdit = async (productId) => { const { data } = await fetchAdminProductDetail(productId); const detail = data.data; const imageUrl = normalizeUploadPath(detail.mainImageUrl || '', 'product'); editorMode.value = 'edit'; editingProductId.value = productId; productForm.name = detail.name; productForm.categoryId = detail.categoryId; productForm.mainImageUrl = imageUrl; productForm.imagePreviewUrl = imageUrl; productForm.description = detail.description || ''; productForm.status = normalizeProductStatus(detail.status); productForm.skus = (detail.skus || []).filter(item => item.skuCode).map(item => ({ id: item.id, skuCode: item.skuCode, skuName: item.skuName, specJson: item.specJson || '{}', salePriceYuan: Number(centToYuan(item.salePriceCent)), originPriceYuan: Number(centToYuan(item.originPriceCent)), initialStock: item.totalStock || 0, status: normalizeSkuStatus(item.status), originalStatus: normalizeSkuStatus(item.status) })); originalEditSkus.value = productForm.skus.map(item => ({ ...item })); specGroups.value = parseSpecGroupsFromSkus(productForm.skus); if (!specGroups.value.length) specGroups.value = [{ name: '默认', values: ['默认'], pending: '' }]; editorVisible.value = true; await nextTick(); };
@@ -463,6 +539,9 @@ const submitProduct = async () => {
 };
 const submitStatus = async () => { try { const targetStatus = normalizeProductStatus(statusForm.status); await confirmAction(t('productManage.confirmStatusUpdate', { status: productStatusMeta(targetStatus).label })); await updateAdminProductStatus(currentProductId.value, { status: targetStatus, reason: statusForm.reason?.trim() || (targetStatus === 'ONLINE' ? '后台手动上架' : '后台手动下架') }); ElMessage.success(t('productManage.statusUpdateSuccess')); statusVisible.value = false; adminPageCache.products.loaded = false; await loadProducts(); } catch (error) { if (error !== 'cancel') ElMessage.error(error?.response?.data?.msg || error?.response?.data?.message || t('productManage.statusUpdateFailed')); } };
 const handleLogout = async () => { await adminStore.logout(); router.push('/login'); };
+const syncTabRoute = async () => { await router.replace({ path: '/products', query: { ...route.query, ...(activeTab.value === 'categories' ? { tab: 'categories' } : {}) } }); };
+const handleTabChange = async () => { await syncTabRoute(); if (activeTab.value === 'categories') await loadCategories(true); };
+const refreshCurrentTab = async () => { if (activeTab.value === 'categories') { await loadCategories(true); return; } await loadProducts(); };
 const initializeProductsPage = async (force = false) => { await loadSalesThresholdDefault(); applyRouteQuery(); if (!force && adminPageCache.products.loaded && products.value.length && !Object.keys(route.query).length) return; await Promise.all([loadProducts(), loadCategories()]); };
 onMounted(async () => { resetForm(); await initializeProductsPage(); });
 onActivated(async () => { await initializeProductsPage(true); });
@@ -472,6 +551,16 @@ onBeforeUnmount(() => { richTextEditor.value?.destroy(); });
 <style scoped>
 .mb12 { margin-bottom: 12px; }
 .compact-alert { margin-bottom: 10px; }
+.product-manage-tabs :deep(.el-tabs__header) { margin: 0 0 14px; }
+.product-manage-tabs :deep(.el-tabs__item) { font-weight: 700; }
+.category-toolbar-card { margin-bottom: 12px; }
+.category-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.category-toolbar__title { font-size: 18px; font-weight: 800; color: #1f2937; }
+.category-toolbar__desc { margin-top: 6px; color: #64748b; font-size: 13px; }
+.category-name { font-weight: 700; color: #1f2937; }
+.category-name--child { padding-left: 18px; color: #475569; }
+.category-name--child::before { content: '└ '; color: #94a3b8; }
+.category-table :deep(.el-table__row) { height: 56px; }
 .product-page-card {
   width: 100%;
 }
