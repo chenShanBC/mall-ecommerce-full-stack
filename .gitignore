@@ -26,7 +26,9 @@ logs/
 .env.*
 backend/mall-start/src/main/resources/application-dev.yml
 backend/mall-start/src/main/resources/application-local.yml
+backend/mall-start/src/main/resources/application-cloud.yml
 backend/mall-start/src/main/resources/application-test.yml
+!backend/mall-start/src/main/resources/application-*.example.yml
 backend/mall-start/src/main/resources/*private*
 backend/mall-start/src/main/resources/*secret*
 backend/*.pem

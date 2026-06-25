@@ -1,0 +1,56 @@
+spring:
+  datasource:
+    url: jdbc:mysql://${MALL_MYSQL_HOST:127.0.0.1}:${MALL_MYSQL_PORT:3306}/${MALL_MYSQL_DATABASE:mall_fei}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&connectTimeout=5000&socketTimeout=10000
+    username: ${MALL_MYSQL_USERNAME:root}
+    password: ${MALL_MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${MALL_REDIS_HOST:localhost}
+      port: ${MALL_REDIS_PORT:6379}
+      database: ${MALL_REDIS_DATABASE:0}
+      password: ${MALL_REDIS_PASSWORD:}
+  rabbitmq:
+    host: ${MALL_RABBITMQ_HOST:localhost}
+    port: ${MALL_RABBITMQ_PORT:5672}
+    username: ${MALL_RABBITMQ_USERNAME:guest}
+    password: ${MALL_RABBITMQ_PASSWORD:}
+
+springdoc:
+  api-docs:
+    enabled: true
+
+mall:
+  order:
+    timeout-minutes: 15
+  file:
+    storage-type: ${MALL_FILE_STORAGE_TYPE:local}
+    upload-dir: ${MALL_FILE_UPLOAD_DIR:/home/ubuntu/storage}
+    public-base-path: ${MALL_FILE_PUBLIC_BASE_PATH:/uploads}
+    max-avatar-size: 2097152
+  pay:
+    alipay:
+      enabled: ${MALL_PAY_ALIPAY_ENABLED:false}
+      gateway: ${MALL_PAY_ALIPAY_GATEWAY:https://openapi-sandbox.dl.alipaydev.com/gateway.do}
+      app-id: ${MALL_PAY_ALIPAY_APP_ID:}
+      merchant-private-key: ${MALL_PAY_ALIPAY_PRIVATE_KEY:}
+      alipay-public-key: ${MALL_PAY_ALIPAY_PUBLIC_KEY:}
+      notify-url: ${MALL_PAY_ALIPAY_NOTIFY_URL:}
+      return-url: ${MALL_PAY_ALIPAY_RETURN_URL:}
+      client-return-url: ${MALL_PAY_ALIPAY_CLIENT_RETURN_URL:}
+      sign-type: RSA2
+      charset: UTF-8
+      format: json
+  user:
+    alipay-login:
+      gateway: ${MALL_USER_ALIPAY_GATEWAY:https://openapi.alipay.com/gateway.do}
+      app-id: ${MALL_USER_ALIPAY_APP_ID:}
+      merchant-private-key: ${MALL_USER_ALIPAY_PRIVATE_KEY:}
+      alipay-public-key: ${MALL_USER_ALIPAY_PUBLIC_KEY:}
+      sign-type: RSA2
+      charset: UTF-8
+      format: json
+      redirect-uri: ${MALL_USER_ALIPAY_REDIRECT_URI:}
+      frontend-redirect-uri: ${MALL_USER_ALIPAY_FRONTEND_REDIRECT_URI:}
+      state-expire-seconds: 300
+      login-ticket-expire-seconds: 120
