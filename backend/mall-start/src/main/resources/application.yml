@@ -16,7 +16,7 @@ spring:
       force: true
   profiles:
     # local / cloud
-    active: ${SPRING_PROFILES_ACTIVE:local}
+    active: ${SPRING_PROFILES_ACTIVE:cloud}
   servlet:
     multipart:
       max-file-size: 2MB
@@ -46,8 +46,11 @@ sa-token:
 springdoc:
   api-docs:
     enabled: true
+    path: /api/v3/api-docs
   swagger-ui:
-    path: /swagger-ui.html
+    path: /api/swagger-ui.html
+    config-url: /api/v3/api-docs/swagger-config
+    url: /api/v3/api-docs
     persistAuthorization: true
 
 mybatis-plus:

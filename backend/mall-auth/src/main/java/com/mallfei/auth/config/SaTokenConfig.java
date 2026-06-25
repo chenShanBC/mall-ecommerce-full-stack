@@ -31,6 +31,27 @@ import java.util.Set;
 @EnableConfigurationProperties(AuthSessionProperties.class)
 public class SaTokenConfig implements WebMvcConfigurer {
 
+    private static final String[] SWAGGER_WHITELIST = {
+            "/error",
+            "/swagger-ui.html",
+            "/swagger-ui/**",
+            "/v3/api-docs",
+            "/v3/api-docs/**",
+            "/swagger-resources",
+            "/swagger-resources/**",
+            "/webjars/**",
+            "/doc.html",
+            "/favicon.ico",
+            "/api/swagger-ui.html",
+            "/api/swagger-ui/**",
+            "/api/v3/api-docs",
+            "/api/v3/api-docs/**",
+            "/api/swagger-resources",
+            "/api/swagger-resources/**",
+            "/api/webjars/**",
+            "/api/doc.html"
+    };
+
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new SaInterceptor(handler -> {
@@ -42,21 +63,11 @@ public class SaTokenConfig implements WebMvcConfigurer {
                     StpUtil.checkLogin();
                 }))
                 .addPathPatterns("/**")
-                .excludePathPatterns(
-                        "/error",
-                        "/swagger-ui.html",
-                        "/swagger-ui/**",
-                        "/v3/api-docs/**"
-                );
+                .excludePathPatterns(SWAGGER_WHITELIST);
 
         registry.addInterceptor(new AuthorizationAnnotationInterceptor())
                 .addPathPatterns("/**")
-                .excludePathPatterns(
-                        "/error",
-                        "/swagger-ui.html",
-                        "/swagger-ui/**",
-                        "/v3/api-docs/**"
-                );
+                .excludePathPatterns(SWAGGER_WHITELIST);
     }
 
     @Override
@@ -78,7 +89,8 @@ public class SaTokenConfig implements WebMvcConfigurer {
     }
 
     private boolean isPublicPath(String requestUri) {
-        return requestUri.startsWith("/uploads/")
+        return isSwaggerPath(requestUri)
+                || requestUri.startsWith("/uploads/")
                 || requestUri.startsWith("/upload/")
                 || requestUri.startsWith("/api/users/register")
                 || requestUri.startsWith("/api/users/login/captcha/challenge")
@@ -96,6 +108,25 @@ public class SaTokenConfig implements WebMvcConfigurer {
                 || requestUri.startsWith("/api/pay/alipay/return-bridge")
                 || requestUri.matches("^/api/pay/orders/[^/]+/submit-page$")
                 || requestUri.startsWith("/api/pay/callback");
+    }
+
+    private boolean isSwaggerPath(String requestUri) {
+        return requestUri.equals("/swagger-ui.html")
+                || requestUri.startsWith("/swagger-ui/")
+                || requestUri.equals("/v3/api-docs")
+                || requestUri.startsWith("/v3/api-docs/")
+                || requestUri.equals("/swagger-resources")
+                || requestUri.startsWith("/swagger-resources/")
+                || requestUri.startsWith("/webjars/")
+                || requestUri.equals("/doc.html")
+                || requestUri.equals("/api/swagger-ui.html")
+                || requestUri.startsWith("/api/swagger-ui/")
+                || requestUri.equals("/api/v3/api-docs")
+                || requestUri.startsWith("/api/v3/api-docs/")
+                || requestUri.equals("/api/swagger-resources")
+                || requestUri.startsWith("/api/swagger-resources/")
+                || requestUri.startsWith("/api/webjars/")
+                || requestUri.equals("/api/doc.html");
     }
 
     static class AuthorizationAnnotationInterceptor implements HandlerInterceptor {
