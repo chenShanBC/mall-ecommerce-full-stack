@@ -7,14 +7,11 @@
 - **线上架构**：Nginx反向代理 \+ 全站HTTPS加密 \+ 80端口强制跳转443
 - **运行环境**：Ubuntu \+ Docker MySQL \+ Redis \+ RabbitMQ \+ SpringBoot后端 \+ Vite双端前端
 - **线上正式访问地址（已全部配置完成）**：
-  
 - 已配置 SSH 免密登录   -- 本地私钥：C:\Users\23235\.ssh\id_ed25519
-  
 - - 商城H5移动端首页：**https://mallfei.cloud**
-  
 - 后台管理系统：**https://mallfei.cloud/admin**
-  
 - 后端统一接口地址：**https://mallfei.cloud/api**
+- 接口文档地址：**https://mallfei.cloud/api/swagger-ui/index.html 。**
 - **使用说明**：所有命令直接复制即可，严格拆分【本地电脑操作】、【云端服务器操作】两大板块，区分首次部署、日常迭代更新，无需修改任何本地/服务器路径
 
 ---
