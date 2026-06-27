@@ -44,7 +44,8 @@ export const initAdminForceLogoutSocket = (adminStore, router) => {
       adminStore.sessionCheckPromise = null;
       router.replace({ path: '/login', query: { reason: 'forceLogout', t: Date.now() } }).catch(() => null);
       redirectTimer = window.setTimeout(() => {
-        window.location.replace(`/login?reason=forceLogout&t=${Date.now()}`);
+        const loginPath = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/login`;
+        window.location.replace(`${loginPath}?reason=forceLogout&t=${Date.now()}`);
       }, 80);
     } catch {
     }

@@ -56,7 +56,15 @@ export const useAdminStore = defineStore('admin', {
     },
     clearLocalSession() {
       this.clearProductSalesThresholdSession();
-      this.clearLocalSession();
+      destroyAdminForceLogoutSocket();
+      this.token = '';
+      this.profile = null;
+      this.dashboard = null;
+      this.profileLoaded = false;
+      this.profileLoadingPromise = null;
+      this.sessionCheckPromise = null;
+      localStorage.removeItem('mall-admin-token');
+      localStorage.removeItem('mall-admin-profile');
     },
     async login(form) {
       const { data } = await adminLogin(form);
@@ -136,14 +144,7 @@ export const useAdminStore = defineStore('admin', {
           console.warn('admin logout failed', error);
         }
       }
-      this.token = '';
-      this.profile = null;
-      this.dashboard = null;
-      this.profileLoaded = false;
-      this.profileLoadingPromise = null;
-      this.sessionCheckPromise = null;
-      localStorage.removeItem('mall-admin-token');
-      localStorage.removeItem('mall-admin-profile');
+      this.clearLocalSession();
     },
   },
 });

@@ -6,7 +6,7 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const adminBase = env.VITE_ADMIN_BASE || (mode === 'cloud' ? '/admin/' : '/');
+  const adminBase = env.VITE_ADMIN_BASE || (mode === 'devlocal' ? '/' : '/admin/');
   const apiTarget = env.VITE_DEV_API_TARGET || 'http://127.0.0.1:9090';
 
   return {

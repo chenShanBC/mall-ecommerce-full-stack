@@ -13,6 +13,7 @@
 
     <modules>
         <module>mall-common</module>
+        <module>mall-test-support</module>
         <module>mall-auth</module>
         <module>mall-user</module>
         <module>mall-product</module>
@@ -68,6 +69,11 @@
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

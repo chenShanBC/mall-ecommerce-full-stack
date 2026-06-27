@@ -18,7 +18,7 @@
 > 2. **后台管理系统**：[https://mallfei.cloud/admin](https://mallfei.cloud/admin) 。
 > 3. **接口文档**：[https://mallfei.cloud/api/swagger-ui/index.html](https://mallfei.cloud/api/swagger-ui/index.html) 。
 > 4. **项目定位**：本项目是面向面试展示与企业级电商业务实践的 B2C 电商系统，覆盖 MVP 到一期增强阶段。
-> 5. **演示账号**：为避免线上数据被误操作，H5 与 Admin 测试账号建议在面试或沟通时提供。
+> 5. **演示账号**：H5 与 Admin 测试账号在页面中有默认的。
 > 6. **截图说明**：建议将 `项目运行截图.docx` 中的截图导出到 `documents/screenshots/`，在 README 中展示关键页面。
 
 ## 前言
@@ -26,6 +26,15 @@
 `mallFei` 是一个从 0 到 1 搭建的企业级 B2C 电商项目，目标是完整覆盖电商系统中的用户、商品、SKU、购物车、订单、库存、支付、售后、后台运营、权限控制、操作日志、接口文档和云端部署等核心能力。
 
 项目采用 **Spring Boot 3 + MyBatis-Plus + MySQL + Redis + RabbitMQ + Vue 3 + Vite + Nginx HTTPS** 技术栈，包含 C 端 H5 商城、Admin 后台管理端和后端多模块服务，支持线上 HTTPS 访问和前后端完整联调。
+
+项目亮点主要体现在以下几个方面：
+
+- **交易主链路完整**：从商品浏览、购物车、下单、库存预占、Mock 支付、订单状态流转、售后处理，到支付对账、退款同步和库存对账补偿，形成可演示、可排查、可修复的闭环。
+- **库存系统设计完整**：围绕库存校验、Redis 原子预占、库存锁、库存日志、MQ 异步落库、库存释放/确认/回补、超时释放、库存校准补偿和库存对账设计，兼顾防超卖、幂等和可恢复性。
+- **订单-支付状态设计明确**：订单、支付单、库存锁、超时关闭、支付确认、对账修复和售后退款之间保持清晰状态机，便于讲解交易一致性。
+- **性能验证充分**：已完成商城下单核心接口压测，结果表明优化后可稳定支撑 60~100 并发的交易场景。
+- **阶段化冒烟验证可复现**：已按 MVP 阶段、一期及一期增强阶段拆分 PowerShell 冒烟脚本，并形成执行报告；本地 9090 端口验证结果为 MVP `33 PASS / 2 SKIP / 0 FAIL`，一期及增强 `53 PASS / 36 SKIP / 0 FAIL`，可支撑后续单元测试、模块测试和集成测试。
+- **云端部署可直接访问**：线上 H5、Admin、Swagger、HTTPS 与静态资源路由已配置完成，适合面试现场展示。
 
 ## 项目文档
 
@@ -37,24 +46,95 @@ documents/
 
 主要文档包括：
 
-- B2C 电商 MVP 项目开发主文档
-- B2C 电商一期及一期增强阶段正式开发设计文档
-- B2C 电商二期运营履约能力指导主文档
-- B2C 电商三期平台经营能力开发主文档
-- B2C 电商四期生产治理能力开发主文档
-- B2C 电商五期平台化与智能化能力开发主文档
-- mallFei 项目已实现业务功能阶段梳理
-- 大型企业级 B2C 电商平台总体目标指导文档
+- [B2C 电商 MVP 项目开发主文档](documents/设计指导主文档/B2C电商MVP项目_开发主文档_后端.md)
+- [B2C 电商一期及一期增强阶段正式开发设计文档](documents/设计指导主文档/B2C电商一期及一期增强阶段%20正式开发设计文档%20(1).md)
+- [B2C 电商二期运营履约能力指导主文档](documents/设计指导主文档/B2C电商二期运营履约能力指导主文档.md)
+- [B2C 电商三期平台经营能力开发主文档](documents/设计指导主文档/B2C电商三期平台经营能力开发主文档.md)
+- [B2C 电商四期生产治理能力开发主文档](documents/设计指导主文档/B2C电商四期生产治理能力开发主文档.md)
+- [B2C 电商五期平台化与智能化能力开发主文档](documents/设计指导主文档/B2C电商五期平台化与智能化能力开发主文档.md)
+- [mallFei 项目已实现业务功能阶段梳理](documents/mallFei项目已实现业务功能阶段性梳理文档.md)
+- [大型企业级 B2C 电商平台总体目标指导文档](documents/设计指导主文档/大型企业级B2C电商平台总体目标指导文档.md)
+- [商城下单接口性能压测总结报告](documents/商城下单压力测试文档/商城下单接口性能压测总结报告.md)
+- [MallFei 后端测试操作手册](documents/MallFei后端测试操作手册.md)
+- [MallFei 阶段冒烟测试执行报告](documents/MallFei阶段冒烟测试执行报告.md)
+- [云端一键部署运维手册](documents/MallFei商城项目%20云端一键部署运维手册（本地%2B云端分离版）.md)
+- [MallFei AI 辅助开发心得总结](documents/MallFei_AI辅助开发心得总结.md)
 
 ## 项目介绍
 
 `mallFei` 项目是一套 B2C 电商系统，包括 **前台 H5 商城系统**、**后台 Admin 管理系统** 和 **Spring Boot 多模块后端服务**。
 
-前台商城系统包含用户登录、个人资料、地址管理、商品分类、商品列表、商品详情、SKU 选择、购物车、结算预览、订单提交、Mock 支付、订单列表、订单详情、售后申请等模块。
+前台商城系统围绕“浏览商品 -> 加入购物车 -> 提交订单 -> Mock 支付 -> 查看订单”这一条主交易链路设计，覆盖用户登录、个人资料、地址管理、商品分类、商品列表、商品详情、SKU 选择、购物车、结算预览、订单提交、支付状态流转、订单列表、订单详情和售后申请等模块。
 
-后台管理系统包含仪表盘、用户管理、商品分类管理、SPU/SKU 管理、商品上下架、库存管理、库存日志、订单管理、支付管理、售后管理、账号权限管理、操作日志、对账管理等模块。
+后台管理系统围绕“运营可视化 + 履约管理 + 风控治理”设计，包含仪表盘、用户管理、商品分类管理、SPU/SKU 管理、商品上下架、库存管理、库存日志、订单管理、支付管理、售后管理、账号权限管理、操作日志、对账管理等模块。
 
-后端服务采用 Maven 多模块组织，按业务领域拆分为用户、认证、商品、购物车、订单、库存、支付、售后、后台、文件、通用能力和启动模块，便于维护和扩展。
+后端服务采用 Maven 多模块组织，按业务领域拆分为用户、认证、商品、购物车、订单、库存、支付、售后、后台、文件、通用能力和启动模块，便于维护和扩展，也方便针对交易链路做独立优化和压测验证。
+
+---
+
+## 项目亮点
+
+### 交易链路完整闭环
+
+- C 端支持商品浏览、SKU 选择、购物车、结算、下单、Mock 支付、订单查询和售后申请。
+- Admin 端支持商品、库存、订单、支付、售后、账号权限、操作日志和对账管理。
+- 后端保存订单商品快照、收货地址快照、支付单、支付回调记录、退款单、库存锁记录、库存操作日志和库存对账记录，避免商品或地址后续变更影响历史订单，也便于问题追踪。
+- 交易闭环不止“下单 -> 支付 -> 发货/售后”，还包含支付对账、订单支付状态同步、已支付订单修复、退款状态同步、库存对账、库存一致性校验和库存补偿释放，保证异常场景可发现、可定位、可修复。
+
+### 库存系统与防超卖设计
+
+- 下单前进行商品、SKU、上下架状态、库存、地址和结算数据等基础校验，避免无效订单进入库存预占链路。
+- 库存链路采用 **Redis Lua 原子预占库存**，保障单 SKU 维度扣减的原子性；并通过库存锁记录标识订单维度的预占、确认、取消和释放状态。
+- 使用库存操作日志承载幂等键和业务流水，降低重复下单、重复 MQ 消费、重复释放、重复确认带来的副作用。
+- 库存预占失败时支持已成功预占项回滚释放，避免多 SKU 部分成功导致库存长期占用。
+- 支付成功后确认库存，订单取消、超时关闭或支付失败时释放预占库存，售后退款/异常修复场景可通过回补接口恢复库存。
+- 库存系统不是简单扣减：目前已经包含库存初始化、人工调整、策略更新、库存同步、预占、取消预占、确认、直接回补、锁定、释放、扣减等操作接口，并配合库存日志形成可审计链路。
+- 通过 RabbitMQ 异步同步库存 DB，并结合 `StockTimeoutReleaseJob`、`StockReservationCompensationJob`、`StockReconciliationJob`、库存对账记录和库存一致性校验，覆盖超时释放、补偿释放、库存校准和库存对账能力。
+
+### 订单-支付状态机设计
+
+项目围绕订单状态、支付状态、库存锁状态、退款状态、售后状态和对账状态建立了清晰的业务状态流转。
+
+- 订单创建后进入 `PENDING_PAYMENT`，同时创建支付单并预占库存。
+
+- 用户主动取消、订单超时关闭、支付失败或支付单关闭时，订单进入关闭/取消链路，并释放已预占库存。
+
+- Mock 支付或渠道支付回调成功后，支付单进入成功状态，订单从 `PENDING_PAYMENT` 条件更新为 `PAID`，避免重复支付确认造成重复加销量或重复确认库存。
+
+- 支付成功后进入履约链路，后台可继续执行发货、完成、售后审核和退款处理；退款链路保留退款单状态，并支持退款状态同步。
+
+- 支付模块提供支付对账、订单支付状态同步、已成功支付订单修复和退款状态同步接口，用于处理“渠道已成功但本地未更新”“退款渠道状态与本地状态不一致”等异常场景。
+
+- 订单、支付、库存、售后和对账之间保留相对独立状态，降低单一状态字段承载过多业务语义的风险，也便于后续接入真实支付渠道、定时对账文件和自动修复任务。
+
+下面三张图是初代订单/支付/退款状态设计草图，和当前代码实现保持同一套核心语义，可作为 README 中讲解状态机的辅助材料。
+
+![订单状态流转草图](documents/架构图及页面截图/1782467611614.png)
+
+![支付状态流转草图](documents/架构图及页面截图/1782467514957.png)
+
+![支付与对账闭环草图](documents/架构图及页面截图/1782467543484.png)
+
+
+
+### 下单接口压测成果
+
+已对商城下单核心接口完成 50、60、100 并发多轮压测和优化验证，详见：[商城下单接口性能压测总结报告](documents/商城下单压力测试文档/商城下单接口性能压测总结报告.md)。
+
+| 压测轮次 | 并发 / 时长 | 结果概述 | 综合评价 |
+| --- | --- | --- | --- |
+| 初始版本 | 50 并发 / 40s | 成功率 100%，但存在 1s 以上长尾请求 | 及格 |
+| 未优化版本 | 60 并发 / 40s | 成功率 100%，但出现 3s 级别峰值耗时和明显吞吐下降 | 不及格 |
+| 优化后版本 | 60 并发 / 40s | 90% 以上请求稳定在 30~80ms，无 500ms 以上慢请求 | 优秀 |
+| 最新版本 | 100 并发 / 40s | 成功率 100%，绝大多数请求稳定在 30~90ms，无 1s 以上恶性慢请求 | 优秀偏上 |
+
+本轮性能优化主要包括：商品快照批量查询、订单明细批量插入、订单查询消除 N+1、库存预占批量加载与请求聚合、支付确认状态条件更新、库存日志唯一索引幂等插入、重复库存操作不再重复发布 MQ、高频成功日志降级等。
+
+### 云端部署与线上演示
+
+- 已完成 H5 商城、Admin 后台、后端 API、Swagger、上传资源和 WebSocket 的 Nginx HTTPS 统一代理。
+- 支持本地构建、云端上传、后端进程重启、前端静态资源发布和 Nginx reload 的分步骤部署流程。
+- 部署说明详见：[云端一键部署运维手册](documents/MallFei商城项目%20云端一键部署运维手册（本地%2B云端分离版）.md)。
 
 ---
 
@@ -78,11 +158,7 @@ documents/
 - 订单列表与订单详情
 - 售后申请
 
-> 截图建议放置位置：`documents/screenshots/h5-home.png`
-
-```markdown
-![H5 商城首页](documents/screenshots/h5-home.png)
-```
+项目截图请参考：[项目运行截图文档](documents/%E9%A1%B9%E7%9B%AE%E8%BF%90%E8%A1%8C%E6%88%AA%E5%9B%BE.docx)
 
 ### 后台管理系统
 
@@ -103,21 +179,13 @@ documents/
 - 操作日志
 - 对账管理
 
-> 截图建议放置位置：`documents/screenshots/admin-dashboard.png`
-
-```markdown
-![Admin 仪表盘](documents/screenshots/admin-dashboard.png)
-```
+项目截图请参考：[项目运行截图文档](documents/%E9%A1%B9%E7%9B%AE%E8%BF%90%E8%A1%8C%E6%88%AA%E5%9B%BE.docx)
 
 ### 接口文档
 
 Swagger UI：
 
 [https://mallfei.cloud/api/swagger-ui/index.html](https://mallfei.cloud/api/swagger-ui/index.html)
-
-OpenAPI JSON：
-
-[https://mallfei.cloud/api/v3/api-docs](https://mallfei.cloud/api/v3/api-docs)
 
 ---
 
@@ -202,55 +270,11 @@ mallFei
 
 ### 系统架构图
 
-```mermaid
-flowchart LR
-    User[用户浏览器] --> Nginx[Nginx HTTPS 网关]
-    AdminUser[后台管理员] --> Nginx
+![MallFei系统架构图](documents/架构图及页面截图/MallFei系统架构图.png)
 
-    Nginx --> H5[Vue3 H5 商城 /]
-    Nginx --> Admin[Vue3 Admin 后台 /admin]
-    Nginx --> API[Spring Boot API /api]
-    Nginx --> Uploads[上传资源 /uploads]
-    Nginx --> WS[WebSocket /ws]
+### 业务架构图
 
-    API --> Auth[mall-auth]
-    API --> UserModule[mall-user]
-    API --> Product[mall-product]
-    API --> Cart[mall-cart]
-    API --> Order[mall-order]
-    API --> Stock[mall-stock]
-    API --> Pay[mall-pay]
-    API --> AfterSale[mall-aftersale]
-    API --> AdminModule[mall-admin]
-    API --> File[mall-file]
-
-    API --> MySQL[(MySQL 8.0)]
-    API --> Redis[(Redis 7)]
-    API --> RabbitMQ[(RabbitMQ 3)]
-```
-
-### 核心业务链路图
-
-```mermaid
-sequenceDiagram
-    participant C as H5 用户端
-    participant API as Spring Boot API
-    participant DB as MySQL
-    participant Admin as Admin 后台
-
-    C->>API: 登录 / 获取用户信息
-    C->>API: 浏览分类、商品、SKU
-    C->>API: 加入购物车 / 修改数量 / 勾选
-    C->>API: 结算预览
-    API->>DB: 校验商品、SKU、库存、地址
-    C->>API: 提交订单
-    API->>DB: 生成订单、订单项、商品快照、地址快照
-    API->>DB: 创建支付单
-    C->>API: Mock 支付
-    API->>DB: 支付单成功、订单变更为已支付
-    Admin->>API: 查询订单、支付单、库存记录
-    API->>DB: 返回后台运营数据
-```
+![业务架构图](documents/架构图及页面截图/业务架构图.png)
 
 ---
 
@@ -593,7 +617,9 @@ backend/scripts
 
 | 脚本 | 说明 |
 | --- | --- |
-| `smoke-test.ps1` | 基础冒烟测试 |
+| `smoke-test-mvp.ps1` | MVP 阶段冒烟测试，覆盖商品浏览、用户注册/资料、地址、购物车、结算、下单、Mock 支付、用户订单、后台基础管理等核心交易闭环 |
+| `smoke-test-phase1-enhanced.ps1` | 一期及一期增强阶段冒烟测试，覆盖订单异常处理、支付同步、售后退款、库存日志/预警、基础对账、线上人工对账、Dashboard 增强、权限审计和认证增强入口 |
+| `smoke-test.ps1` | 历史基础冒烟测试脚本 |
 | `run-api-tests.ps1` | API 测试入口 |
 | `e2e-business-flow-tests.ps1` | 端到端业务流测试 |
 | `p1-business-flow-tests.ps1` | 一期业务流测试 |
@@ -602,25 +628,126 @@ backend/scripts
 | `test-order-pay.ps1` | 订单支付测试 |
 | `test-admin.ps1` | 后台模块测试 |
 
-运行示例：
+阶段化冒烟测试运行示例：
 
 ```powershell
 cd backend/scripts
-./smoke-test.ps1
-./e2e-business-flow-tests.ps1
+
+# MVP 核心交易闭环冒烟测试，默认访问 http://localhost:9090
+./smoke-test-mvp.ps1
+
+# 一期及一期增强能力入口冒烟测试，可复用 MVP 脚本生成的订单号
+./smoke-test-phase1-enhanced.ps1 -OrderNo "ORD1782478440821F28189"
+
+# 如需遇到业务失败即中断，可追加 -Strict
+./smoke-test-mvp.ps1 -Strict
 ```
+
+最近一次阶段化冒烟测试执行结果如下，详见：[MallFei 阶段冒烟测试执行报告](documents/MallFei阶段冒烟测试执行报告.md)。
+
+| 脚本 | 覆盖阶段 | PASS | SKIP | FAIL | 结论 |
+| --- | --- | ---: | ---: | ---: | --- |
+| `smoke-test-mvp.ps1` | MVP 阶段 | 33 | 2 | 0 | 核心交易闭环通过，可支撑继续进入后续测试 |
+| `smoke-test-phase1-enhanced.ps1` | 一期及一期增强阶段 | 53 | 36 | 0 | 主要后台管理、支付、库存、售后、对账、Dashboard、权限审计接口具备基本可访问性 |
+
+> 冒烟测试中的 SKIP 主要来自验证码策略、multipart 文件上传、支付宝本地配置缺失、订单/售后/退款/对账等状态敏感接口缺少专项数据。上述结果表示系统未发现阻断性问题，已具备进入单元测试、模块测试、集成测试和专项验证的前置条件。
+
+### 后端单元测试、模块测试与集成测试
+
+除脚本化接口测试外，后端已经补充 Maven/JUnit 自动化测试体系，覆盖核心领域规则、模块协作和轻量集成链路。详细操作说明见：[MallFei 后端测试操作手册](documents/MallFei后端测试操作手册.md)。
+
+当前测试体系按三层设计：
+
+| 测试类型 | 命名特征 | 公共基类 | 主要验证目标 | 执行特点 |
+| --- | --- | --- | --- | --- |
+| 单元测试 | `*DomainServiceTest` | `BaseUnitTest` | 领域模型、领域服务、业务状态机、异常边界 | 不启动 Spring，不连接真实中间件 |
+| 模块测试 | `*ModuleStandardTest` | `BaseModuleTest` | 单模块内 Bean 装配、模块协作流程、关键业务闭环 | 可启动轻量 Spring TestContext，外部依赖 Mock |
+| 集成测试 | `*IntegrationTest` | `BaseIntegrationTest` | HTTP API、MQ 发布、Controller 到 Application Service 链路 | 当前以轻量集成为主，默认不连接真实 MySQL/Redis/RabbitMQ |
+
+公共测试支撑模块位于：
+
+```text
+backend/mall-test-support
+```
+
+目前已覆盖的代表性测试包括：
+
+| 模块 | 测试文件 | 覆盖重点 |
+| --- | --- | --- |
+| `mall-auth` | `AuthDomainServiceTest` | 登录主体校验、身份类型授权边界 |
+| `mall-user` | `UserDomainServiceTest` | 用户领域规则、登录/资料相关边界 |
+| `mall-product` | `ProductDomainServiceTest` | 商品与 SKU 领域规则 |
+| `mall-cart` | `CartDomainServiceTest`、`CartModuleStandardTest`、`CartApiIntegrationTest` | 购物车增删改查、勾选、结算校验、接口链路 |
+| `mall-order` | `OrderDomainServiceTest`、`OrderModuleStandardTest`、`OrderMqIntegrationTest` | 订单创建、金额计算、状态流转、超时取消、MQ 行为 |
+| `mall-stock` | `StockDomainServiceTest`、`StockModuleStandardTest` | 库存预占、释放、确认、防超卖、幂等边界 |
+| `mall-pay` | `PayOrderDomainServiceTest`、`PayModuleStandardTest`、`PayMqIntegrationTest` | 支付单状态机、支付回调幂等、金额校验、MQ 行为 |
+| `mall-file` | `FileDomainServiceTest` | 文件领域规则 |
+| `mall-aftersale` | `AftersaleDomainServiceTest` | 售后申请、审核、退款前置规则 |
+
+常用执行命令：
+
+```powershell
+cd backend
+
+# 执行后端全量测试
+mvn test
+
+# 执行指定模块测试，并自动构建其依赖模块
+mvn -pl mall-auth -am test
+mvn -pl mall-order -am test
+mvn -pl mall-pay -am test
+
+# 执行指定测试类
+mvn -pl mall-order -am -Dtest=OrderDomainServiceTest test
+
+# 执行指定测试方法
+mvn -pl mall-pay -am -Dtest=PayModuleStandardTest#shouldKeepCallbackIdempotent test
+```
+
+> 多模块项目中，如果单独执行某个模块测试，建议使用 `-am` 参数，让 Maven 同时构建该模块依赖的本地模块，例如 `mall-common`、`mall-test-support` 等，避免本地依赖尚未安装导致解析失败。
+
+最近一次后端全量 Maven 测试已经通过，执行结果如下：
+
+```text
+[INFO] mall-backend ....................................... SUCCESS [  0.002 s]
+[INFO] mall-common ........................................ SUCCESS [  0.961 s]
+[INFO] mall-test-support .................................. SUCCESS [  0.127 s]
+[INFO] mall-auth .......................................... SUCCESS [  0.897 s]
+[INFO] mall-stock ......................................... SUCCESS [  2.975 s]
+[INFO] mall-product ....................................... SUCCESS [  1.615 s]
+[INFO] mall-order ......................................... SUCCESS [  3.248 s]
+[INFO] mall-pay ........................................... SUCCESS [  2.964 s]
+[INFO] mall-user .......................................... SUCCESS [  2.082 s]
+[INFO] mall-cart .......................................... SUCCESS [  4.079 s]
+[INFO] mall-aftersale ..................................... SUCCESS [  1.737 s]
+[INFO] mall-admin ......................................... SUCCESS [  0.120 s]
+[INFO] mall-file .......................................... SUCCESS [  1.619 s]
+[INFO] mall-start ......................................... SUCCESS [  0.166 s]
+[INFO] BUILD SUCCESS
+[INFO] Total time:  22.887 s
+[INFO] Finished at: 2026-06-26T20:22:09+08:00
+```
+
+测试通过的判断标准：
+
+- Maven 输出 `BUILD SUCCESS`；
+- Reactor Summary 中后端各模块均为 `SUCCESS`；
+- Surefire 结果中 `Failures: 0`、`Errors: 0`；
+- 如需查看单个模块详情，可查看各模块的 `target/surefire-reports/` 目录。
+
+在业务层面，一个订单可判断为“成功订单”的核心标准是：订单已创建并生成有效订单号，订单金额与订单明细汇总一致，库存预占成功，支付单支付成功，订单状态从待支付推进到已支付，并且重复支付回调、重复库存确认、重复 MQ 消费不会导致金额、库存或订单状态被重复变更。
 
 ---
 
 ## 项目截图
 
-建议将 `项目运行截图.docx` 中的截图导出为 PNG，放入：
+项目运行截图已整理为文档，可直接查看：
 
-```text
-documents/screenshots/
-```
+[项目运行截图文档](documents/%E9%A1%B9%E7%9B%AE%E8%BF%90%E8%A1%8C%E6%88%AA%E5%9B%BE.docx)
 
-建议准备：
+如果你想在 README 中继续补图，建议只保留关键页面，避免内容过长影响阅读体验。
+
+可优先展示以下内容：
 
 | 截图 | 建议文件名 |
 | --- | --- |
@@ -640,97 +767,6 @@ documents/screenshots/
 | 账号权限 | `admin-account.png` |
 | Swagger 文档 | `swagger.png` |
 | 部署架构图 | `deploy-arch.png` |
-
-引用示例：
-
-```markdown
-![H5 商城首页](documents/screenshots/h5-home.png)
-![Admin 仪表盘](documents/screenshots/admin-dashboard.png)
-![Swagger 接口文档](documents/screenshots/swagger.png)
-```
-
----
-
-## 面试展示建议
-
-建议现场展示控制在 8 到 12 分钟，重点演示一条主链路：
-
-```text
-C 端登录
--> 商品详情
--> 选择 SKU
--> 加入购物车
--> 结算下单
--> Mock 支付
--> C 端查看订单
--> Admin 登录
--> 后台搜索订单
--> 查看支付单
--> 查看库存 / 日志 / 权限 / Swagger
-```
-
-推荐讲解关键词：
-
-- SPU / SKU
-- 购物车
-- 订单快照
-- 地址快照
-- 库存校验
-- 支付单
-- 订单状态流转
-- 后台履约
-- 权限控制
-- 操作日志
-- Swagger 接口文档
-- 云端 HTTPS 部署
-
----
-
-## 常见问题
-
-### 后台登录后跳到了 H5 首页？
-
-请确认 Admin 前端构建时 Vite `base` 为：
-
-```text
-/admin/
-```
-
-线上 Nginx 需要将 `/admin/` 指向 Admin 静态目录，并 fallback 到 `/admin/index.html`。
-
-### RabbitMQ 启动认证失败？
-
-检查：
-
-```bash
-MALL_RABBITMQ_HOST
-MALL_RABBITMQ_PORT
-MALL_RABBITMQ_USERNAME
-MALL_RABBITMQ_PASSWORD
-```
-
-如果使用远程 RabbitMQ，不建议使用默认 `guest` 用户。
-
-### MySQL 连接失败，提示 Access denied？
-
-检查：
-
-```bash
-MALL_MYSQL_HOST
-MALL_MYSQL_PORT
-MALL_MYSQL_USERNAME
-MALL_MYSQL_PASSWORD
-```
-
-如果日志提示 `using password: NO`，说明没有传入数据库密码。
-
-### Swagger 地址打不开？
-
-请确认后端已启动，且 Nginx 正确代理 `/api`。线上地址为：
-
-```text
-https://mallfei.cloud/api/swagger-ui/index.html
-```
 
 ---
 

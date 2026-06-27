@@ -39,7 +39,7 @@
           </div>
         </div>
         <div class="actions">
-          <el-button class="header-action-button" size="small" @click="$emit('refresh')">刷新</el-button>
+          <el-button class="header-action-button" size="small" @click="handlePageReload">刷新</el-button>
           <el-button class="header-action-button header-action-button--danger" size="small" @click="$emit('logout')">退出</el-button>
         </div>
       </el-header>
@@ -74,6 +74,10 @@ const roleLabelMap = {
 const currentRoleLabel = computed(() => roleLabelMap[adminStore.profile?.roleCode] || adminStore.profile?.roleCode || '-');
 const canShowProductMenu = computed(() => adminStore.hasPermission('product:view') && adminStore.hasAnyPermission(['product:create', 'product:update', 'product:on_sale', 'product:off_sale', 'product:status:update', 'product:sales:view', 'category:manage']));
 const reconciliationMenuPath = computed(() => adminStore.hasPermission('reconciliation:view') ? '/reconciliations' : '/reconciliations?tab=stock');
+
+const handlePageReload = () => {
+  window.location.reload();
+};
 
 const handleMenuSelect = async (path) => {
   const valid = await adminStore.ensureSessionValid();

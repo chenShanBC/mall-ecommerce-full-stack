@@ -38,11 +38,10 @@ public class LoginCaptchaRenderer {
     private static final int MAX_Y = 92;
     private static final float JPEG_QUALITY = 0.58f;
     private static final String CAPTCHA_IMAGE_PATH = "static/images/captcha-scene.jpg";
-    private static final BufferedImage SCALED_SOURCE_IMAGE = scaleSourceImage();
 
     public LoginCaptchaRenderResult render() {
         try {
-            BufferedImage scaled = SCALED_SOURCE_IMAGE;
+            BufferedImage scaled = scaleSourceImage();
 
             int x = ThreadLocalRandom.current().nextInt(MIN_X, MAX_X + 1);
             int y = ThreadLocalRandom.current().nextInt(MIN_Y, MAX_Y + 1);

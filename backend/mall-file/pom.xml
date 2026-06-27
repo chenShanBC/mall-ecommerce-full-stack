@@ -20,6 +20,12 @@
         </dependency>
         <dependency>
             <groupId>com.mallfei</groupId>
+            <artifactId>mall-test-support</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.mallfei</groupId>
             <artifactId>mall-auth</artifactId>
             <version>${project.version}</version>
         </dependency>

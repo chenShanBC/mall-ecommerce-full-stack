@@ -11,7 +11,7 @@
  Target Server Version : 80409 (8.4.9)
  File Encoding         : 65001
 
- Date: 12/06/2026 19:23:24
+ Date: 24/06/2026 15:46:00
 */
 
 SET NAMES utf8mb4;
@@ -31,7 +31,7 @@ CREATE TABLE `admin_operation_config`  (
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_config_key`(`config_key` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 3 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '后台运营轻量配置表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 5 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '后台运营轻量配置表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for aftersale_order
@@ -60,7 +60,7 @@ CREATE TABLE `aftersale_order`  (
   INDEX `idx_aftersale_order_user_id`(`user_id` ASC) USING BTREE,
   INDEX `idx_aftersale_order_status`(`status` ASC) USING BTREE,
   INDEX `idx_aftersale_order_refund_no`(`refund_no` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 5 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '售后单表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 11 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '售后单表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for auth_session_event_log
@@ -85,7 +85,7 @@ CREATE TABLE `auth_session_event_log`  (
   INDEX `idx_auth_session_event_type_time`(`event_type` ASC, `created_at` DESC) USING BTREE,
   INDEX `idx_auth_session_event_login_id`(`login_id` ASC) USING BTREE,
   INDEX `idx_auth_session_event_ip_time`(`ip` ASC, `created_at` DESC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 20 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '认证会话安全事件日志表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 87 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '认证会话安全事件日志表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for cart_item
@@ -102,7 +102,7 @@ CREATE TABLE `cart_item`  (
   `deleted_at` datetime NULL DEFAULT NULL COMMENT '删除时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_cart_item_user_sku`(`user_id` ASC, `sku_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '购物车项表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 5 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '购物车项表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for fms_file_record
@@ -155,7 +155,7 @@ CREATE TABLE `ims_stock`  (
   INDEX `idx_ims_stock_warning_status_sku`(`warning_status` ASC, `sku_id` ASC) USING BTREE,
   INDEX `idx_ims_stock_stock_status_sku`(`stock_status` ASC, `sku_id` ASC) USING BTREE,
   CONSTRAINT `chk_ims_stock_quantity_relation` CHECK (`total_stock` = (`locked_stock` + `available_stock`))
-) ENGINE = InnoDB AUTO_INCREMENT = 13 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '库存表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 17 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '库存表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for ims_stock_lock
@@ -181,7 +181,7 @@ CREATE TABLE `ims_stock_lock`  (
   UNIQUE INDEX `uk_ims_stock_lock_no`(`lock_no` ASC) USING BTREE,
   UNIQUE INDEX `uk_ims_stock_lock_business`(`business_type` ASC, `business_no` ASC, `sku_id` ASC) USING BTREE,
   INDEX `idx_ims_stock_lock_sync_status`(`status` ASC, `reserved_synced` ASC, `lock_time` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 8 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '库存锁记录表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 30 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '库存锁记录表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for ims_stock_operation_log
@@ -213,7 +213,7 @@ CREATE TABLE `ims_stock_operation_log`  (
   INDEX `idx_ims_stock_operation_log_created_at`(`created_at` ASC) USING BTREE,
   INDEX `idx_ims_stock_operation_log_source_type`(`source_type` ASC) USING BTREE,
   INDEX `idx_ims_stock_operation_log_operator_id`(`operator_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 30 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '库存操作日志表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 107 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '库存操作日志表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for ims_stock_reconciliation_record
@@ -238,7 +238,7 @@ CREATE TABLE `ims_stock_reconciliation_record`  (
   INDEX `idx_stock_reconciliation_sku_checked`(`sku_id` ASC, `checked_at` ASC) USING BTREE,
   INDEX `idx_stock_reconciliation_status_checked`(`status` ASC, `checked_at` ASC) USING BTREE,
   INDEX `idx_stock_reconciliation_repair_status`(`repair_status` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 11 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '库存对账记录表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 16 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '库存对账记录表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for oms_order
@@ -282,7 +282,7 @@ CREATE TABLE `oms_order`  (
   INDEX `idx_oms_order_user_deleted`(`user_id` ASC, `user_deleted` ASC, `id` ASC) USING BTREE,
   INDEX `idx_oms_order_status_expire_time`(`order_status` ASC, `expire_time` ASC) USING BTREE,
   INDEX `idx_oms_order_status_expire_order_no`(`order_status` ASC, `expire_time` ASC, `order_no` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 17 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '订单表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 33 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '订单表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for oms_order_item
@@ -304,7 +304,7 @@ CREATE TABLE `oms_order_item`  (
   `deleted_at` datetime NULL DEFAULT NULL COMMENT '删除时间',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_oms_order_item_order_id`(`order_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 17 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '订单项表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 34 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '订单项表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for oms_order_refund
@@ -328,7 +328,7 @@ CREATE TABLE `oms_order_refund`  (
   INDEX `idx_oms_order_refund_order_no`(`order_no` ASC) USING BTREE,
   INDEX `idx_oms_order_refund_user_id`(`user_id` ASC) USING BTREE,
   INDEX `idx_oms_order_refund_status`(`refund_status` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '订单退款申请表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 8 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '订单退款申请表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for oms_order_refund_item
@@ -346,7 +346,7 @@ CREATE TABLE `oms_order_refund_item`  (
   INDEX `idx_oms_order_refund_item_refund_no`(`refund_no` ASC) USING BTREE,
   INDEX `idx_oms_order_refund_item_order_item_id`(`order_item_id` ASC) USING BTREE,
   INDEX `idx_oms_order_refund_item_sku_id`(`sku_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '订单退款明细表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 8 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '订单退款明细表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pay_callback_record
@@ -379,7 +379,7 @@ CREATE TABLE `pay_callback_record`  (
   INDEX `idx_pay_callback_record_out_trade_no`(`out_trade_no` ASC) USING BTREE,
   INDEX `idx_pay_callback_record_refund_no`(`refund_no` ASC) USING BTREE,
   INDEX `idx_pay_callback_record_created_at`(`created_at` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 18 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '支付回调记录表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 35 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '支付回调记录表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pay_order
@@ -408,7 +408,7 @@ CREATE TABLE `pay_order`  (
   INDEX `idx_pay_order_status_id`(`pay_status` ASC, `id` ASC) USING BTREE,
   INDEX `idx_pay_order_order_no`(`order_no` ASC) USING BTREE,
   INDEX `idx_pay_order_pay_order_no`(`pay_order_no` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 15 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '支付单表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 31 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '支付单表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pay_reconcile_channel_bill_item
@@ -435,7 +435,7 @@ CREATE TABLE `pay_reconcile_channel_bill_item`  (
   INDEX `idx_task_biz`(`task_id` ASC, `biz_type` ASC) USING BTREE,
   INDEX `idx_out_trade_no`(`out_trade_no` ASC) USING BTREE,
   INDEX `idx_refund_no`(`refund_no` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 60 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 21 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pay_reconcile_diff_item
@@ -470,7 +470,7 @@ CREATE TABLE `pay_reconcile_diff_item`  (
   INDEX `idx_order_no`(`order_no` ASC) USING BTREE,
   INDEX `idx_pay_order_no`(`pay_order_no` ASC) USING BTREE,
   INDEX `idx_refund_no`(`refund_no` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 33 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 23 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pay_reconcile_local_bill_item
@@ -496,7 +496,7 @@ CREATE TABLE `pay_reconcile_local_bill_item`  (
   INDEX `idx_task_biz`(`task_id` ASC, `biz_type` ASC) USING BTREE,
   INDEX `idx_pay_order_no`(`pay_order_no` ASC) USING BTREE,
   INDEX `idx_refund_no`(`refund_no` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 90 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 22 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pay_reconcile_operation_log
@@ -517,7 +517,7 @@ CREATE TABLE `pay_reconcile_operation_log`  (
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_task_id`(`task_id` ASC) USING BTREE,
   INDEX `idx_diff_item_id`(`diff_item_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 22 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pay_reconcile_task
@@ -552,7 +552,7 @@ CREATE TABLE `pay_reconcile_task`  (
   UNIQUE INDEX `task_no`(`task_no` ASC) USING BTREE,
   INDEX `idx_reconcile_date_channel`(`reconcile_date` ASC, `channel` ASC) USING BTREE,
   INDEX `idx_status`(`status` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 6 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 9 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pay_reconciliation_record
@@ -582,7 +582,7 @@ CREATE TABLE `pay_reconciliation_record`  (
   INDEX `idx_pay_reconciliation_refund_no`(`refund_no` ASC) USING BTREE,
   INDEX `idx_pay_reconciliation_pay_order_no`(`pay_order_no` ASC) USING BTREE,
   INDEX `idx_pay_reconciliation_batch_no`(`batch_no` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 17 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '支付退款轻量对账记录表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 6 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '支付退款轻量对账记录表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pay_refund_order
@@ -611,7 +611,7 @@ CREATE TABLE `pay_refund_order`  (
   INDEX `idx_pay_refund_order_order_no`(`order_no` ASC) USING BTREE,
   INDEX `idx_pay_refund_order_pay_order_no`(`pay_order_no` ASC) USING BTREE,
   INDEX `idx_pay_refund_order_status_id`(`refund_status` ASC, `id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '支付退款单表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 8 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '支付退款单表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pms_category
@@ -630,7 +630,7 @@ CREATE TABLE `pms_category`  (
   `deleted_at` datetime NULL DEFAULT NULL COMMENT '删除时间',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_pms_category_parent_id`(`parent_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 103 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '商品类目表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 15 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '商品类目表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pms_product_sales_daily_stat
@@ -651,7 +651,7 @@ CREATE TABLE `pms_product_sales_daily_stat`  (
   INDEX `idx_spu_date`(`spu_id` ASC, `stat_date` ASC) USING BTREE,
   INDEX `idx_sku_date`(`sku_id` ASC, `stat_date` ASC) USING BTREE,
   INDEX `idx_channel_date`(`sale_channel` ASC, `stat_date` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 5 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '商品每日完成销量统计表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 11 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '商品每日完成销量统计表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pms_product_sales_stat_event
@@ -666,7 +666,7 @@ CREATE TABLE `pms_product_sales_stat_event`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_event_key`(`event_key` ASC) USING BTREE,
   INDEX `idx_biz_no`(`biz_no` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 3 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '商品销售统计事件幂等表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 12 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '商品销售统计事件幂等表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pms_sku
@@ -691,7 +691,7 @@ CREATE TABLE `pms_sku`  (
   INDEX `idx_pms_sku_spu_id`(`spu_id` ASC) USING BTREE,
   INDEX `idx_pms_sku_spu_deleted_id`(`spu_id` ASC, `deleted_at` ASC, `id` ASC) USING BTREE,
   INDEX `idx_pms_sku_deleted_sku_code`(`deleted_at` ASC, `sku_code` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 13 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '商品SKU表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 17 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '商品SKU表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for pms_spu
@@ -714,7 +714,7 @@ CREATE TABLE `pms_spu`  (
   INDEX `idx_pms_spu_status_category_deleted_id`(`status` ASC, `category_id` ASC, `deleted_at` ASC, `id` ASC) USING BTREE,
   INDEX `idx_pms_spu_category_deleted_id`(`category_id` ASC, `deleted_at` ASC, `id` ASC) USING BTREE,
   INDEX `idx_pms_spu_deleted_id`(`deleted_at` ASC, `id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 13 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '商品SPU表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 14 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '商品SPU表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for ums_admin
@@ -735,7 +735,7 @@ CREATE TABLE `ums_admin`  (
   `deleted_at` datetime NULL DEFAULT NULL COMMENT '删除时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_ums_admin_username`(`username` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 8 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '管理员表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 6 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '管理员表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for ums_admin_operation_log
@@ -753,7 +753,7 @@ CREATE TABLE `ums_admin_operation_log`  (
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_ums_admin_operation_log_admin_id`(`operator_admin_id` ASC) USING BTREE,
   INDEX `idx_ums_admin_operation_log_module`(`operation_module` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 73 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '运营后台操作日志表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 168 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '运营后台操作日志表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for ums_user
@@ -798,7 +798,7 @@ CREATE TABLE `ums_user_address`  (
   `deleted_at` datetime NULL DEFAULT NULL COMMENT '删除时间',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_ums_user_address_user_id`(`user_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 22 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '用户地址表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 25 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '用户地址表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for ums_user_third_bind
@@ -815,6 +815,6 @@ CREATE TABLE `ums_user_third_bind`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_third_type_uid`(`third_type` ASC, `third_uid` ASC) USING BTREE,
   INDEX `idx_user_id`(`user_id` ASC) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '用户第三方绑定表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '用户第三方绑定表' ROW_FORMAT = DYNAMIC;
 
 SET FOREIGN_KEY_CHECKS = 1;
